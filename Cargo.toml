@@ -1,7 +1,7 @@
 [package]
 name = "otc_contract"
 version = "0.1.0"
-authors = ["[your_name] <[your_email]>"]
+authors = ["taostats <dev@taostats.io>"]
 edition = "2021"
 
 [dependencies]
