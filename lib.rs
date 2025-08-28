@@ -1,141 +1,152 @@
 #![cfg_attr(not(feature = "std"), no_std, no_main)]
 
+pub mod errors;
+pub mod events;
+pub mod types;
+
 #[ink::contract]
 mod otc_contract {
+    use crate::types::{AlphaListing, AlphaListingId, FixedDecimal, NetUid, TaoOffer, TaoOfferId};
+    use ink::prelude::vec::Vec;
+    use ink::storage::Mapping;
 
-    /// Defines the storage of your contract.
-    /// Add new fields to the below struct in order
-    /// to add new static storage fields to your contract.
     #[ink(storage)]
     pub struct OtcContract {
-        /// Stores a single `bool` value on the storage.
-        value: bool,
+        /// Listings: (netuid, seller, listing_id) -> AlphaListing
+        alpha_listings: Mapping<(NetUid, AccountId, AlphaListingId), AlphaListing>,
+
+        /// User's listing IDs for iteration: (seller, netuid) -> Vec<listing_id>
+        user_listings: Mapping<(AccountId, NetUid), Vec<AlphaListingId>>,
+
+        /// Offers: (netuid, buyer, offer_id) -> TaoOffer
+        tao_offers: Mapping<(NetUid, AccountId, TaoOfferId), TaoOffer>,
+
+        /// User's offer IDs for iteration: (buyer, netuid) -> Vec<offer_id>
+        user_offers: Mapping<(AccountId, NetUid), Vec<TaoOfferId>>,
+
+        /// Global listing counter
+        next_alpha_listing_id: AlphaListingId,
+
+        /// Global offer counter
+        next_tao_offer_id: TaoOfferId,
+
+        /// Contract owner
+        owner: AccountId,
+
+        /// Validator hotkey
+        hotkey: AccountId,
+
+        /// Fee rate charged on trades (as decimal, e.g., 0.005 = 0.5%)
+        fee_rate: FixedDecimal,
+
+        /// Minimum Alpha amount for listings
+        min_listing_amount: u64,
+
+        /// Minimum TAO amount for offers
+        min_offer_amount: u64,
+
+        /// Minimum age before listing can be cancelled (in blocks)
+        min_listing_age: u64,
     }
 
     impl OtcContract {
-        /// Constructor that initializes the `bool` value to the given `init_value`.
         #[ink(constructor)]
-        pub fn new(init_value: bool) -> Self {
-            Self { value: init_value }
+        pub fn new(
+            owner: AccountId,
+            hotkey: AccountId,
+            fee_rate: u128, // U64F64 bits representing the fee rate
+            min_listing_amount: u64,
+            min_offer_amount: u64,
+            min_listing_age: u64,
+        ) -> Self {
+            let fee_rate = FixedDecimal::from_bits(fee_rate);
+
+            Self {
+                alpha_listings: Default::default(),
+                user_listings: Default::default(),
+                tao_offers: Default::default(),
+                user_offers: Default::default(),
+                next_alpha_listing_id: 1,
+                next_tao_offer_id: 1,
+                owner,
+                hotkey,
+                fee_rate,
+                min_listing_amount,
+                min_offer_amount,
+                min_listing_age,
+            }
         }
 
-        /// Constructor that initializes the `bool` value to `false`.
-        ///
-        /// Constructors can delegate to other constructors.
-        #[ink(constructor)]
-        pub fn default() -> Self {
-            Self::new(Default::default())
-        }
-
-        /// A message that can be called on instantiated contracts.
-        /// This one flips the value of the stored `bool` from `true`
-        /// to `false` and vice versa.
+        /// Get the contract owner
         #[ink(message)]
-        pub fn flip(&mut self) {
-            self.value = !self.value;
+        pub fn get_owner(&self) -> AccountId {
+            self.owner
         }
 
-        /// Simply returns the current value of our `bool`.
+        /// Get the validator hotkey
         #[ink(message)]
-        pub fn get(&self) -> bool {
-            self.value
+        pub fn get_hotkey(&self) -> AccountId {
+            self.hotkey
+        }
+
+        /// Get the fee rate
+        #[ink(message)]
+        pub fn get_fee_rate(&self) -> FixedDecimal {
+            self.fee_rate
+        }
+
+        /// Get minimum listing amount
+        #[ink(message)]
+        pub fn get_min_listing_amount(&self) -> u64 {
+            self.min_listing_amount
+        }
+
+        /// Get minimum offer amount
+        #[ink(message)]
+        pub fn get_min_offer_amount(&self) -> u64 {
+            self.min_offer_amount
+        }
+
+        /// Get minimum listing age
+        #[ink(message)]
+        pub fn get_min_listing_age(&self) -> u64 {
+            self.min_listing_age
         }
     }
 
-    /// Unit tests in Rust are normally defined within such a `#[cfg(test)]`
-    /// module and test functions are marked with a `#[test]` attribute.
-    /// The below code is technically just normal Rust code.
     #[cfg(test)]
     mod tests {
-        /// Imports all the definitions from the outer scope so we can use them here.
         use super::*;
+        use fixed::types::U64F64;
 
-        /// We test if the default constructor does its job.
+        /// Helper function to create fee rate bits from percentage
+        fn fee_rate_from_percentage(percentage: f64) -> u128 {
+            let fee_as_decimal = percentage / 100.0;
+            let fixed = U64F64::from_num(fee_as_decimal);
+            fixed.to_bits()
+        }
+
         #[ink::test]
-        fn default_works() {
-            let otc_contract = OtcContract::default();
-            assert_eq!(otc_contract.get(), false);
-        }
+        fn constructor_works() {
+            let accounts = ink::env::test::default_accounts::<Environment>();
 
-        /// We test a simple use case of our contract.
-        #[ink::test]
-        fn it_works() {
-            let mut otc_contract = OtcContract::new(false);
-            assert_eq!(otc_contract.get(), false);
-            otc_contract.flip();
-            assert_eq!(otc_contract.get(), true);
-        }
-    }
+            // Test with custom parameters (0.5% fee)
+            let fee_rate = fee_rate_from_percentage(0.5);
 
+            let contract = OtcContract::new(
+                accounts.alice,
+                accounts.bob,
+                fee_rate,
+                1_000_000_000,
+                1_000_000_000,
+                100,
+            );
 
-    /// This is how you'd write end-to-end (E2E) or integration tests for ink! contracts.
-    ///
-    /// When running these you need to make sure that you:
-    /// - Compile the tests with the `e2e-tests` feature flag enabled (`--features e2e-tests`)
-    /// - Are running a Substrate node which contains `pallet-contracts` in the background
-    #[cfg(all(test, feature = "e2e-tests"))]
-    mod e2e_tests {
-        /// Imports all the definitions from the outer scope so we can use them here.
-        use super::*;
-
-        /// A helper function used for calling contract messages.
-        use ink_e2e::ContractsBackend;
-
-        /// The End-to-End test `Result` type.
-        type E2EResult<T> = std::result::Result<T, Box<dyn std::error::Error>>;
-
-        /// We test that we can upload and instantiate the contract using its default constructor.
-        #[ink_e2e::test]
-        async fn default_works(mut client: ink_e2e::Client<C, E>) -> E2EResult<()> {
-            // Given
-            let mut constructor = OtcContractRef::default();
-
-            // When
-            let contract = client
-                .instantiate("otc_contract", &ink_e2e::alice(), &mut constructor)
-                .submit()
-                .await
-                .expect("instantiate failed");
-            let call_builder = contract.call_builder::<OtcContract>();
-
-            // Then
-            let get = call_builder.get();
-            let get_result = client.call(&ink_e2e::alice(), &get).dry_run().await?;
-            assert!(matches!(get_result.return_value(), false));
-
-            Ok(())
-        }
-
-        /// We test that we can read and write a value from the on-chain contract.
-        #[ink_e2e::test]
-        async fn it_works(mut client: ink_e2e::Client<C, E>) -> E2EResult<()> {
-            // Given
-            let mut constructor = OtcContractRef::new(false);
-            let contract = client
-                .instantiate("otc_contract", &ink_e2e::bob(), &mut constructor)
-                .submit()
-                .await
-                .expect("instantiate failed");
-            let mut call_builder = contract.call_builder::<OtcContract>();
-
-            let get = call_builder.get();
-            let get_result = client.call(&ink_e2e::bob(), &get).dry_run().await?;
-            assert!(matches!(get_result.return_value(), false));
-
-            // When
-            let flip = call_builder.flip();
-            let _flip_result = client
-                .call(&ink_e2e::bob(), &flip)
-                .submit()
-                .await
-                .expect("flip failed");
-
-            // Then
-            let get = call_builder.get();
-            let get_result = client.call(&ink_e2e::bob(), &get).dry_run().await?;
-            assert!(matches!(get_result.return_value(), true));
-
-            Ok(())
+            assert_eq!(contract.get_owner(), accounts.alice);
+            assert_eq!(contract.get_hotkey(), accounts.bob);
+            assert_eq!(contract.get_min_listing_amount(), 1_000_000_000);
+            assert_eq!(contract.get_min_offer_amount(), 1_000_000_000);
+            assert_eq!(contract.get_min_listing_age(), 100);
         }
     }
 }
