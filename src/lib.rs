@@ -2,19 +2,22 @@
 
 pub mod errors;
 pub mod events;
+pub mod runtime;
 pub mod types;
 
 #[ink::contract]
 mod otc_contract {
     use crate::errors::Error;
     use crate::events::{
-        FeeRateUpdated, HotkeyUpdated, MinListingAgeUpdated, MinListingAmountUpdated,
+        AlphaListed, FeeRateUpdated, HotkeyUpdated, MinListingAgeUpdated, MinListingAmountUpdated,
         MinOfferAmountUpdated, OwnerUpdated,
     };
+    use crate::runtime::{ProxyCall, RuntimeCall, SubtensorCall};
     use crate::types::{
-        AlphaListingId, AlphaListingsMapping, FixedDecimal, TaoOfferId, TaoOffersMapping,
-        UserListingsMapping, UserOffersMapping,
+        AlphaListing, AlphaListingId, AlphaListingsMapping, FixedDecimal, NetUid, TaoOfferId,
+        TaoOffersMapping, UserListingsMapping, UserOffersMapping,
     };
+    use ink::prelude::{boxed::Box, vec::Vec};
 
     #[ink(storage)]
     pub struct OtcContract {
@@ -215,6 +218,119 @@ mod otc_contract {
                 .emit_event(MinListingAgeUpdated { old_age, new_age });
 
             Ok(())
+        }
+
+        /// List Alpha tokens for sale
+        /// Prerequisites: The seller must have added the contract as their proxy
+        /// This will transfer the stake from the seller to the contract via proxy
+        /// and consolidate it under the contract's hotkey if needed
+        #[ink(message)]
+        pub fn list_alpha(
+            &mut self,
+            hotkey: AccountId,
+            netuid: NetUid,
+            amount: u64,
+            price: u128, // Price as FixedDecimal bits (TAO per Alpha)
+        ) -> Result<AlphaListingId, Error> {
+            let seller = self.env().caller();
+            let price = FixedDecimal::from_bits(price);
+
+            if amount < self.min_listing_amount {
+                return Err(Error::AmountTooSmall);
+            }
+
+            if price.to_bits() == 0 {
+                return Err(Error::InvalidPrice);
+            }
+
+            // Transfer stake from seller to contract via proxy
+            // The seller must have added the contract as their proxy for this to work
+            let transfer_call = RuntimeCall::SubtensorModule(SubtensorCall::TransferStake {
+                destination_coldkey: self.env().account_id(),
+                hotkey,
+                origin_netuid: netuid,
+                destination_netuid: netuid,
+                alpha_amount: amount,
+            });
+
+            let proxy_call = RuntimeCall::Proxy(ProxyCall::Proxy {
+                real: seller,
+                force_proxy_type: None,
+                call: Box::new(transfer_call),
+            });
+
+            self.env()
+                .call_runtime(&proxy_call)
+                .map_err(|_| Error::RuntimeCallFailed)?;
+
+            // If the hotkey is different from contract's hotkey, consolidate stake
+            if hotkey != self.hotkey {
+                let move_call = RuntimeCall::SubtensorModule(SubtensorCall::MoveStake {
+                    origin_hotkey: hotkey,
+                    destination_hotkey: self.hotkey,
+                    origin_netuid: netuid,
+                    destination_netuid: netuid,
+                    alpha_amount: amount,
+                });
+
+                let proxy_move_call = RuntimeCall::Proxy(ProxyCall::Proxy {
+                    real: seller,
+                    force_proxy_type: None,
+                    call: Box::new(move_call),
+                });
+
+                self.env()
+                    .call_runtime(&proxy_move_call)
+                    .map_err(|_| Error::RuntimeCallFailed)?;
+            }
+
+            let listing_id = self.next_alpha_listing_id;
+            self.next_alpha_listing_id = listing_id.checked_add(1).ok_or(Error::Overflow)?;
+
+            let listing = AlphaListing {
+                id: listing_id,
+                netuid,
+                seller,
+                amount,
+                price,
+                fee_rate: self.fee_rate,
+                created_at: self.env().block_number(),
+            };
+
+            self.alpha_listings
+                .insert((netuid, seller, listing_id), &listing);
+
+            let mut user_listings = self.user_listings.get((seller, netuid)).unwrap_or_default();
+            user_listings.push(listing_id);
+            self.user_listings.insert((seller, netuid), &user_listings);
+
+            self.env().emit_event(AlphaListed {
+                seller,
+                hotkey,
+                netuid,
+                alpha_listing_id: listing_id,
+                amount,
+                price,
+            });
+
+            Ok(listing_id)
+        }
+
+        /// Get a specific Alpha listing
+        #[ink(message)]
+        pub fn get_listing(
+            &self,
+            netuid: NetUid,
+            seller: AccountId,
+            listing_id: AlphaListingId,
+        ) -> Option<AlphaListing> {
+            self.alpha_listings.get((netuid, seller, listing_id))
+        }
+
+        /// Get all listing IDs for a user on a specific subnet
+        #[ink(message)]
+        pub fn get_user_listings(&self, seller: AccountId, netuid: NetUid) -> Vec<AlphaListingId> {
+            self.user_listings.get((seller, netuid)).unwrap_or_default()
         }
 
         /// Access control helper: ensure caller is the owner
@@ -675,6 +791,96 @@ mod otc_contract {
             // Verify 4 events were emitted
             let emitted_events = ink::env::test::recorded_events().collect::<Vec<_>>();
             assert_eq!(emitted_events.len(), 4);
+        }
+
+        #[ink::test]
+        fn list_alpha_fails_with_amount_too_small() {
+            let accounts = ink::env::test::default_accounts::<Environment>();
+            let fee_rate = fee_rate_from_percentage(0.5);
+
+            let mut contract = OtcContract::new(
+                accounts.alice,
+                accounts.bob,
+                fee_rate,
+                1_000_000_000, // min listing amount
+                1_000_000_000,
+                100,
+            );
+
+            // Set caller to Charlie (the seller)
+            ink::env::test::set_caller::<Environment>(accounts.charlie);
+
+            let price = U64F64::from_num(2u64).to_bits();
+            let netuid = 1u16;
+            let amount = 500_000_000u64; // Below minimum
+
+            // Should fail due to amount being too small
+            let result = contract.list_alpha(accounts.django, netuid, amount, price);
+            assert_eq!(result, Err(Error::AmountTooSmall));
+        }
+
+        #[ink::test]
+        fn list_alpha_fails_with_zero_price() {
+            let accounts = ink::env::test::default_accounts::<Environment>();
+            let fee_rate = fee_rate_from_percentage(0.5);
+
+            let mut contract = OtcContract::new(
+                accounts.alice,
+                accounts.bob,
+                fee_rate,
+                1_000_000_000,
+                1_000_000_000,
+                100,
+            );
+
+            // Set caller to Charlie (the seller)
+            ink::env::test::set_caller::<Environment>(accounts.charlie);
+
+            let price = 0u128; // Zero price
+            let netuid = 1u16;
+            let amount = 5_000_000_000u64;
+
+            // Should fail due to zero price
+            let result = contract.list_alpha(accounts.django, netuid, amount, price);
+            assert_eq!(result, Err(Error::InvalidPrice));
+        }
+
+        #[ink::test]
+        fn get_listing_works() {
+            let accounts = ink::env::test::default_accounts::<Environment>();
+            let fee_rate = fee_rate_from_percentage(0.5);
+
+            let contract = OtcContract::new(
+                accounts.alice,
+                accounts.bob,
+                fee_rate,
+                1_000_000_000,
+                1_000_000_000,
+                100,
+            );
+
+            // Try to get a non-existent listing
+            let listing = contract.get_listing(1, accounts.charlie, 1);
+            assert_eq!(listing, None);
+        }
+
+        #[ink::test]
+        fn get_user_listings_works() {
+            let accounts = ink::env::test::default_accounts::<Environment>();
+            let fee_rate = fee_rate_from_percentage(0.5);
+
+            let contract = OtcContract::new(
+                accounts.alice,
+                accounts.bob,
+                fee_rate,
+                1_000_000_000,
+                1_000_000_000,
+                100,
+            );
+
+            // Get listings for a user with no listings
+            let listings = contract.get_user_listings(accounts.charlie, 1);
+            assert_eq!(listings, Vec::<AlphaListingId>::new());
         }
     }
 }
