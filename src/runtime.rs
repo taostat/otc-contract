@@ -1,5 +1,6 @@
 #![allow(clippy::cast_possible_truncation)]
 
+use crate::types::AlphaAmount;
 use ink::prelude::boxed::Box;
 use ink::primitives::AccountId;
 
@@ -36,7 +37,7 @@ pub enum SubtensorCall {
         destination_hotkey: AccountId,
         origin_netuid: u16,
         destination_netuid: u16,
-        alpha_amount: u64, // Alpha amount in rao
+        alpha_amount: AlphaAmount, // Alpha amount in rao
     },
     /// transfer_stake - Transfers stake between coldkeys
     #[codec(index = 86)]
@@ -45,6 +46,6 @@ pub enum SubtensorCall {
         hotkey: AccountId,
         origin_netuid: u16,
         destination_netuid: u16,
-        alpha_amount: u64, // Alpha amount in rao
+        alpha_amount: AlphaAmount, // Alpha amount in rao
     },
 }

@@ -1,4 +1,6 @@
-use crate::types::{AlphaListingId, FixedDecimal, NetUid, TaoOfferId};
+use crate::types::{
+    AlphaAmount, AlphaListingId, Balance, BlockAge, FixedDecimal, NetUid, TaoAmount, TaoOfferId,
+};
 use ink::primitives::AccountId;
 
 #[ink::event]
@@ -9,7 +11,7 @@ pub struct AlphaListed {
     #[ink(topic)]
     pub netuid: NetUid,
     pub alpha_listing_id: AlphaListingId,
-    pub amount: u64,
+    pub amount: AlphaAmount,
     pub price: FixedDecimal,
 }
 
@@ -20,7 +22,7 @@ pub struct TaoOfferCreated {
     #[ink(topic)]
     pub netuid: NetUid,
     pub tao_offer_id: TaoOfferId,
-    pub amount: u64,
+    pub amount: TaoAmount,
     pub price: FixedDecimal,
 }
 
@@ -31,7 +33,7 @@ pub struct AlphaListingCancelled {
     #[ink(topic)]
     pub netuid: NetUid,
     pub listing_id: AlphaListingId,
-    pub amount_returned: u64,
+    pub amount_returned: AlphaAmount,
 }
 
 #[ink::event]
@@ -41,7 +43,7 @@ pub struct TaoOfferCancelled {
     #[ink(topic)]
     pub netuid: NetUid,
     pub offer_id: TaoOfferId,
-    pub amount_returned: u64,
+    pub amount_returned: TaoAmount,
 }
 
 #[ink::event]
@@ -52,10 +54,10 @@ pub struct AlphaListingTaken {
     pub buyer: AccountId,
     #[ink(topic)]
     pub netuid: NetUid,
-    pub alpha_amount: u64,
-    pub tao_amount: u64,
+    pub alpha_amount: AlphaAmount,
+    pub tao_amount: TaoAmount,
     pub price: FixedDecimal,
-    pub fee: u64,
+    pub fee: Balance,
     pub alpha_listing_id: Option<AlphaListingId>,
 }
 
@@ -67,10 +69,10 @@ pub struct TaoOfferTaken {
     pub buyer: AccountId,
     #[ink(topic)]
     pub netuid: NetUid,
-    pub alpha_amount: u64,
-    pub tao_amount: u64,
+    pub alpha_amount: AlphaAmount,
+    pub tao_amount: TaoAmount,
     pub price: FixedDecimal,
-    pub fee: u64,
+    pub fee: Balance,
     pub tao_offer_id: Option<TaoOfferId>,
 }
 
@@ -94,18 +96,18 @@ pub struct FeeRateUpdated {
 
 #[ink::event]
 pub struct MinOfferAmountUpdated {
-    pub old_amount: u64,
-    pub new_amount: u64,
+    pub old_amount: TaoAmount,
+    pub new_amount: TaoAmount,
 }
 
 #[ink::event]
 pub struct MinListingAmountUpdated {
-    pub old_amount: u64,
-    pub new_amount: u64,
+    pub old_amount: AlphaAmount,
+    pub new_amount: AlphaAmount,
 }
 
 #[ink::event]
 pub struct MinListingAgeUpdated {
-    pub old_age: u64,
-    pub new_age: u64,
+    pub old_age: BlockAge,
+    pub new_age: BlockAge,
 }
