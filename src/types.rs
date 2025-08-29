@@ -4,10 +4,19 @@ use ink::prelude::vec::Vec;
 use ink::primitives::AccountId;
 use ink::storage::Mapping;
 
+// ID types
 pub type AlphaListingId = u64;
 pub type TaoOfferId = u64;
+
+// Network and blockchain types
 pub type NetUid = u16;
 pub type BlockNumber = u32;
+pub type BlockAge = u32; // Age/duration in blocks
+
+// Balance and amount types (all u64 in Bittensor)
+pub type Balance = u64; // Generic balance/amount type
+pub type AlphaAmount = u64; // Amount of Alpha tokens in rao
+pub type TaoAmount = u64; // Amount of TAO tokens in rao
 
 pub type AlphaListingsMapping = Mapping<(NetUid, AccountId, AlphaListingId), AlphaListing>;
 pub type UserListingsMapping = Mapping<(AccountId, NetUid), Vec<AlphaListingId>>;
@@ -26,7 +35,7 @@ pub struct FixedDecimal {
 }
 
 impl FixedDecimal {
-    pub fn multiply_u64(&self, amount: u64) -> Result<u64, Error> {
+    pub fn multiply_u64(&self, amount: Balance) -> Result<Balance, Error> {
         let fixed = U64F64::from_bits(self.value);
         let amount_fixed = U64F64::from_num(amount);
         let result = fixed.checked_mul(amount_fixed).ok_or(Error::Overflow)?;
@@ -71,7 +80,7 @@ pub struct AlphaListing {
     pub id: AlphaListingId,
     pub netuid: NetUid,
     pub seller: AccountId,
-    pub amount: u64,            // Alpha amount in rao
+    pub amount: AlphaAmount,    // Alpha amount in rao
     pub price: FixedDecimal,    // TAO price per Alpha token
     pub fee_rate: FixedDecimal, // Fee rate at listing time (as decimal, e.g., 0.005 = 0.5%)
     pub created_at: BlockNumber,
@@ -85,7 +94,7 @@ pub struct TaoOffer {
     pub id: TaoOfferId,
     pub netuid: NetUid,
     pub buyer: AccountId,
-    pub amount: u64,            // TAO amount offered in rao
+    pub amount: TaoAmount,      // TAO amount offered in rao
     pub price: FixedDecimal,    // TAO price willing to pay per Alpha
     pub fee_rate: FixedDecimal, // Fee rate at offer time (as decimal, e.g., 0.005 = 0.5%)
     pub created_at: BlockNumber,
