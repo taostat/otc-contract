@@ -109,4 +109,3 @@ pub struct MinListingAgeUpdated {
     pub old_age: u64,
     pub new_age: u64,
 }
-
