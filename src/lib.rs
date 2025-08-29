@@ -6,23 +6,24 @@ pub mod types;
 
 #[ink::contract]
 mod otc_contract {
-    use crate::types::{AlphaListing, AlphaListingId, FixedDecimal, NetUid, TaoOffer, TaoOfferId};
-    use ink::prelude::vec::Vec;
-    use ink::storage::Mapping;
+    use crate::types::{
+        AlphaListingId, AlphaListingsMapping, FixedDecimal, 
+        TaoOfferId, TaoOffersMapping, UserListingsMapping, UserOffersMapping
+    };
 
     #[ink(storage)]
     pub struct OtcContract {
         /// Listings: (netuid, seller, listing_id) -> AlphaListing
-        alpha_listings: Mapping<(NetUid, AccountId, AlphaListingId), AlphaListing>,
+        alpha_listings: AlphaListingsMapping,
 
         /// User's listing IDs for iteration: (seller, netuid) -> Vec<listing_id>
-        user_listings: Mapping<(AccountId, NetUid), Vec<AlphaListingId>>,
+        user_listings: UserListingsMapping,
 
         /// Offers: (netuid, buyer, offer_id) -> TaoOffer
-        tao_offers: Mapping<(NetUid, AccountId, TaoOfferId), TaoOffer>,
+        tao_offers: TaoOffersMapping,
 
         /// User's offer IDs for iteration: (buyer, netuid) -> Vec<offer_id>
-        user_offers: Mapping<(AccountId, NetUid), Vec<TaoOfferId>>,
+        user_offers: UserOffersMapping,
 
         /// Global listing counter
         next_alpha_listing_id: AlphaListingId,
