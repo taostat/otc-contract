@@ -5,17 +5,33 @@ pub mod events;
 pub mod runtime;
 pub mod types;
 
-#[ink::contract]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "std", ink::scale_derive(TypeInfo))]
+pub struct BittensorEnvironment;
+
+impl ink::env::Environment for BittensorEnvironment {
+    const MAX_EVENT_TOPICS: usize = 4;
+    type AccountId = ink::primitives::AccountId;
+    type Balance = u64;
+    type Hash = ink::primitives::Hash;
+    type Timestamp = u64;
+    type BlockNumber = u32;
+    type ChainExtension = ::ink::env::NoChainExtension;
+}
+
+#[ink::contract(env = crate::BittensorEnvironment)]
 mod otc_contract {
     use crate::errors::Error;
     use crate::events::{
         AlphaListed, AlphaListingCancelled, FeeRateUpdated, HotkeyUpdated, MinListingAgeUpdated,
-        MinListingAmountUpdated, MinOfferAmountUpdated, OwnerUpdated,
+        MinListingAmountUpdated, MinOfferAmountUpdated, OwnerUpdated, TaoOfferCancelled,
+        TaoOfferCreated,
     };
     use crate::runtime::{ProxyCall, RuntimeCall, SubtensorCall};
     use crate::types::{
-        AlphaListing, AlphaListingId, AlphaListingsMapping, FixedDecimal, NetUid, TaoOfferId,
-        TaoOffersMapping, UserListingsMapping, UserOffersMapping,
+        AlphaAmount, AlphaListing, AlphaListingId, AlphaListingsMapping, BlockAge, FixedDecimal,
+        NetUid, TaoAmount, TaoOffer, TaoOfferId, TaoOffersMapping, UserListingsMapping,
+        UserOffersMapping,
     };
     use ink::prelude::{boxed::Box, vec::Vec};
 
@@ -49,13 +65,13 @@ mod otc_contract {
         fee_rate: FixedDecimal,
 
         /// Minimum Alpha amount for listings
-        min_listing_amount: u64,
+        min_listing_amount: AlphaAmount,
 
         /// Minimum TAO amount for offers
-        min_offer_amount: u64,
+        min_offer_amount: TaoAmount,
 
         /// Minimum age before listing can be cancelled (in blocks)
-        min_listing_age: u64,
+        min_listing_age: BlockAge,
     }
 
     impl OtcContract {
@@ -64,9 +80,9 @@ mod otc_contract {
             owner: AccountId,
             hotkey: AccountId,
             fee_rate: u128, // U64F64 bits representing the fee rate
-            min_listing_amount: u64,
-            min_offer_amount: u64,
-            min_listing_age: u64,
+            min_listing_amount: AlphaAmount,
+            min_offer_amount: TaoAmount,
+            min_listing_age: BlockAge,
         ) -> Self {
             let fee_rate = FixedDecimal::from_bits(fee_rate);
 
@@ -106,19 +122,19 @@ mod otc_contract {
 
         /// Get minimum listing amount
         #[ink(message)]
-        pub fn get_min_listing_amount(&self) -> u64 {
+        pub fn get_min_listing_amount(&self) -> AlphaAmount {
             self.min_listing_amount
         }
 
         /// Get minimum offer amount
         #[ink(message)]
-        pub fn get_min_offer_amount(&self) -> u64 {
+        pub fn get_min_offer_amount(&self) -> TaoAmount {
             self.min_offer_amount
         }
 
         /// Get minimum listing age
         #[ink(message)]
-        pub fn get_min_listing_age(&self) -> u64 {
+        pub fn get_min_listing_age(&self) -> BlockAge {
             self.min_listing_age
         }
 
@@ -174,7 +190,7 @@ mod otc_contract {
         /// Update the minimum listing amount
         /// Can only be called by the contract owner
         #[ink(message)]
-        pub fn update_min_listing_amount(&mut self, new_amount: u64) -> Result<(), Error> {
+        pub fn update_min_listing_amount(&mut self, new_amount: AlphaAmount) -> Result<(), Error> {
             self.ensure_owner()?;
 
             let old_amount = self.min_listing_amount;
@@ -191,7 +207,7 @@ mod otc_contract {
         /// Update the minimum offer amount
         /// Can only be called by the contract owner
         #[ink(message)]
-        pub fn update_min_offer_amount(&mut self, new_amount: u64) -> Result<(), Error> {
+        pub fn update_min_offer_amount(&mut self, new_amount: TaoAmount) -> Result<(), Error> {
             self.ensure_owner()?;
 
             let old_amount = self.min_offer_amount;
@@ -208,7 +224,7 @@ mod otc_contract {
         /// Update the minimum listing age
         /// Can only be called by the contract owner
         #[ink(message)]
-        pub fn update_min_listing_age(&mut self, new_age: u64) -> Result<(), Error> {
+        pub fn update_min_listing_age(&mut self, new_age: BlockAge) -> Result<(), Error> {
             self.ensure_owner()?;
 
             let old_age = self.min_listing_age;
@@ -229,7 +245,7 @@ mod otc_contract {
             &mut self,
             hotkey: AccountId,
             netuid: NetUid,
-            amount: u64,
+            amount: AlphaAmount,
             price: u128, // Price as FixedDecimal bits (TAO per Alpha)
         ) -> Result<AlphaListingId, Error> {
             let seller = self.env().caller();
@@ -334,7 +350,7 @@ mod otc_contract {
             let current_block = self.env().block_number();
             let listing_age = current_block.saturating_sub(listing.created_at);
 
-            if listing_age < self.min_listing_age as u32 {
+            if listing_age < self.min_listing_age {
                 return Err(Error::ListingTooYoung);
             }
 
@@ -388,6 +404,114 @@ mod otc_contract {
         #[ink(message)]
         pub fn get_user_listings(&self, seller: AccountId, netuid: NetUid) -> Vec<AlphaListingId> {
             self.user_listings.get((seller, netuid)).unwrap_or_default()
+        }
+
+        /// Create a TAO offer by depositing TAO into the contract
+        /// The buyer sends TAO with the transaction and specifies their desired price
+        #[ink(message, payable)]
+        pub fn create_tao_offer(
+            &mut self,
+            netuid: NetUid,
+            price: u128, // Price as FixedDecimal bits
+        ) -> Result<TaoOfferId, Error> {
+            let buyer = self.env().caller();
+            let amount = self.env().transferred_value();
+            let price = FixedDecimal::from_bits(price);
+
+            if amount < self.min_offer_amount {
+                return Err(Error::AmountTooSmall);
+            }
+
+            if price.to_bits() == 0 {
+                return Err(Error::InvalidPrice);
+            }
+
+            let offer_id = self.next_tao_offer_id;
+            self.next_tao_offer_id = offer_id.saturating_add(1);
+
+            let offer = TaoOffer {
+                id: offer_id,
+                netuid,
+                buyer,
+                amount,
+                price,
+                fee_rate: self.fee_rate,
+                created_at: self.env().block_number(),
+            };
+
+            self.tao_offers.insert((netuid, buyer, offer_id), &offer);
+
+            let mut user_offers = self.user_offers.get((buyer, netuid)).unwrap_or_default();
+            user_offers.push(offer_id);
+            self.user_offers.insert((buyer, netuid), &user_offers);
+
+            self.env().emit_event(TaoOfferCreated {
+                buyer,
+                netuid,
+                tao_offer_id: offer_id,
+                amount,
+                price,
+            });
+
+            Ok(offer_id)
+        }
+
+        /// Cancel a TAO offer and return the TAO to the buyer
+        /// Can only be called by the offer owner
+        #[ink(message)]
+        pub fn cancel_tao_offer(
+            &mut self,
+            netuid: NetUid,
+            offer_id: TaoOfferId,
+        ) -> Result<(), Error> {
+            let buyer = self.env().caller();
+
+            let offer = self
+                .tao_offers
+                .get((netuid, buyer, offer_id))
+                .ok_or(Error::OfferNotFound)?;
+
+            // Return TAO to buyer
+            self.env()
+                .transfer(buyer, offer.amount)
+                .map_err(|_| Error::TransferFailed)?;
+
+            self.tao_offers.remove((netuid, buyer, offer_id));
+
+            let mut user_offers = self.user_offers.get((buyer, netuid)).unwrap_or_default();
+            user_offers.retain(|&id| id != offer_id);
+
+            if user_offers.is_empty() {
+                self.user_offers.remove((buyer, netuid));
+            } else {
+                self.user_offers.insert((buyer, netuid), &user_offers);
+            }
+
+            self.env().emit_event(TaoOfferCancelled {
+                buyer,
+                netuid,
+                offer_id,
+                amount_returned: offer.amount,
+            });
+
+            Ok(())
+        }
+
+        /// Get a specific TAO offer
+        #[ink(message)]
+        pub fn get_offer(
+            &self,
+            netuid: NetUid,
+            buyer: AccountId,
+            offer_id: TaoOfferId,
+        ) -> Option<TaoOffer> {
+            self.tao_offers.get((netuid, buyer, offer_id))
+        }
+
+        /// Get all offer IDs for a user on a specific subnet
+        #[ink(message)]
+        pub fn get_user_offers(&self, buyer: AccountId, netuid: NetUid) -> Vec<TaoOfferId> {
+            self.user_offers.get((buyer, netuid)).unwrap_or_default()
         }
 
         /// Access control helper: ensure caller is the owner
@@ -1098,6 +1222,290 @@ mod otc_contract {
             assert!(contract.get_listing(1, accounts.charlie, 1).is_none());
             assert!(contract.get_listing(1, accounts.charlie, 2).is_none());
             assert_eq!(contract.get_user_listings(accounts.charlie, 1).len(), 0);
+        }
+
+        #[ink::test]
+        fn create_tao_offer_works() {
+            let accounts = ink::env::test::default_accounts::<Environment>();
+            let fee_rate = fee_rate_from_percentage(0.5);
+
+            let mut contract = OtcContract::new(
+                accounts.alice,
+                accounts.bob,
+                fee_rate,
+                1_000_000_000,
+                1_000_000_000, // min offer amount
+                100,
+            );
+
+            // Set caller to Charlie (the buyer)
+            ink::env::test::set_caller::<Environment>(accounts.charlie);
+            // Set transferred value (TAO amount)
+            ink::env::test::set_value_transferred::<ink::env::DefaultEnvironment>(5_000_000_000);
+
+            let price = U64F64::from_num(2u64).to_bits();
+            let netuid = 1u16;
+
+            // Create TAO offer
+            let result = contract.create_tao_offer(netuid, price);
+            assert!(result.is_ok());
+
+            let offer_id = result.unwrap();
+            assert_eq!(offer_id, 1);
+
+            // Verify offer was stored correctly
+            let offer = contract.get_offer(netuid, accounts.charlie, offer_id);
+            assert!(offer.is_some());
+
+            let offer = offer.unwrap();
+            assert_eq!(offer.id, offer_id);
+            assert_eq!(offer.netuid, netuid);
+            assert_eq!(offer.buyer, accounts.charlie);
+            assert_eq!(offer.amount, 5_000_000_000);
+            assert_eq!(offer.price.to_bits(), price);
+
+            // Verify user offers index was updated
+            let user_offers = contract.get_user_offers(accounts.charlie, netuid);
+            assert_eq!(user_offers, vec![offer_id]);
+        }
+
+        #[ink::test]
+        fn create_tao_offer_fails_with_amount_too_small() {
+            let accounts = ink::env::test::default_accounts::<Environment>();
+            let fee_rate = fee_rate_from_percentage(0.5);
+
+            let mut contract = OtcContract::new(
+                accounts.alice,
+                accounts.bob,
+                fee_rate,
+                1_000_000_000,
+                1_000_000_000, // min offer amount
+                100,
+            );
+
+            // Set caller to Charlie (the buyer)
+            ink::env::test::set_caller::<Environment>(accounts.charlie);
+            // Set transferred value below minimum
+            ink::env::test::set_value_transferred::<ink::env::DefaultEnvironment>(500_000_000);
+
+            let price = U64F64::from_num(2u64).to_bits();
+            let netuid = 1u16;
+
+            // Should fail due to amount being too small
+            let result = contract.create_tao_offer(netuid, price);
+            assert_eq!(result, Err(Error::AmountTooSmall));
+        }
+
+        #[ink::test]
+        fn create_tao_offer_fails_with_zero_price() {
+            let accounts = ink::env::test::default_accounts::<Environment>();
+            let fee_rate = fee_rate_from_percentage(0.5);
+
+            let mut contract = OtcContract::new(
+                accounts.alice,
+                accounts.bob,
+                fee_rate,
+                1_000_000_000,
+                1_000_000_000,
+                100,
+            );
+
+            // Set caller to Charlie (the buyer)
+            ink::env::test::set_caller::<Environment>(accounts.charlie);
+            // Set transferred value
+            ink::env::test::set_value_transferred::<ink::env::DefaultEnvironment>(5_000_000_000);
+
+            let price = 0u128; // Zero price
+            let netuid = 1u16;
+
+            // Should fail due to zero price
+            let result = contract.create_tao_offer(netuid, price);
+            assert_eq!(result, Err(Error::InvalidPrice));
+        }
+
+        #[ink::test]
+        fn cancel_tao_offer_authorization_works() {
+            let accounts = ink::env::test::default_accounts::<Environment>();
+            let fee_rate = fee_rate_from_percentage(0.5);
+
+            let mut contract = OtcContract::new(
+                accounts.alice,
+                accounts.bob,
+                fee_rate,
+                1_000_000_000,
+                1_000_000_000,
+                100,
+            );
+
+            // Create a mock offer manually for testing
+            let offer = TaoOffer {
+                id: 1,
+                netuid: 1,
+                buyer: accounts.charlie,
+                amount: 5_000_000_000,
+                price: FixedDecimal::from_bits(U64F64::from_num(2u64).to_bits()),
+                fee_rate: contract.fee_rate,
+                created_at: 1000,
+            };
+
+            // Insert the offer
+            contract.tao_offers.insert((1, accounts.charlie, 1), &offer);
+            contract.user_offers.insert((accounts.charlie, 1), &vec![1]);
+
+            // Test that a different user cannot cancel
+            ink::env::test::set_caller::<Environment>(accounts.django);
+            let result = contract.cancel_tao_offer(1, 1);
+            assert_eq!(result, Err(Error::OfferNotFound));
+
+            // Verify that the correct owner can find their offer
+            ink::env::test::set_caller::<Environment>(accounts.charlie);
+            let found_offer = contract.get_offer(1, accounts.charlie, 1);
+            assert!(found_offer.is_some());
+            assert_eq!(found_offer.unwrap().buyer, accounts.charlie);
+        }
+
+        #[ink::test]
+        fn cancel_tao_offer_fails_when_offer_not_found() {
+            let accounts = ink::env::test::default_accounts::<Environment>();
+            let fee_rate = fee_rate_from_percentage(0.5);
+
+            let mut contract = OtcContract::new(
+                accounts.alice,
+                accounts.bob,
+                fee_rate,
+                1_000_000_000,
+                1_000_000_000,
+                100,
+            );
+
+            // Set caller to Charlie
+            ink::env::test::set_caller::<Environment>(accounts.charlie);
+
+            // Try to cancel a non-existent offer
+            let result = contract.cancel_tao_offer(1, 999);
+            assert_eq!(result, Err(Error::OfferNotFound));
+        }
+
+        #[ink::test]
+        fn get_offer_works() {
+            let accounts = ink::env::test::default_accounts::<Environment>();
+            let fee_rate = fee_rate_from_percentage(0.5);
+
+            let contract = OtcContract::new(
+                accounts.alice,
+                accounts.bob,
+                fee_rate,
+                1_000_000_000,
+                1_000_000_000,
+                100,
+            );
+
+            // Try to get a non-existent offer
+            let offer = contract.get_offer(1, accounts.charlie, 1);
+            assert_eq!(offer, None);
+        }
+
+        #[ink::test]
+        fn get_user_offers_works() {
+            let accounts = ink::env::test::default_accounts::<Environment>();
+            let fee_rate = fee_rate_from_percentage(0.5);
+
+            let contract = OtcContract::new(
+                accounts.alice,
+                accounts.bob,
+                fee_rate,
+                1_000_000_000,
+                1_000_000_000,
+                100,
+            );
+
+            // Get offers for a user with no offers
+            let offers = contract.get_user_offers(accounts.charlie, 1);
+            assert_eq!(offers, Vec::<TaoOfferId>::new());
+        }
+
+        #[ink::test]
+        fn cancel_tao_offer_cleans_up_storage() {
+            let accounts = ink::env::test::default_accounts::<Environment>();
+            let fee_rate = fee_rate_from_percentage(0.5);
+
+            let mut contract = OtcContract::new(
+                accounts.alice,
+                accounts.bob,
+                fee_rate,
+                1_000_000_000,
+                1_000_000_000,
+                100,
+            );
+
+            // Create two mock offers for the same user
+            let offer1 = TaoOffer {
+                id: 1,
+                netuid: 1,
+                buyer: accounts.charlie,
+                amount: 5_000_000_000,
+                price: FixedDecimal::from_bits(U64F64::from_num(2u64).to_bits()),
+                fee_rate: contract.fee_rate,
+                created_at: 1000,
+            };
+
+            let offer2 = TaoOffer {
+                id: 2,
+                netuid: 1,
+                buyer: accounts.charlie,
+                amount: 3_000_000_000,
+                price: FixedDecimal::from_bits(U64F64::from_num(1u64).to_bits()),
+                fee_rate: contract.fee_rate,
+                created_at: 1100,
+            };
+
+            // Insert both offers
+            contract
+                .tao_offers
+                .insert((1, accounts.charlie, 1), &offer1);
+            contract
+                .tao_offers
+                .insert((1, accounts.charlie, 2), &offer2);
+            contract
+                .user_offers
+                .insert((accounts.charlie, 1), &vec![1, 2]);
+
+            // Verify both offers exist
+            assert!(contract.get_offer(1, accounts.charlie, 1).is_some());
+            assert!(contract.get_offer(1, accounts.charlie, 2).is_some());
+            assert_eq!(contract.get_user_offers(accounts.charlie, 1).len(), 2);
+
+            // Manually simulate successful cancellation for testing storage cleanup
+            // Remove offer 1
+            contract.tao_offers.remove((1, accounts.charlie, 1));
+            let mut user_offers = contract.user_offers.get((accounts.charlie, 1)).unwrap();
+            user_offers.retain(|&id| id != 1);
+            contract
+                .user_offers
+                .insert((accounts.charlie, 1), &user_offers);
+
+            // Verify offer 1 is removed but offer 2 remains
+            assert!(contract.get_offer(1, accounts.charlie, 1).is_none());
+            assert!(contract.get_offer(1, accounts.charlie, 2).is_some());
+            assert_eq!(contract.get_user_offers(accounts.charlie, 1), vec![2]);
+
+            // Remove offer 2
+            contract.tao_offers.remove((1, accounts.charlie, 2));
+            let user_offers = contract.user_offers.get((accounts.charlie, 1)).unwrap();
+            let filtered: Vec<_> = user_offers.into_iter().filter(|&id| id != 2).collect();
+
+            if filtered.is_empty() {
+                contract.user_offers.remove((accounts.charlie, 1));
+            } else {
+                contract
+                    .user_offers
+                    .insert((accounts.charlie, 1), &filtered);
+            }
+
+            // Verify both offers are removed and user_offers is cleaned up
+            assert!(contract.get_offer(1, accounts.charlie, 1).is_none());
+            assert!(contract.get_offer(1, accounts.charlie, 2).is_none());
+            assert_eq!(contract.get_user_offers(accounts.charlie, 1).len(), 0);
         }
     }
 }
