@@ -9,7 +9,6 @@ pub type TaoOfferId = u64;
 pub type NetUid = u16;
 pub type BlockNumber = u32;
 
-// Type aliases for complex storage mappings to reduce clippy complexity warnings
 pub type AlphaListingsMapping = Mapping<(NetUid, AccountId, AlphaListingId), AlphaListing>;
 pub type UserListingsMapping = Mapping<(AccountId, NetUid), Vec<AlphaListingId>>;
 pub type TaoOffersMapping = Mapping<(NetUid, AccountId, TaoOfferId), TaoOffer>;
@@ -30,8 +29,6 @@ impl FixedDecimal {
     pub fn multiply_u64(&self, amount: u64) -> Result<u64, Error> {
         let fixed = U64F64::from_bits(self.value);
         let amount_fixed = U64F64::from_num(amount);
-
-        // Use checked multiplication to avoid arithmetic side effects
         let result = fixed.checked_mul(amount_fixed).ok_or(Error::Overflow)?;
 
         if result > U64F64::from_num(u64::MAX) {
