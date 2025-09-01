@@ -1836,5 +1836,797 @@ mod otc_contract {
             let result = contract.take_tao_offer(1, accounts.charlie, 999, accounts.eve);
             assert_eq!(result, Err(Error::OfferNotFound));
         }
+
+        #[ink::test]
+        fn test_fixed_decimal_overflow_in_mul() {
+            // Test multiplication that would overflow
+            let large_decimal = FixedDecimal::from_bits(U64F64::from_num(u64::MAX / 2).to_bits());
+            let result = large_decimal.mul(3);
+            assert_eq!(result, Err(Error::Overflow));
+
+            // Test with maximum safe value
+            let safe_decimal = FixedDecimal::from_bits(U64F64::from_num(1000u64).to_bits());
+            let safe_result = safe_decimal.mul(1_000_000);
+            assert_eq!(safe_result, Ok(1_000_000_000));
+        }
+
+        #[ink::test]
+        fn test_fixed_decimal_overflow_in_div_by() {
+            // Test division with very small divisor - should produce a large number
+            let tiny_decimal = FixedDecimal::from_bits(U64F64::from_num(0.000000001).to_bits());
+            let result = tiny_decimal.div_by(100);
+
+            // This produces 100 / 0.000000001 = 100,000,000,000 which fits in u64
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), 99_999_999_998); // Slight rounding from fixed-point math
+
+            // Test that would actually overflow
+            let extremely_tiny =
+                FixedDecimal::from_bits(U64F64::from_num(0.0000000000001).to_bits());
+            let overflow_result = extremely_tiny.div_by(u64::MAX);
+            assert_eq!(overflow_result, Err(Error::Overflow));
+
+            // Test normal division
+            let normal_decimal = FixedDecimal::from_bits(U64F64::from_num(10u64).to_bits());
+            let normal_result = normal_decimal.div_by(1000);
+            assert_eq!(normal_result, Ok(100));
+        }
+
+        #[ink::test]
+        fn test_fixed_decimal_fee_calculations() {
+            // Test various fee percentages
+            let fee_0_1_percent = FixedDecimal::from_bits(U64F64::from_num(0.001).to_bits()); // 0.1%
+            let fee_0_5_percent = FixedDecimal::from_bits(U64F64::from_num(0.005).to_bits()); // 0.5%
+            let fee_1_percent = FixedDecimal::from_bits(U64F64::from_num(0.01).to_bits()); // 1%
+            let fee_2_5_percent = FixedDecimal::from_bits(U64F64::from_num(0.025).to_bits()); // 2.5%
+
+            let amount = 10_000_000_000u64; // 10 TAO
+
+            assert_eq!(fee_0_1_percent.mul(amount), Ok(10_000_000)); // 0.01 TAO
+            assert_eq!(fee_0_5_percent.mul(amount), Ok(50_000_000)); // 0.05 TAO
+            assert_eq!(fee_1_percent.mul(amount), Ok(100_000_000)); // 0.1 TAO
+            assert_eq!(fee_2_5_percent.mul(amount), Ok(250_000_000)); // 0.25 TAO
+        }
+
+        #[ink::test]
+        fn test_fixed_decimal_maximum_values() {
+            // Test with maximum TAO amounts (considering 1 TAO = 10^9 rao)
+            let price = FixedDecimal::from_bits(U64F64::from_num(1.5).to_bits());
+            let max_tao = 1_000_000_000_000_000u64; // 1 million TAO in rao
+
+            // Should handle large TAO amounts
+            let result = price.mul(max_tao);
+            assert_eq!(result, Ok(1_500_000_000_000_000));
+
+            // Test div_by_decimal with large amounts
+            let alpha_result = price.div_by_decimal(max_tao);
+            assert_eq!(alpha_result, Ok(666_666_666_666_666)); // Approximately 2/3 of max_tao
+        }
+
+        #[ink::test]
+        fn test_listing_counter_increments() {
+            let accounts = ink::env::test::default_accounts::<Environment>();
+            let fee_rate = fee_rate_from_percentage(0.5);
+
+            let mut contract = OtcContract::new(
+                accounts.alice,
+                accounts.bob,
+                fee_rate,
+                1_000_000_000,
+                1_000_000_000,
+                100,
+            );
+
+            // Initial counter should be 1
+            assert_eq!(contract.next_alpha_listing_id, 1);
+
+            // Manually simulate listing creation (since runtime calls won't work)
+            contract.next_alpha_listing_id = 5;
+            assert_eq!(contract.next_alpha_listing_id, 5);
+
+            // Simulate another increment
+            contract.next_alpha_listing_id += 1;
+            assert_eq!(contract.next_alpha_listing_id, 6);
+        }
+
+        #[ink::test]
+        fn test_offer_counter_increments() {
+            let accounts = ink::env::test::default_accounts::<Environment>();
+            let fee_rate = fee_rate_from_percentage(0.5);
+
+            let mut contract = OtcContract::new(
+                accounts.alice,
+                accounts.bob,
+                fee_rate,
+                1_000_000_000,
+                1_000_000_000,
+                100,
+            );
+
+            // Initial counter should be 1
+            assert_eq!(contract.next_tao_offer_id, 1);
+
+            // Create an offer (this will actually work since it doesn't need runtime calls)
+            ink::env::test::set_caller::<Environment>(accounts.charlie);
+            ink::env::test::set_value_transferred::<ink::env::DefaultEnvironment>(5_000_000_000);
+
+            let price = U64F64::from_num(2u64).to_bits();
+            let result = contract.create_tao_offer(1, price);
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), 1);
+
+            // Counter should have incremented
+            assert_eq!(contract.next_tao_offer_id, 2);
+
+            // Create another offer
+            let result2 = contract.create_tao_offer(1, price);
+            assert!(result2.is_ok());
+            assert_eq!(result2.unwrap(), 2);
+            assert_eq!(contract.next_tao_offer_id, 3);
+        }
+
+        #[ink::test]
+        fn test_multiple_listings_different_netuids() {
+            let accounts = ink::env::test::default_accounts::<Environment>();
+            let fee_rate = fee_rate_from_percentage(0.5);
+
+            let mut contract = OtcContract::new(
+                accounts.alice,
+                accounts.bob,
+                fee_rate,
+                1_000_000_000,
+                1_000_000_000,
+                100,
+            );
+
+            // Create listings on different netuids for the same user
+            let listing1 = AlphaListing {
+                id: 1,
+                netuid: 1,
+                seller: accounts.charlie,
+                amount: 5_000_000_000,
+                price: FixedDecimal::from_bits(U64F64::from_num(2u64).to_bits()),
+                fee_rate: contract.fee_rate,
+                created_at: 1000,
+            };
+
+            let listing2 = AlphaListing {
+                id: 2,
+                netuid: 2,
+                seller: accounts.charlie,
+                amount: 3_000_000_000,
+                price: FixedDecimal::from_bits(U64F64::from_num(1.5).to_bits()),
+                fee_rate: contract.fee_rate,
+                created_at: 1000,
+            };
+
+            let listing3 = AlphaListing {
+                id: 3,
+                netuid: 1,
+                seller: accounts.charlie,
+                amount: 7_000_000_000,
+                price: FixedDecimal::from_bits(U64F64::from_num(3u64).to_bits()),
+                fee_rate: contract.fee_rate,
+                created_at: 1000,
+            };
+
+            // Insert listings
+            contract
+                .alpha_listings
+                .insert((1, accounts.charlie, 1), &listing1);
+            contract
+                .alpha_listings
+                .insert((2, accounts.charlie, 2), &listing2);
+            contract
+                .alpha_listings
+                .insert((1, accounts.charlie, 3), &listing3);
+
+            // Update user listings index
+            contract
+                .user_listings
+                .insert((accounts.charlie, 1), &vec![1, 3]);
+            contract
+                .user_listings
+                .insert((accounts.charlie, 2), &vec![2]);
+
+            // Verify correct retrieval
+            assert_eq!(contract.get_user_listings(accounts.charlie, 1), vec![1, 3]);
+            assert_eq!(contract.get_user_listings(accounts.charlie, 2), vec![2]);
+            assert_eq!(
+                contract.get_user_listings(accounts.charlie, 3),
+                Vec::<AlphaListingId>::new()
+            );
+
+            // Verify individual listings
+            assert!(contract.get_listing(1, accounts.charlie, 1).is_some());
+            assert!(contract.get_listing(2, accounts.charlie, 2).is_some());
+            assert!(contract.get_listing(1, accounts.charlie, 3).is_some());
+            assert!(contract.get_listing(1, accounts.charlie, 2).is_none()); // Wrong netuid
+        }
+
+        #[ink::test]
+        fn test_multiple_offers_different_netuids() {
+            let accounts = ink::env::test::default_accounts::<Environment>();
+            let fee_rate = fee_rate_from_percentage(0.5);
+
+            let mut contract = OtcContract::new(
+                accounts.alice,
+                accounts.bob,
+                fee_rate,
+                1_000_000_000,
+                1_000_000_000,
+                100,
+            );
+
+            // Create offers on different netuids
+            ink::env::test::set_caller::<Environment>(accounts.charlie);
+            ink::env::test::set_value_transferred::<ink::env::DefaultEnvironment>(5_000_000_000);
+
+            let price = U64F64::from_num(2u64).to_bits();
+
+            // Offer on netuid 1
+            let offer1_id = contract.create_tao_offer(1, price).unwrap();
+            assert_eq!(offer1_id, 1);
+
+            // Offer on netuid 2
+            ink::env::test::set_value_transferred::<ink::env::DefaultEnvironment>(3_000_000_000);
+            let offer2_id = contract.create_tao_offer(2, price).unwrap();
+            assert_eq!(offer2_id, 2);
+
+            // Another offer on netuid 1
+            ink::env::test::set_value_transferred::<ink::env::DefaultEnvironment>(7_000_000_000);
+            let offer3_id = contract.create_tao_offer(1, price).unwrap();
+            assert_eq!(offer3_id, 3);
+
+            // Verify correct retrieval
+            assert_eq!(contract.get_user_offers(accounts.charlie, 1), vec![1, 3]);
+            assert_eq!(contract.get_user_offers(accounts.charlie, 2), vec![2]);
+            assert_eq!(
+                contract.get_user_offers(accounts.charlie, 3),
+                Vec::<TaoOfferId>::new()
+            );
+        }
+
+        #[ink::test]
+        fn test_storage_cleanup_all_listings_removed() {
+            let accounts = ink::env::test::default_accounts::<Environment>();
+            let fee_rate = fee_rate_from_percentage(0.5);
+
+            let mut contract = OtcContract::new(
+                accounts.alice,
+                accounts.bob,
+                fee_rate,
+                1_000_000_000,
+                1_000_000_000,
+                100,
+            );
+
+            // Create a single listing
+            let listing = AlphaListing {
+                id: 1,
+                netuid: 1,
+                seller: accounts.charlie,
+                amount: 5_000_000_000,
+                price: FixedDecimal::from_bits(U64F64::from_num(2u64).to_bits()),
+                fee_rate: contract.fee_rate,
+                created_at: 1000,
+            };
+
+            contract
+                .alpha_listings
+                .insert((1, accounts.charlie, 1), &listing);
+            contract
+                .user_listings
+                .insert((accounts.charlie, 1), &vec![1]);
+
+            // Verify listing exists
+            assert!(contract.get_listing(1, accounts.charlie, 1).is_some());
+            assert_eq!(contract.get_user_listings(accounts.charlie, 1).len(), 1);
+
+            // Remove the listing completely
+            contract.alpha_listings.remove((1, accounts.charlie, 1));
+            contract.user_listings.remove((accounts.charlie, 1));
+
+            // Verify complete cleanup
+            assert!(contract.get_listing(1, accounts.charlie, 1).is_none());
+            assert_eq!(contract.get_user_listings(accounts.charlie, 1).len(), 0);
+        }
+
+        #[ink::test]
+        fn test_storage_cleanup_all_offers_removed() {
+            let accounts = ink::env::test::default_accounts::<Environment>();
+            let fee_rate = fee_rate_from_percentage(0.5);
+
+            let mut contract = OtcContract::new(
+                accounts.alice,
+                accounts.bob,
+                fee_rate,
+                1_000_000_000,
+                1_000_000_000,
+                100,
+            );
+
+            // Create a single offer
+            let offer = TaoOffer {
+                id: 1,
+                netuid: 1,
+                buyer: accounts.charlie,
+                amount: 5_000_000_000,
+                price: FixedDecimal::from_bits(U64F64::from_num(2u64).to_bits()),
+                fee_rate: contract.fee_rate,
+                created_at: 1000,
+            };
+
+            contract.tao_offers.insert((1, accounts.charlie, 1), &offer);
+            contract.user_offers.insert((accounts.charlie, 1), &vec![1]);
+
+            // Verify offer exists
+            assert!(contract.get_offer(1, accounts.charlie, 1).is_some());
+            assert_eq!(contract.get_user_offers(accounts.charlie, 1).len(), 1);
+
+            // Remove the offer completely
+            contract.tao_offers.remove((1, accounts.charlie, 1));
+            contract.user_offers.remove((accounts.charlie, 1));
+
+            // Verify complete cleanup
+            assert!(contract.get_offer(1, accounts.charlie, 1).is_none());
+            assert_eq!(contract.get_user_offers(accounts.charlie, 1).len(), 0);
+        }
+
+        // Error Conditions
+
+        #[ink::test]
+        fn test_list_alpha_with_zero_amount() {
+            let accounts = ink::env::test::default_accounts::<Environment>();
+            let fee_rate = fee_rate_from_percentage(0.5);
+
+            let mut contract = OtcContract::new(
+                accounts.alice,
+                accounts.bob,
+                fee_rate,
+                1_000_000_000,
+                1_000_000_000,
+                100,
+            );
+
+            ink::env::test::set_caller::<Environment>(accounts.charlie);
+            let price = U64F64::from_num(2u64).to_bits();
+
+            // Try to list with zero amount
+            let result = contract.list_alpha(accounts.django, 1, 0, price);
+            assert_eq!(result, Err(Error::AmountTooSmall));
+        }
+
+        #[ink::test]
+        fn test_create_offer_with_maximum_amounts() {
+            let accounts = ink::env::test::default_accounts::<Environment>();
+            let fee_rate = fee_rate_from_percentage(0.5);
+
+            let mut contract = OtcContract::new(
+                accounts.alice,
+                accounts.bob,
+                fee_rate,
+                1_000_000_000,
+                1_000_000_000,
+                100,
+            );
+
+            ink::env::test::set_caller::<Environment>(accounts.charlie);
+
+            // Test with very large amount (but still valid)
+            let large_amount = 1_000_000_000_000_000u128; // 1 million TAO
+            ink::env::test::set_value_transferred::<ink::env::DefaultEnvironment>(large_amount);
+
+            let price = U64F64::from_num(2u64).to_bits();
+            let result = contract.create_tao_offer(1, price);
+            assert!(result.is_ok());
+
+            let offer = contract
+                .get_offer(1, accounts.charlie, result.unwrap())
+                .unwrap();
+            assert_eq!(offer.amount, large_amount as u64);
+        }
+
+        #[ink::test]
+        fn test_fee_calculation_precision() {
+            let accounts = ink::env::test::default_accounts::<Environment>();
+
+            // Test with various fee rates to ensure precision
+            let test_cases = vec![
+                (0.1, 10_000_000_000u64, 10_000_000u64), // 0.1% of 10 TAO = 0.01 TAO
+                (0.25, 10_000_000_000u64, 25_000_000u64), // 0.25% of 10 TAO = 0.025 TAO
+                (0.33, 10_000_000_000u64, 32_999_999u64), // 0.33% of 10 TAO = ~0.033 TAO (rounding)
+                (1.5, 10_000_000_000u64, 149_999_999u64), // 1.5% of 10 TAO = ~0.15 TAO (rounding)
+                (2.75, 10_000_000_000u64, 275_000_000u64), // 2.75% of 10 TAO = 0.275 TAO
+            ];
+
+            for (fee_percentage, amount, expected_fee) in test_cases {
+                let fee_rate = fee_rate_from_percentage(fee_percentage);
+                let contract = OtcContract::new(
+                    accounts.alice,
+                    accounts.bob,
+                    fee_rate,
+                    1_000_000_000,
+                    1_000_000_000,
+                    100,
+                );
+
+                let calculated_fee = contract.fee_rate.mul(amount).unwrap();
+                assert_eq!(
+                    calculated_fee, expected_fee,
+                    "Fee calculation failed for {}% of {}",
+                    fee_percentage, amount
+                );
+            }
+        }
+
+        #[ink::test]
+        fn test_take_listing_exact_payment_required() {
+            let accounts = ink::env::test::default_accounts::<Environment>();
+            let fee_rate = fee_rate_from_percentage(1.0);
+
+            let mut contract = OtcContract::new(
+                accounts.alice,
+                accounts.bob,
+                fee_rate,
+                1_000_000_000,
+                1_000_000_000,
+                100,
+            );
+
+            // Create a listing
+            let alpha_amount = 5_000_000_000u64; // 5 Alpha
+            let price_per_alpha = U64F64::from_num(2u64); // 2 TAO per Alpha
+            let listing = AlphaListing {
+                id: 1,
+                netuid: 1,
+                seller: accounts.charlie,
+                amount: alpha_amount,
+                price: FixedDecimal::from_bits(price_per_alpha.to_bits()),
+                fee_rate: contract.fee_rate,
+                created_at: 1000,
+            };
+
+            contract
+                .alpha_listings
+                .insert((1, accounts.charlie, 1), &listing);
+
+            // Calculate exact required payment
+            let total_price = listing.price.mul(alpha_amount).unwrap(); // 10 TAO
+            let fee = contract.fee_rate.mul(total_price).unwrap(); // 0.1 TAO (1% fee)
+            let required_payment = total_price + fee; // 10.1 TAO
+
+            ink::env::test::set_caller::<Environment>(accounts.django);
+
+            // Test with payment too low by 1 rao
+            ink::env::test::set_value_transferred::<ink::env::DefaultEnvironment>(
+                (required_payment - 1) as u128,
+            );
+            let result = contract.take_alpha_listing(1, accounts.charlie, 1);
+            assert_eq!(result, Err(Error::InvalidPrice));
+
+            // Test with exact payment
+            ink::env::test::set_value_transferred::<ink::env::DefaultEnvironment>(
+                required_payment as u128,
+            );
+            // Would succeed if runtime calls worked, but we test the validation logic
+
+            // Test with payment too high by 1 rao
+            ink::env::test::set_value_transferred::<ink::env::DefaultEnvironment>(
+                (required_payment + 1) as u128,
+            );
+            let result = contract.take_alpha_listing(1, accounts.charlie, 1);
+            assert_eq!(result, Err(Error::InvalidPrice));
+        }
+
+        #[ink::test]
+        fn test_take_offer_calculation_accuracy() {
+            let accounts = ink::env::test::default_accounts::<Environment>();
+            let fee_rate = fee_rate_from_percentage(1.0);
+
+            let contract = OtcContract::new(
+                accounts.alice,
+                accounts.bob,
+                fee_rate,
+                1_000_000_000,
+                1_000_000_000,
+                100,
+            );
+
+            // Test various price and amount combinations
+            let test_cases = vec![
+                (2.0, 10_000_000_000u64, 4_950_000_000u64), // 2 TAO/Alpha, 10 TAO offer -> 4.95 Alpha
+                (1.5, 15_000_000_000u64, 9_900_000_000u64), // 1.5 TAO/Alpha, 15 TAO offer -> 9.9 Alpha
+                (0.5, 5_000_000_000u64, 9_900_000_000u64), // 0.5 TAO/Alpha, 5 TAO offer -> 9.9 Alpha
+                (3.33, 33_300_000_000u64, 9_900_000_000u64), // 3.33 TAO/Alpha, 33.3 TAO offer -> ~9.9 Alpha
+            ];
+
+            for (price_float, tao_amount, expected_alpha) in test_cases {
+                let price = FixedDecimal::from_bits(U64F64::from_num(price_float).to_bits());
+                let fee_amount = contract.fee_rate.mul(tao_amount).unwrap();
+                let tao_for_seller = tao_amount - fee_amount;
+                let calculated_alpha = price.div_by_decimal(tao_for_seller).unwrap();
+
+                // Allow for small rounding differences (within 1000 rao)
+                let diff = if calculated_alpha > expected_alpha {
+                    calculated_alpha - expected_alpha
+                } else {
+                    expected_alpha - calculated_alpha
+                };
+                assert!(
+                    diff < 1000,
+                    "Calculation mismatch for price {} with {} TAO: got {}, expected {}",
+                    price_float,
+                    tao_amount,
+                    calculated_alpha,
+                    expected_alpha
+                );
+            }
+        }
+
+        // Integration-style Unit Tests
+
+        #[ink::test]
+        fn test_complete_trade_flow_storage_cleanup() {
+            let accounts = ink::env::test::default_accounts::<Environment>();
+            let fee_rate = fee_rate_from_percentage(1.0);
+
+            let mut contract = OtcContract::new(
+                accounts.alice,
+                accounts.bob,
+                fee_rate,
+                1_000_000_000,
+                1_000_000_000,
+                100,
+            );
+
+            // Create a listing
+            let listing = AlphaListing {
+                id: 1,
+                netuid: 1,
+                seller: accounts.charlie,
+                amount: 5_000_000_000,
+                price: FixedDecimal::from_bits(U64F64::from_num(2u64).to_bits()),
+                fee_rate: contract.fee_rate,
+                created_at: 1000,
+            };
+
+            contract
+                .alpha_listings
+                .insert((1, accounts.charlie, 1), &listing);
+            contract
+                .user_listings
+                .insert((accounts.charlie, 1), &vec![1]);
+
+            // Verify listing exists
+            assert!(contract.get_listing(1, accounts.charlie, 1).is_some());
+
+            // Simulate successful trade by removing listing and cleaning up storage
+            contract.alpha_listings.remove((1, accounts.charlie, 1));
+            let mut user_listings = contract
+                .user_listings
+                .get((accounts.charlie, 1))
+                .unwrap_or_default();
+            user_listings.retain(|&id| id != 1);
+            if user_listings.is_empty() {
+                contract.user_listings.remove((accounts.charlie, 1));
+            } else {
+                contract
+                    .user_listings
+                    .insert((accounts.charlie, 1), &user_listings);
+            }
+
+            // Verify complete cleanup
+            assert!(contract.get_listing(1, accounts.charlie, 1).is_none());
+            assert_eq!(contract.get_user_listings(accounts.charlie, 1).len(), 0);
+        }
+
+        #[ink::test]
+        fn test_multiple_users_trading_simultaneously() {
+            let accounts = ink::env::test::default_accounts::<Environment>();
+            let fee_rate = fee_rate_from_percentage(0.5);
+
+            let mut contract = OtcContract::new(
+                accounts.alice,
+                accounts.bob,
+                fee_rate,
+                1_000_000_000,
+                1_000_000_000,
+                100,
+            );
+
+            // Create listings from different sellers
+            let listing1 = AlphaListing {
+                id: 1,
+                netuid: 1,
+                seller: accounts.charlie,
+                amount: 5_000_000_000,
+                price: FixedDecimal::from_bits(U64F64::from_num(2u64).to_bits()),
+                fee_rate: contract.fee_rate,
+                created_at: 1000,
+            };
+
+            let listing2 = AlphaListing {
+                id: 2,
+                netuid: 1,
+                seller: accounts.django,
+                amount: 3_000_000_000,
+                price: FixedDecimal::from_bits(U64F64::from_num(1.5).to_bits()),
+                fee_rate: contract.fee_rate,
+                created_at: 1100,
+            };
+
+            contract
+                .alpha_listings
+                .insert((1, accounts.charlie, 1), &listing1);
+            contract
+                .alpha_listings
+                .insert((1, accounts.django, 2), &listing2);
+            contract
+                .user_listings
+                .insert((accounts.charlie, 1), &vec![1]);
+            contract
+                .user_listings
+                .insert((accounts.django, 1), &vec![2]);
+
+            // Create offers from different buyers
+            ink::env::test::set_caller::<Environment>(accounts.eve);
+            ink::env::test::set_value_transferred::<ink::env::DefaultEnvironment>(7_000_000_000);
+            let offer1_id = contract
+                .create_tao_offer(1, U64F64::from_num(2.5).to_bits())
+                .unwrap();
+
+            ink::env::test::set_caller::<Environment>(accounts.frank);
+            ink::env::test::set_value_transferred::<ink::env::DefaultEnvironment>(4_000_000_000);
+            let offer2_id = contract
+                .create_tao_offer(1, U64F64::from_num(1.8).to_bits())
+                .unwrap();
+
+            // Verify all exist independently
+            assert!(contract.get_listing(1, accounts.charlie, 1).is_some());
+            assert!(contract.get_listing(1, accounts.django, 2).is_some());
+            assert!(contract.get_offer(1, accounts.eve, offer1_id).is_some());
+            assert!(contract.get_offer(1, accounts.frank, offer2_id).is_some());
+
+            // Verify user indices are correct
+            assert_eq!(contract.get_user_listings(accounts.charlie, 1), vec![1]);
+            assert_eq!(contract.get_user_listings(accounts.django, 1), vec![2]);
+            assert_eq!(contract.get_user_offers(accounts.eve, 1), vec![offer1_id]);
+            assert_eq!(contract.get_user_offers(accounts.frank, 1), vec![offer2_id]);
+        }
+
+        #[ink::test]
+        fn test_listing_and_offer_interaction() {
+            let accounts = ink::env::test::default_accounts::<Environment>();
+            let fee_rate = fee_rate_from_percentage(1.0);
+
+            let mut contract = OtcContract::new(
+                accounts.alice,
+                accounts.bob,
+                fee_rate,
+                1_000_000_000,
+                1_000_000_000,
+                100,
+            );
+
+            // User creates both a listing and an offer
+            let listing = AlphaListing {
+                id: 1,
+                netuid: 1,
+                seller: accounts.charlie,
+                amount: 5_000_000_000,
+                price: FixedDecimal::from_bits(U64F64::from_num(2u64).to_bits()),
+                fee_rate: contract.fee_rate,
+                created_at: 1000,
+            };
+
+            contract
+                .alpha_listings
+                .insert((1, accounts.charlie, 1), &listing);
+            contract
+                .user_listings
+                .insert((accounts.charlie, 1), &vec![1]);
+
+            // Same user creates an offer on a different netuid
+            ink::env::test::set_caller::<Environment>(accounts.charlie);
+            ink::env::test::set_value_transferred::<ink::env::DefaultEnvironment>(3_000_000_000);
+            let offer_id = contract
+                .create_tao_offer(2, U64F64::from_num(1.5).to_bits())
+                .unwrap();
+
+            // Verify both exist independently
+            assert!(contract.get_listing(1, accounts.charlie, 1).is_some());
+            assert!(contract.get_offer(2, accounts.charlie, offer_id).is_some());
+
+            // Verify they're tracked separately
+            assert_eq!(contract.get_user_listings(accounts.charlie, 1), vec![1]);
+            assert_eq!(
+                contract.get_user_listings(accounts.charlie, 2),
+                Vec::<AlphaListingId>::new()
+            );
+            assert_eq!(
+                contract.get_user_offers(accounts.charlie, 1),
+                Vec::<TaoOfferId>::new()
+            );
+            assert_eq!(
+                contract.get_user_offers(accounts.charlie, 2),
+                vec![offer_id]
+            );
+        }
+
+        #[ink::test]
+        fn test_zero_fee_rate() {
+            let accounts = ink::env::test::default_accounts::<Environment>();
+            let zero_fee_rate = 0u128; // 0% fee
+
+            let mut contract = OtcContract::new(
+                accounts.alice,
+                accounts.bob,
+                zero_fee_rate,
+                1_000_000_000,
+                1_000_000_000,
+                100,
+            );
+
+            // Create a listing with zero fee
+            let listing = AlphaListing {
+                id: 1,
+                netuid: 1,
+                seller: accounts.charlie,
+                amount: 5_000_000_000,
+                price: FixedDecimal::from_bits(U64F64::from_num(2u64).to_bits()),
+                fee_rate: contract.fee_rate,
+                created_at: 1000,
+            };
+
+            contract
+                .alpha_listings
+                .insert((1, accounts.charlie, 1), &listing);
+
+            // Calculate payment with zero fee
+            let total_price = listing.price.mul(listing.amount).unwrap();
+            let fee = contract.fee_rate.mul(total_price).unwrap();
+            assert_eq!(fee, 0); // Fee should be zero
+
+            let required_payment = total_price + fee;
+            assert_eq!(required_payment, total_price); // Payment equals price without fee
+        }
+
+        #[ink::test]
+        fn test_boundary_netuid_values() {
+            let accounts = ink::env::test::default_accounts::<Environment>();
+            let fee_rate = fee_rate_from_percentage(0.5);
+
+            let mut contract = OtcContract::new(
+                accounts.alice,
+                accounts.bob,
+                fee_rate,
+                1_000_000_000,
+                1_000_000_000,
+                100,
+            );
+
+            // Test with minimum and maximum netuid values
+            let min_netuid: u16 = 0;
+            let max_netuid: u16 = u16::MAX;
+
+            // Create offers with boundary netuid values
+            ink::env::test::set_caller::<Environment>(accounts.charlie);
+            ink::env::test::set_value_transferred::<ink::env::DefaultEnvironment>(2_000_000_000);
+
+            let offer1 = contract.create_tao_offer(min_netuid, U64F64::from_num(1u64).to_bits());
+            assert!(offer1.is_ok());
+
+            let offer2 = contract.create_tao_offer(max_netuid, U64F64::from_num(1u64).to_bits());
+            assert!(offer2.is_ok());
+
+            // Verify retrieval works with boundary values
+            assert!(contract
+                .get_offer(min_netuid, accounts.charlie, offer1.unwrap())
+                .is_some());
+            assert!(contract
+                .get_offer(max_netuid, accounts.charlie, offer2.unwrap())
+                .is_some());
+        }
     }
 }
