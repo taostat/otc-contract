@@ -23,9 +23,9 @@ impl ink::env::Environment for BittensorEnvironment {
 mod otc_contract {
     use crate::errors::Error;
     use crate::events::{
-        AlphaListed, AlphaListingCancelled, FeeRateUpdated, HotkeyUpdated, MinListingAgeUpdated,
-        MinListingAmountUpdated, MinOfferAmountUpdated, OwnerUpdated, TaoOfferCancelled,
-        TaoOfferCreated,
+        AlphaListed, AlphaListingCancelled, AlphaListingTaken, FeeRateUpdated, HotkeyUpdated,
+        MinListingAgeUpdated, MinListingAmountUpdated, MinOfferAmountUpdated, OwnerUpdated,
+        TaoOfferCancelled, TaoOfferCreated, TaoOfferTaken,
     };
     use crate::runtime::{ProxyCall, RuntimeCall, SubtensorCall};
     use crate::types::{
@@ -255,7 +255,7 @@ mod otc_contract {
                 return Err(Error::AmountTooSmall);
             }
 
-            if price.to_bits() == 0 {
+            if price.is_zero() {
                 return Err(Error::InvalidPrice);
             }
 
@@ -354,8 +354,18 @@ mod otc_contract {
                 return Err(Error::ListingTooYoung);
             }
 
+            self.alpha_listings.remove((netuid, seller, listing_id));
+
+            let mut user_listings = self.user_listings.get((seller, netuid)).unwrap_or_default();
+            user_listings.retain(|&id| id != listing_id);
+
+            if user_listings.is_empty() {
+                self.user_listings.remove((seller, netuid));
+            } else {
+                self.user_listings.insert((seller, netuid), &user_listings);
+            }
+
             // Return stake from contract to seller
-            // The contract directly transfers its own stake back to the seller
             let transfer_call = RuntimeCall::SubtensorModule(SubtensorCall::TransferStake {
                 destination_coldkey: seller,
                 hotkey: self.hotkey,
@@ -367,17 +377,6 @@ mod otc_contract {
             self.env()
                 .call_runtime(&transfer_call)
                 .map_err(|_| Error::RuntimeCallFailed)?;
-
-            self.alpha_listings.remove((netuid, seller, listing_id));
-
-            let mut user_listings = self.user_listings.get((seller, netuid)).unwrap_or_default();
-            user_listings.retain(|&id| id != listing_id);
-
-            if user_listings.is_empty() {
-                self.user_listings.remove((seller, netuid));
-            } else {
-                self.user_listings.insert((seller, netuid), &user_listings);
-            }
 
             self.env().emit_event(AlphaListingCancelled {
                 seller,
@@ -422,12 +421,12 @@ mod otc_contract {
                 return Err(Error::AmountTooSmall);
             }
 
-            if price.to_bits() == 0 {
+            if price.is_zero() {
                 return Err(Error::InvalidPrice);
             }
 
             let offer_id = self.next_tao_offer_id;
-            self.next_tao_offer_id = offer_id.saturating_add(1);
+            self.next_tao_offer_id = offer_id.checked_add(1).ok_or(Error::Overflow)?;
 
             let offer = TaoOffer {
                 id: offer_id,
@@ -512,6 +511,180 @@ mod otc_contract {
         #[ink(message)]
         pub fn get_user_offers(&self, buyer: AccountId, netuid: NetUid) -> Vec<TaoOfferId> {
             self.user_offers.get((buyer, netuid)).unwrap_or_default()
+        }
+
+        /// Take an Alpha listing by paying TAO
+        /// The buyer sends TAO with the transaction to purchase Alpha tokens at the listing price
+        /// Prerequisites: Buyer must send exact TAO amount (price * amount + fees)
+        #[ink(message, payable)]
+        pub fn take_alpha_listing(
+            &mut self,
+            netuid: NetUid,
+            seller: AccountId,
+            listing_id: AlphaListingId,
+        ) -> Result<(), Error> {
+            let buyer = self.env().caller();
+            let tao_received = self.env().transferred_value();
+
+            let listing = self
+                .alpha_listings
+                .get((netuid, seller, listing_id))
+                .ok_or(Error::ListingNotFound)?;
+
+            let tao_amount = listing
+                .price
+                .mul(listing.amount)
+                .map_err(|_| Error::Overflow)?;
+
+            let fee_amount = listing
+                .fee_rate
+                .mul(tao_amount)
+                .map_err(|_| Error::Overflow)?;
+
+            let total_tao_required = tao_amount.checked_add(fee_amount).ok_or(Error::Overflow)?;
+
+            if tao_received != total_tao_required {
+                return Err(Error::InvalidPrice);
+            }
+
+            self.alpha_listings.remove((netuid, seller, listing_id));
+
+            let mut user_listings = self.user_listings.get((seller, netuid)).unwrap_or_default();
+            user_listings.retain(|&id| id != listing_id);
+
+            if user_listings.is_empty() {
+                self.user_listings.remove((seller, netuid));
+            } else {
+                self.user_listings.insert((seller, netuid), &user_listings);
+            }
+
+            // Transfer Alpha from contract to buyer
+            let transfer_call = RuntimeCall::SubtensorModule(SubtensorCall::TransferStake {
+                destination_coldkey: buyer,
+                hotkey: self.hotkey,
+                origin_netuid: netuid,
+                destination_netuid: netuid,
+                alpha_amount: listing.amount,
+            });
+
+            self.env()
+                .call_runtime(&transfer_call)
+                .map_err(|_| Error::RuntimeCallFailed)?;
+
+            // Transfer TAO to seller (minus fee)
+            self.env()
+                .transfer(listing.seller, tao_amount)
+                .map_err(|_| Error::TransferFailed)?;
+
+            if fee_amount > 0 {
+                self.env()
+                    .transfer(self.owner, fee_amount)
+                    .map_err(|_| Error::TransferFailed)?;
+            }
+
+            self.env().emit_event(AlphaListingTaken {
+                seller,
+                buyer,
+                netuid,
+                alpha_amount: listing.amount,
+                tao_amount,
+                price: listing.price,
+                fee: fee_amount,
+                alpha_listing_id: Some(listing_id),
+            });
+
+            Ok(())
+        }
+
+        /// Take a TAO offer by providing Alpha tokens
+        /// The seller provides Alpha tokens to claim the TAO at the offer price
+        /// Prerequisites: The seller must have added the contract as their proxy
+        #[ink(message)]
+        pub fn take_tao_offer(
+            &mut self,
+            netuid: NetUid,
+            buyer: AccountId,
+            offer_id: TaoOfferId,
+            hotkey: AccountId,
+        ) -> Result<(), Error> {
+            let seller = self.env().caller();
+
+            let offer = self
+                .tao_offers
+                .get((netuid, buyer, offer_id))
+                .ok_or(Error::OfferNotFound)?;
+
+            // Calculate fee first (buyer pays fee, so seller gets less TAO)
+            let fee_amount = offer
+                .fee_rate
+                .mul(offer.amount)
+                .map_err(|_| Error::Overflow)?;
+
+            let tao_for_seller = offer
+                .amount
+                .checked_sub(fee_amount)
+                .ok_or(Error::Overflow)?;
+
+            // Calculate Alpha amount needed
+            // offer.price is TAO per Alpha, so alpha_amount = tao_for_seller / price
+            let alpha_amount = offer
+                .price
+                .div_by_decimal(tao_for_seller)
+                .map_err(|_| Error::Overflow)?;
+
+            self.tao_offers.remove((netuid, buyer, offer_id));
+
+            let mut user_offers = self.user_offers.get((buyer, netuid)).unwrap_or_default();
+            user_offers.retain(|&id| id != offer_id);
+
+            if user_offers.is_empty() {
+                self.user_offers.remove((buyer, netuid));
+            } else {
+                self.user_offers.insert((buyer, netuid), &user_offers);
+            }
+
+            // Transfer Alpha directly from seller to buyer
+            let transfer_call = RuntimeCall::SubtensorModule(SubtensorCall::TransferStake {
+                destination_coldkey: buyer,
+                hotkey, // Seller's original hotkey - Alpha stays here
+                origin_netuid: netuid,
+                destination_netuid: netuid,
+                alpha_amount,
+            });
+
+            let proxy_call = RuntimeCall::Proxy(ProxyCall::Proxy {
+                real: seller,
+                force_proxy_type: None,
+                call: Box::new(transfer_call),
+            });
+
+            self.env()
+                .call_runtime(&proxy_call)
+                .map_err(|_| Error::RuntimeCallFailed)?;
+
+            // Transfer TAO to seller (minus fee)
+            self.env()
+                .transfer(seller, tao_for_seller)
+                .map_err(|_| Error::TransferFailed)?;
+
+            if fee_amount > 0 {
+                self.env()
+                    .transfer(self.owner, fee_amount)
+                    .map_err(|_| Error::TransferFailed)?;
+            }
+
+            self.env().emit_event(TaoOfferTaken {
+                seller,
+                buyer,
+                netuid,
+                alpha_amount,
+                tao_amount: offer.amount,
+                price: offer.price,
+                fee: fee_amount,
+                tao_offer_id: Some(offer_id),
+            });
+
+            Ok(())
         }
 
         /// Access control helper: ensure caller is the owner
@@ -1324,6 +1497,75 @@ mod otc_contract {
         }
 
         #[ink::test]
+        fn create_tao_offer_fails_with_zero_amount() {
+            let accounts = ink::env::test::default_accounts::<Environment>();
+            let fee_rate = fee_rate_from_percentage(0.5);
+
+            let mut contract = OtcContract::new(
+                accounts.alice,
+                accounts.bob,
+                fee_rate,
+                1_000_000_000,
+                1_000_000_000,
+                100,
+            );
+
+            // Set caller to Charlie (the buyer)
+            ink::env::test::set_caller::<Environment>(accounts.charlie);
+            // Set transferred value to zero
+            ink::env::test::set_value_transferred::<ink::env::DefaultEnvironment>(0);
+
+            let price = U64F64::from_num(2u64).to_bits();
+            let netuid = 1u16;
+
+            // Should fail due to zero amount
+            let result = contract.create_tao_offer(netuid, price);
+            assert_eq!(result, Err(Error::AmountTooSmall));
+        }
+
+        #[ink::test]
+        fn price_calculation_in_take_tao_offer_is_correct() {
+            let accounts = ink::env::test::default_accounts::<Environment>();
+            let fee_rate = fee_rate_from_percentage(1.0); // 1% fee
+
+            let contract = OtcContract::new(
+                accounts.alice,
+                accounts.bob,
+                fee_rate,
+                1_000_000_000,
+                1_000_000_000,
+                100,
+            );
+
+            // Create a TAO offer
+            let price = U64F64::from_num(2u64).to_bits(); // 2 TAO per Alpha
+            let tao_amount = 10_000_000_000u64; // 10 TAO
+            let netuid = 1u16;
+
+            // Create the offer
+            let offer = TaoOffer {
+                id: 1,
+                netuid,
+                buyer: accounts.charlie,
+                amount: tao_amount,
+                price: FixedDecimal::from_bits(price),
+                fee_rate: contract.fee_rate,
+                created_at: 0,
+            };
+
+            // Calculate expected values
+            let fee_amount = 100_000_000u64; // 1% of 10 TAO = 0.1 TAO
+            let tao_for_seller = tao_amount - fee_amount; // 9.9 TAO
+
+            // Expected Alpha: 9.9 TAO / 2 TAO per Alpha = 4.95 Alpha
+            let expected_alpha = 4_950_000_000u64; // 4.95 Alpha in rao
+
+            // Test the calculation using the same logic as the contract
+            let calculated_alpha = offer.price.div_by_decimal(tao_for_seller).unwrap();
+            assert_eq!(calculated_alpha, expected_alpha);
+        }
+
+        #[ink::test]
         fn cancel_tao_offer_authorization_works() {
             let accounts = ink::env::test::default_accounts::<Environment>();
             let fee_rate = fee_rate_from_percentage(0.5);
@@ -1506,6 +1748,93 @@ mod otc_contract {
             assert!(contract.get_offer(1, accounts.charlie, 1).is_none());
             assert!(contract.get_offer(1, accounts.charlie, 2).is_none());
             assert_eq!(contract.get_user_offers(accounts.charlie, 1).len(), 0);
+        }
+
+        #[ink::test]
+        fn take_alpha_listing_fails_with_wrong_payment() {
+            let accounts = ink::env::test::default_accounts::<Environment>();
+            let fee_rate = fee_rate_from_percentage(1.0);
+
+            let mut contract = OtcContract::new(
+                accounts.alice,
+                accounts.bob,
+                fee_rate,
+                1_000_000_000,
+                1_000_000_000,
+                100,
+            );
+
+            // Create a mock listing
+            let alpha_amount = 5_000_000_000u64;
+            let price_per_alpha = U64F64::from_num(2u64);
+            let listing = AlphaListing {
+                id: 1,
+                netuid: 1,
+                seller: accounts.charlie,
+                amount: alpha_amount,
+                price: FixedDecimal::from_bits(price_per_alpha.to_bits()),
+                fee_rate: contract.fee_rate,
+                created_at: 1000,
+            };
+
+            contract
+                .alpha_listings
+                .insert((1, accounts.charlie, 1), &listing);
+
+            // Set wrong payment amount
+            ink::env::test::set_caller::<Environment>(accounts.django);
+            ink::env::test::set_value_transferred::<ink::env::DefaultEnvironment>(
+                1_000_000_000u128,
+            ); // Too little
+
+            // Try to take the listing
+            let result = contract.take_alpha_listing(1, accounts.charlie, 1);
+            assert_eq!(result, Err(Error::InvalidPrice));
+        }
+
+        #[ink::test]
+        fn take_alpha_listing_fails_when_not_found() {
+            let accounts = ink::env::test::default_accounts::<Environment>();
+            let fee_rate = fee_rate_from_percentage(1.0);
+
+            let mut contract = OtcContract::new(
+                accounts.alice,
+                accounts.bob,
+                fee_rate,
+                1_000_000_000,
+                1_000_000_000,
+                100,
+            );
+
+            ink::env::test::set_caller::<Environment>(accounts.django);
+            ink::env::test::set_value_transferred::<ink::env::DefaultEnvironment>(
+                10_000_000_000u128,
+            );
+
+            // Try to take non-existent listing
+            let result = contract.take_alpha_listing(1, accounts.charlie, 999);
+            assert_eq!(result, Err(Error::ListingNotFound));
+        }
+
+        #[ink::test]
+        fn take_tao_offer_fails_when_not_found() {
+            let accounts = ink::env::test::default_accounts::<Environment>();
+            let fee_rate = fee_rate_from_percentage(1.0);
+
+            let mut contract = OtcContract::new(
+                accounts.alice,
+                accounts.bob,
+                fee_rate,
+                1_000_000_000,
+                1_000_000_000,
+                100,
+            );
+
+            ink::env::test::set_caller::<Environment>(accounts.django);
+
+            // Try to take non-existent offer
+            let result = contract.take_tao_offer(1, accounts.charlie, 999, accounts.eve);
+            assert_eq!(result, Err(Error::OfferNotFound));
         }
     }
 }
