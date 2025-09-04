@@ -289,14 +289,8 @@ mod otc_contract {
                     alpha_amount: amount,
                 });
 
-                let proxy_move_call = RuntimeCall::Proxy(ProxyCall::Proxy {
-                    real: seller,
-                    force_proxy_type: None,
-                    call: Box::new(move_call),
-                });
-
                 self.env()
-                    .call_runtime(&proxy_move_call)
+                    .call_runtime(&move_call)
                     .map_err(|_| Error::RuntimeCallFailed)?;
             }
 
