@@ -8,7 +8,8 @@
         "test:ui": "vitest --ui",
         "test:run": "vitest run",
         "test:watch": "vitest watch",
-        "generate-types": "papi add devnet -w ws://localhost:9944"
+        "generate-types": "papi add devnet -w ws://localhost:9944",
+        "postinstall": "papi"
     },
     "dependencies": {
         "@polkadot-api/descriptors": "file:.papi/descriptors"
