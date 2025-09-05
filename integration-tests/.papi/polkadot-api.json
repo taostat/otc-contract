@@ -8,5 +8,8 @@
       "genesis": "0xc472e9557d8d473b157090068c4bb9c657486d60cd5df7431c69f8fd7a33fdfe",
       "codeHash": "0xa18f1154bf57af9c45bce4d8fe26558de7e58382df3dc2af793f9e857b091c17"
     }
+  },
+  "ink": {
+    "otc_contract": ".papi/contracts/otc_contract.json"
   }
 }

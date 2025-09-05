@@ -1,0 +1,3149 @@
+{
+  "source": {
+    "hash": "0x7d9ba79b329d5fd032153bc2ba9c3ea266ed9673ef9f2700bd4947973a49db1b",
+    "language": "ink! 5.1.1",
+    "compiler": "rustc 1.85.0",
+    "build_info": {
+      "build_mode": "Release",
+      "cargo_contract_version": "5.0.3",
+      "rust_toolchain": "stable-x86_64-unknown-linux-gnu",
+      "wasm_opt_settings": {
+        "keep_debug_symbols": false,
+        "optimization_passes": "Z"
+      }
+    }
+  },
+  "contract": {
+    "name": "otc_contract",
+    "version": "0.1.0",
+    "authors": [
+      "taostats <dev@taostats.io>"
+    ]
+  },
+  "image": null,
+  "spec": {
+    "constructors": [
+      {
+        "args": [
+          {
+            "label": "owner",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "label": "hotkey",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "label": "fee_rate",
+            "type": {
+              "displayName": [
+                "u128"
+              ],
+              "type": 5
+            }
+          },
+          {
+            "label": "min_listing_amount",
+            "type": {
+              "displayName": [
+                "AlphaAmount"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "label": "min_offer_amount",
+            "type": {
+              "displayName": [
+                "TaoAmount"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "label": "min_listing_age",
+            "type": {
+              "displayName": [
+                "BlockAge"
+              ],
+              "type": 6
+            }
+          }
+        ],
+        "default": false,
+        "docs": [],
+        "label": "new",
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink_primitives",
+            "ConstructorResult"
+          ],
+          "type": 28
+        },
+        "selector": "0x9bae9d5e"
+      }
+    ],
+    "docs": [],
+    "environment": {
+      "accountId": {
+        "displayName": [
+          "AccountId"
+        ],
+        "type": 2
+      },
+      "balance": {
+        "displayName": [
+          "Balance"
+        ],
+        "type": 0
+      },
+      "blockNumber": {
+        "displayName": [
+          "BlockNumber"
+        ],
+        "type": 6
+      },
+      "chainExtension": {
+        "displayName": [
+          "ChainExtension"
+        ],
+        "type": 46
+      },
+      "hash": {
+        "displayName": [
+          "Hash"
+        ],
+        "type": 45
+      },
+      "maxEventTopics": 4,
+      "staticBufferSize": 16384,
+      "timestamp": {
+        "displayName": [
+          "Timestamp"
+        ],
+        "type": 0
+      }
+    },
+    "events": [
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "seller",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "hotkey",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "netuid",
+            "type": {
+              "displayName": [
+                "NetUid"
+              ],
+              "type": 1
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "alpha_listing_id",
+            "type": {
+              "displayName": [
+                "AlphaListingId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "amount",
+            "type": {
+              "displayName": [
+                "AlphaAmount"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "price",
+            "type": {
+              "displayName": [
+                "FixedDecimal"
+              ],
+              "type": 10
+            }
+          }
+        ],
+        "docs": [],
+        "label": "AlphaListed",
+        "module_path": "otc_contract::events",
+        "signature_topic": "0x4a6fb0bf3fc622a3fd3328ece8993792306fd37456510dd4e1c03e414ae983d7"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "buyer",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "netuid",
+            "type": {
+              "displayName": [
+                "NetUid"
+              ],
+              "type": 1
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "tao_offer_id",
+            "type": {
+              "displayName": [
+                "TaoOfferId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "amount",
+            "type": {
+              "displayName": [
+                "TaoAmount"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "price",
+            "type": {
+              "displayName": [
+                "FixedDecimal"
+              ],
+              "type": 10
+            }
+          }
+        ],
+        "docs": [],
+        "label": "TaoOfferCreated",
+        "module_path": "otc_contract::events",
+        "signature_topic": "0x7500a4b8a731b42473309a414a15be35f8f57c20fe7544b1e203dad040f5bc1a"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "seller",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "netuid",
+            "type": {
+              "displayName": [
+                "NetUid"
+              ],
+              "type": 1
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "listing_id",
+            "type": {
+              "displayName": [
+                "AlphaListingId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "amount_returned",
+            "type": {
+              "displayName": [
+                "AlphaAmount"
+              ],
+              "type": 0
+            }
+          }
+        ],
+        "docs": [],
+        "label": "AlphaListingCancelled",
+        "module_path": "otc_contract::events",
+        "signature_topic": "0x1d06f5b3bd11e7ad0b5ded984cefd96bc63f6feff858b35ee62666a1c387d22b"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "buyer",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "netuid",
+            "type": {
+              "displayName": [
+                "NetUid"
+              ],
+              "type": 1
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "offer_id",
+            "type": {
+              "displayName": [
+                "TaoOfferId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "amount_returned",
+            "type": {
+              "displayName": [
+                "TaoAmount"
+              ],
+              "type": 0
+            }
+          }
+        ],
+        "docs": [],
+        "label": "TaoOfferCancelled",
+        "module_path": "otc_contract::events",
+        "signature_topic": "0xa53b5315252cc33c94e0a74f33c9678ac25d26f230f6ce10b27fe2c1262be012"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "seller",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "buyer",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "netuid",
+            "type": {
+              "displayName": [
+                "NetUid"
+              ],
+              "type": 1
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "alpha_amount",
+            "type": {
+              "displayName": [
+                "AlphaAmount"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "tao_amount",
+            "type": {
+              "displayName": [
+                "TaoAmount"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "price",
+            "type": {
+              "displayName": [
+                "FixedDecimal"
+              ],
+              "type": 10
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "fee",
+            "type": {
+              "displayName": [
+                "Balance"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "alpha_listing_id",
+            "type": {
+              "displayName": [
+                "Option"
+              ],
+              "type": 44
+            }
+          }
+        ],
+        "docs": [],
+        "label": "AlphaListingTaken",
+        "module_path": "otc_contract::events",
+        "signature_topic": "0x0895bf3b09185bbbc065cbbc3fb12df3a232dc7220cf0ff35b8d60b2db663f71"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "seller",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "buyer",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "netuid",
+            "type": {
+              "displayName": [
+                "NetUid"
+              ],
+              "type": 1
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "alpha_amount",
+            "type": {
+              "displayName": [
+                "AlphaAmount"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "tao_amount",
+            "type": {
+              "displayName": [
+                "TaoAmount"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "price",
+            "type": {
+              "displayName": [
+                "FixedDecimal"
+              ],
+              "type": 10
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "fee",
+            "type": {
+              "displayName": [
+                "Balance"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "tao_offer_id",
+            "type": {
+              "displayName": [
+                "Option"
+              ],
+              "type": 44
+            }
+          }
+        ],
+        "docs": [],
+        "label": "TaoOfferTaken",
+        "module_path": "otc_contract::events",
+        "signature_topic": "0xba88d8a144e891bac3a465e3ff58c19da87068bf07a02c8640d8f5150dd9de43"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "old_owner",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "new_owner",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          }
+        ],
+        "docs": [],
+        "label": "OwnerUpdated",
+        "module_path": "otc_contract::events",
+        "signature_topic": "0x0892be9b363f4a05a0a745bad93ec767db313f943170eadbd14494a51ce343a7"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "old_hotkey",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "new_hotkey",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          }
+        ],
+        "docs": [],
+        "label": "HotkeyUpdated",
+        "module_path": "otc_contract::events",
+        "signature_topic": "0xdfc870f986c576e855ae2f9cd8216f0846ee69a5848ff85e77a87a1bf01657a7"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "old_rate",
+            "type": {
+              "displayName": [
+                "FixedDecimal"
+              ],
+              "type": 10
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "new_rate",
+            "type": {
+              "displayName": [
+                "FixedDecimal"
+              ],
+              "type": 10
+            }
+          }
+        ],
+        "docs": [],
+        "label": "FeeRateUpdated",
+        "module_path": "otc_contract::events",
+        "signature_topic": "0x17184ba5050773b0631fdd173a084f5dd3a21b4646f12e2072b3c0f5cf793088"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "old_amount",
+            "type": {
+              "displayName": [
+                "TaoAmount"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "new_amount",
+            "type": {
+              "displayName": [
+                "TaoAmount"
+              ],
+              "type": 0
+            }
+          }
+        ],
+        "docs": [],
+        "label": "MinOfferAmountUpdated",
+        "module_path": "otc_contract::events",
+        "signature_topic": "0x82a219440f21b9ac2f3ea621ec6ffac6a75878068b8ef61e43af6e83e89b18d8"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "old_amount",
+            "type": {
+              "displayName": [
+                "AlphaAmount"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "new_amount",
+            "type": {
+              "displayName": [
+                "AlphaAmount"
+              ],
+              "type": 0
+            }
+          }
+        ],
+        "docs": [],
+        "label": "MinListingAmountUpdated",
+        "module_path": "otc_contract::events",
+        "signature_topic": "0xe56664c32ee70a6e4d1ef5a9339298efd2f43fbaae668a76bcf5d0a0b8d8d3ac"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "old_age",
+            "type": {
+              "displayName": [
+                "BlockAge"
+              ],
+              "type": 6
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "new_age",
+            "type": {
+              "displayName": [
+                "BlockAge"
+              ],
+              "type": 6
+            }
+          }
+        ],
+        "docs": [],
+        "label": "MinListingAgeUpdated",
+        "module_path": "otc_contract::events",
+        "signature_topic": "0xafd61dbed2c977b796520f3e6d2daf4cb9b196a21e4377feccd45eefc8d29825"
+      }
+    ],
+    "lang_error": {
+      "displayName": [
+        "ink",
+        "LangError"
+      ],
+      "type": 29
+    },
+    "messages": [
+      {
+        "args": [],
+        "default": false,
+        "docs": [
+          " Get the contract owner"
+        ],
+        "label": "get_owner",
+        "mutates": false,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 30
+        },
+        "selector": "0x07fcd0b1"
+      },
+      {
+        "args": [],
+        "default": false,
+        "docs": [
+          " Get the validator hotkey"
+        ],
+        "label": "get_hotkey",
+        "mutates": false,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 30
+        },
+        "selector": "0xead097fa"
+      },
+      {
+        "args": [],
+        "default": false,
+        "docs": [
+          " Get the fee rate"
+        ],
+        "label": "get_fee_rate",
+        "mutates": false,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 31
+        },
+        "selector": "0xcf886b41"
+      },
+      {
+        "args": [],
+        "default": false,
+        "docs": [
+          " Get minimum listing amount"
+        ],
+        "label": "get_min_listing_amount",
+        "mutates": false,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 32
+        },
+        "selector": "0xba57e251"
+      },
+      {
+        "args": [],
+        "default": false,
+        "docs": [
+          " Get minimum offer amount"
+        ],
+        "label": "get_min_offer_amount",
+        "mutates": false,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 32
+        },
+        "selector": "0x0314e2e2"
+      },
+      {
+        "args": [],
+        "default": false,
+        "docs": [
+          " Get minimum listing age"
+        ],
+        "label": "get_min_listing_age",
+        "mutates": false,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 33
+        },
+        "selector": "0xf8382780"
+      },
+      {
+        "args": [
+          {
+            "label": "new_owner",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          }
+        ],
+        "default": false,
+        "docs": [
+          " Update the contract owner",
+          " Can only be called by the current owner"
+        ],
+        "label": "update_owner",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 34
+        },
+        "selector": "0x22a8dc8f"
+      },
+      {
+        "args": [
+          {
+            "label": "new_hotkey",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          }
+        ],
+        "default": false,
+        "docs": [
+          " Update the validator hotkey",
+          " Can only be called by the contract owner"
+        ],
+        "label": "update_hotkey",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 34
+        },
+        "selector": "0x512fb5ad"
+      },
+      {
+        "args": [
+          {
+            "label": "new_rate",
+            "type": {
+              "displayName": [
+                "u128"
+              ],
+              "type": 5
+            }
+          }
+        ],
+        "default": false,
+        "docs": [
+          " Update the fee rate",
+          " Can only be called by the contract owner"
+        ],
+        "label": "update_fee_rate",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 34
+        },
+        "selector": "0x8a268b92"
+      },
+      {
+        "args": [
+          {
+            "label": "new_amount",
+            "type": {
+              "displayName": [
+                "AlphaAmount"
+              ],
+              "type": 0
+            }
+          }
+        ],
+        "default": false,
+        "docs": [
+          " Update the minimum listing amount",
+          " Can only be called by the contract owner"
+        ],
+        "label": "update_min_listing_amount",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 34
+        },
+        "selector": "0x2a3d49c5"
+      },
+      {
+        "args": [
+          {
+            "label": "new_amount",
+            "type": {
+              "displayName": [
+                "TaoAmount"
+              ],
+              "type": 0
+            }
+          }
+        ],
+        "default": false,
+        "docs": [
+          " Update the minimum offer amount",
+          " Can only be called by the contract owner"
+        ],
+        "label": "update_min_offer_amount",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 34
+        },
+        "selector": "0x969fe9d9"
+      },
+      {
+        "args": [
+          {
+            "label": "new_age",
+            "type": {
+              "displayName": [
+                "BlockAge"
+              ],
+              "type": 6
+            }
+          }
+        ],
+        "default": false,
+        "docs": [
+          " Update the minimum listing age",
+          " Can only be called by the contract owner"
+        ],
+        "label": "update_min_listing_age",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 34
+        },
+        "selector": "0x2cbc2626"
+      },
+      {
+        "args": [
+          {
+            "label": "hotkey",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "label": "netuid",
+            "type": {
+              "displayName": [
+                "NetUid"
+              ],
+              "type": 1
+            }
+          },
+          {
+            "label": "amount",
+            "type": {
+              "displayName": [
+                "AlphaAmount"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "label": "price",
+            "type": {
+              "displayName": [
+                "u128"
+              ],
+              "type": 5
+            }
+          }
+        ],
+        "default": false,
+        "docs": [
+          " List Alpha tokens for sale",
+          " Prerequisites: The seller must have added the contract as their proxy",
+          " This will transfer the stake from the seller to the contract via proxy",
+          " and consolidate it under the contract's hotkey if needed"
+        ],
+        "label": "list_alpha",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 37
+        },
+        "selector": "0x19ebe71d"
+      },
+      {
+        "args": [
+          {
+            "label": "netuid",
+            "type": {
+              "displayName": [
+                "NetUid"
+              ],
+              "type": 1
+            }
+          },
+          {
+            "label": "listing_id",
+            "type": {
+              "displayName": [
+                "AlphaListingId"
+              ],
+              "type": 0
+            }
+          }
+        ],
+        "default": false,
+        "docs": [
+          " Cancel an Alpha listing and return the stake to the seller",
+          " Can only be called by the listing owner after minimum age has passed"
+        ],
+        "label": "cancel_alpha_listing",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 34
+        },
+        "selector": "0x1301f414"
+      },
+      {
+        "args": [
+          {
+            "label": "netuid",
+            "type": {
+              "displayName": [
+                "NetUid"
+              ],
+              "type": 1
+            }
+          },
+          {
+            "label": "seller",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "label": "listing_id",
+            "type": {
+              "displayName": [
+                "AlphaListingId"
+              ],
+              "type": 0
+            }
+          }
+        ],
+        "default": false,
+        "docs": [
+          " Get a specific Alpha listing"
+        ],
+        "label": "get_listing",
+        "mutates": false,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 39
+        },
+        "selector": "0xfd34226e"
+      },
+      {
+        "args": [
+          {
+            "label": "seller",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "label": "netuid",
+            "type": {
+              "displayName": [
+                "NetUid"
+              ],
+              "type": 1
+            }
+          }
+        ],
+        "default": false,
+        "docs": [
+          " Get all listing IDs for a user on a specific subnet"
+        ],
+        "label": "get_user_listings",
+        "mutates": false,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 41
+        },
+        "selector": "0x24011d31"
+      },
+      {
+        "args": [
+          {
+            "label": "netuid",
+            "type": {
+              "displayName": [
+                "NetUid"
+              ],
+              "type": 1
+            }
+          },
+          {
+            "label": "price",
+            "type": {
+              "displayName": [
+                "u128"
+              ],
+              "type": 5
+            }
+          }
+        ],
+        "default": false,
+        "docs": [
+          " Create a TAO offer by depositing TAO into the contract",
+          " The buyer sends TAO with the transaction and specifies their desired price"
+        ],
+        "label": "create_tao_offer",
+        "mutates": true,
+        "payable": true,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 37
+        },
+        "selector": "0x30834e95"
+      },
+      {
+        "args": [
+          {
+            "label": "netuid",
+            "type": {
+              "displayName": [
+                "NetUid"
+              ],
+              "type": 1
+            }
+          },
+          {
+            "label": "offer_id",
+            "type": {
+              "displayName": [
+                "TaoOfferId"
+              ],
+              "type": 0
+            }
+          }
+        ],
+        "default": false,
+        "docs": [
+          " Cancel a TAO offer and return the TAO to the buyer",
+          " Can only be called by the offer owner"
+        ],
+        "label": "cancel_tao_offer",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 34
+        },
+        "selector": "0x14384403"
+      },
+      {
+        "args": [
+          {
+            "label": "netuid",
+            "type": {
+              "displayName": [
+                "NetUid"
+              ],
+              "type": 1
+            }
+          },
+          {
+            "label": "buyer",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "label": "offer_id",
+            "type": {
+              "displayName": [
+                "TaoOfferId"
+              ],
+              "type": 0
+            }
+          }
+        ],
+        "default": false,
+        "docs": [
+          " Get a specific TAO offer"
+        ],
+        "label": "get_offer",
+        "mutates": false,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 42
+        },
+        "selector": "0xdd4e4ee2"
+      },
+      {
+        "args": [
+          {
+            "label": "buyer",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "label": "netuid",
+            "type": {
+              "displayName": [
+                "NetUid"
+              ],
+              "type": 1
+            }
+          }
+        ],
+        "default": false,
+        "docs": [
+          " Get all offer IDs for a user on a specific subnet"
+        ],
+        "label": "get_user_offers",
+        "mutates": false,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 41
+        },
+        "selector": "0xd6692f17"
+      },
+      {
+        "args": [
+          {
+            "label": "netuid",
+            "type": {
+              "displayName": [
+                "NetUid"
+              ],
+              "type": 1
+            }
+          },
+          {
+            "label": "seller",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "label": "listing_id",
+            "type": {
+              "displayName": [
+                "AlphaListingId"
+              ],
+              "type": 0
+            }
+          }
+        ],
+        "default": false,
+        "docs": [
+          " Take an Alpha listing by paying TAO",
+          " The buyer sends TAO with the transaction to purchase Alpha tokens at the listing price",
+          " Prerequisites: Buyer must send exact TAO amount (price * amount + fees)"
+        ],
+        "label": "take_alpha_listing",
+        "mutates": true,
+        "payable": true,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 34
+        },
+        "selector": "0x7506dd44"
+      },
+      {
+        "args": [
+          {
+            "label": "netuid",
+            "type": {
+              "displayName": [
+                "NetUid"
+              ],
+              "type": 1
+            }
+          },
+          {
+            "label": "buyer",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "label": "offer_id",
+            "type": {
+              "displayName": [
+                "TaoOfferId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "label": "hotkey",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          }
+        ],
+        "default": false,
+        "docs": [
+          " Take a TAO offer by providing Alpha tokens",
+          " The seller provides Alpha tokens to claim the TAO at the offer price",
+          " Prerequisites: The seller must have added the contract as their proxy"
+        ],
+        "label": "take_tao_offer",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 34
+        },
+        "selector": "0x3a2ae37d"
+      }
+    ]
+  },
+  "storage": {
+    "root": {
+      "layout": {
+        "struct": {
+          "fields": [
+            {
+              "layout": {
+                "root": {
+                  "layout": {
+                    "struct": {
+                      "fields": [
+                        {
+                          "layout": {
+                            "leaf": {
+                              "key": "0xae545686",
+                              "ty": 0
+                            }
+                          },
+                          "name": "id"
+                        },
+                        {
+                          "layout": {
+                            "leaf": {
+                              "key": "0xae545686",
+                              "ty": 1
+                            }
+                          },
+                          "name": "netuid"
+                        },
+                        {
+                          "layout": {
+                            "leaf": {
+                              "key": "0xae545686",
+                              "ty": 2
+                            }
+                          },
+                          "name": "seller"
+                        },
+                        {
+                          "layout": {
+                            "leaf": {
+                              "key": "0xae545686",
+                              "ty": 0
+                            }
+                          },
+                          "name": "amount"
+                        },
+                        {
+                          "layout": {
+                            "struct": {
+                              "fields": [
+                                {
+                                  "layout": {
+                                    "leaf": {
+                                      "key": "0xae545686",
+                                      "ty": 5
+                                    }
+                                  },
+                                  "name": "value"
+                                }
+                              ],
+                              "name": "FixedDecimal"
+                            }
+                          },
+                          "name": "price"
+                        },
+                        {
+                          "layout": {
+                            "struct": {
+                              "fields": [
+                                {
+                                  "layout": {
+                                    "leaf": {
+                                      "key": "0xae545686",
+                                      "ty": 5
+                                    }
+                                  },
+                                  "name": "value"
+                                }
+                              ],
+                              "name": "FixedDecimal"
+                            }
+                          },
+                          "name": "fee_rate"
+                        },
+                        {
+                          "layout": {
+                            "leaf": {
+                              "key": "0xae545686",
+                              "ty": 6
+                            }
+                          },
+                          "name": "created_at"
+                        }
+                      ],
+                      "name": "AlphaListing"
+                    }
+                  },
+                  "root_key": "0xae545686",
+                  "ty": 7
+                }
+              },
+              "name": "alpha_listings"
+            },
+            {
+              "layout": {
+                "root": {
+                  "layout": {
+                    "leaf": {
+                      "key": "0x766eb9c1",
+                      "ty": 15
+                    }
+                  },
+                  "root_key": "0x766eb9c1",
+                  "ty": 16
+                }
+              },
+              "name": "user_listings"
+            },
+            {
+              "layout": {
+                "root": {
+                  "layout": {
+                    "struct": {
+                      "fields": [
+                        {
+                          "layout": {
+                            "leaf": {
+                              "key": "0x31a909b8",
+                              "ty": 0
+                            }
+                          },
+                          "name": "id"
+                        },
+                        {
+                          "layout": {
+                            "leaf": {
+                              "key": "0x31a909b8",
+                              "ty": 1
+                            }
+                          },
+                          "name": "netuid"
+                        },
+                        {
+                          "layout": {
+                            "leaf": {
+                              "key": "0x31a909b8",
+                              "ty": 2
+                            }
+                          },
+                          "name": "buyer"
+                        },
+                        {
+                          "layout": {
+                            "leaf": {
+                              "key": "0x31a909b8",
+                              "ty": 0
+                            }
+                          },
+                          "name": "amount"
+                        },
+                        {
+                          "layout": {
+                            "struct": {
+                              "fields": [
+                                {
+                                  "layout": {
+                                    "leaf": {
+                                      "key": "0x31a909b8",
+                                      "ty": 5
+                                    }
+                                  },
+                                  "name": "value"
+                                }
+                              ],
+                              "name": "FixedDecimal"
+                            }
+                          },
+                          "name": "price"
+                        },
+                        {
+                          "layout": {
+                            "struct": {
+                              "fields": [
+                                {
+                                  "layout": {
+                                    "leaf": {
+                                      "key": "0x31a909b8",
+                                      "ty": 5
+                                    }
+                                  },
+                                  "name": "value"
+                                }
+                              ],
+                              "name": "FixedDecimal"
+                            }
+                          },
+                          "name": "fee_rate"
+                        },
+                        {
+                          "layout": {
+                            "leaf": {
+                              "key": "0x31a909b8",
+                              "ty": 6
+                            }
+                          },
+                          "name": "created_at"
+                        }
+                      ],
+                      "name": "TaoOffer"
+                    }
+                  },
+                  "root_key": "0x31a909b8",
+                  "ty": 20
+                }
+              },
+              "name": "tao_offers"
+            },
+            {
+              "layout": {
+                "root": {
+                  "layout": {
+                    "leaf": {
+                      "key": "0xecf9111b",
+                      "ty": 15
+                    }
+                  },
+                  "root_key": "0xecf9111b",
+                  "ty": 24
+                }
+              },
+              "name": "user_offers"
+            },
+            {
+              "layout": {
+                "leaf": {
+                  "key": "0x00000000",
+                  "ty": 0
+                }
+              },
+              "name": "next_alpha_listing_id"
+            },
+            {
+              "layout": {
+                "leaf": {
+                  "key": "0x00000000",
+                  "ty": 0
+                }
+              },
+              "name": "next_tao_offer_id"
+            },
+            {
+              "layout": {
+                "leaf": {
+                  "key": "0x00000000",
+                  "ty": 2
+                }
+              },
+              "name": "owner"
+            },
+            {
+              "layout": {
+                "leaf": {
+                  "key": "0x00000000",
+                  "ty": 2
+                }
+              },
+              "name": "hotkey"
+            },
+            {
+              "layout": {
+                "struct": {
+                  "fields": [
+                    {
+                      "layout": {
+                        "leaf": {
+                          "key": "0x00000000",
+                          "ty": 5
+                        }
+                      },
+                      "name": "value"
+                    }
+                  ],
+                  "name": "FixedDecimal"
+                }
+              },
+              "name": "fee_rate"
+            },
+            {
+              "layout": {
+                "leaf": {
+                  "key": "0x00000000",
+                  "ty": 0
+                }
+              },
+              "name": "min_listing_amount"
+            },
+            {
+              "layout": {
+                "leaf": {
+                  "key": "0x00000000",
+                  "ty": 0
+                }
+              },
+              "name": "min_offer_amount"
+            },
+            {
+              "layout": {
+                "leaf": {
+                  "key": "0x00000000",
+                  "ty": 6
+                }
+              },
+              "name": "min_listing_age"
+            }
+          ],
+          "name": "OtcContract"
+        }
+      },
+      "root_key": "0x00000000",
+      "ty": 27
+    }
+  },
+  "types": [
+    {
+      "id": 0,
+      "type": {
+        "def": {
+          "primitive": "u64"
+        }
+      }
+    },
+    {
+      "id": 1,
+      "type": {
+        "def": {
+          "primitive": "u16"
+        }
+      }
+    },
+    {
+      "id": 2,
+      "type": {
+        "def": {
+          "composite": {
+            "fields": [
+              {
+                "type": 3,
+                "typeName": "[u8; 32]"
+              }
+            ]
+          }
+        },
+        "path": [
+          "ink_primitives",
+          "types",
+          "AccountId"
+        ]
+      }
+    },
+    {
+      "id": 3,
+      "type": {
+        "def": {
+          "array": {
+            "len": 32,
+            "type": 4
+          }
+        }
+      }
+    },
+    {
+      "id": 4,
+      "type": {
+        "def": {
+          "primitive": "u8"
+        }
+      }
+    },
+    {
+      "id": 5,
+      "type": {
+        "def": {
+          "primitive": "u128"
+        }
+      }
+    },
+    {
+      "id": 6,
+      "type": {
+        "def": {
+          "primitive": "u32"
+        }
+      }
+    },
+    {
+      "id": 7,
+      "type": {
+        "def": {
+          "composite": {}
+        },
+        "params": [
+          {
+            "name": "K",
+            "type": 8
+          },
+          {
+            "name": "V",
+            "type": 9
+          },
+          {
+            "name": "KeyType",
+            "type": 11
+          }
+        ],
+        "path": [
+          "ink_storage",
+          "lazy",
+          "mapping",
+          "Mapping"
+        ]
+      }
+    },
+    {
+      "id": 8,
+      "type": {
+        "def": {
+          "tuple": [
+            1,
+            2,
+            0
+          ]
+        }
+      }
+    },
+    {
+      "id": 9,
+      "type": {
+        "def": {
+          "composite": {
+            "fields": [
+              {
+                "name": "id",
+                "type": 0,
+                "typeName": "AlphaListingId"
+              },
+              {
+                "name": "netuid",
+                "type": 1,
+                "typeName": "NetUid"
+              },
+              {
+                "name": "seller",
+                "type": 2,
+                "typeName": "AccountId"
+              },
+              {
+                "name": "amount",
+                "type": 0,
+                "typeName": "AlphaAmount"
+              },
+              {
+                "name": "price",
+                "type": 10,
+                "typeName": "FixedDecimal"
+              },
+              {
+                "name": "fee_rate",
+                "type": 10,
+                "typeName": "FixedDecimal"
+              },
+              {
+                "name": "created_at",
+                "type": 6,
+                "typeName": "BlockNumber"
+              }
+            ]
+          }
+        },
+        "path": [
+          "otc_contract",
+          "types",
+          "AlphaListing"
+        ]
+      }
+    },
+    {
+      "id": 10,
+      "type": {
+        "def": {
+          "composite": {
+            "fields": [
+              {
+                "name": "value",
+                "type": 5,
+                "typeName": "u128"
+              }
+            ]
+          }
+        },
+        "path": [
+          "otc_contract",
+          "types",
+          "FixedDecimal"
+        ]
+      }
+    },
+    {
+      "id": 11,
+      "type": {
+        "def": {
+          "composite": {}
+        },
+        "params": [
+          {
+            "name": "L",
+            "type": 12
+          },
+          {
+            "name": "R",
+            "type": 13
+          }
+        ],
+        "path": [
+          "ink_storage_traits",
+          "impls",
+          "ResolverKey"
+        ]
+      }
+    },
+    {
+      "id": 12,
+      "type": {
+        "def": {
+          "composite": {}
+        },
+        "path": [
+          "ink_storage_traits",
+          "impls",
+          "AutoKey"
+        ]
+      }
+    },
+    {
+      "id": 13,
+      "type": {
+        "def": {
+          "composite": {}
+        },
+        "params": [
+          {
+            "name": "ParentKey",
+            "type": 14
+          }
+        ],
+        "path": [
+          "ink_storage_traits",
+          "impls",
+          "ManualKey"
+        ]
+      }
+    },
+    {
+      "id": 14,
+      "type": {
+        "def": {
+          "tuple": []
+        }
+      }
+    },
+    {
+      "id": 15,
+      "type": {
+        "def": {
+          "sequence": {
+            "type": 0
+          }
+        }
+      }
+    },
+    {
+      "id": 16,
+      "type": {
+        "def": {
+          "composite": {}
+        },
+        "params": [
+          {
+            "name": "K",
+            "type": 17
+          },
+          {
+            "name": "V",
+            "type": 15
+          },
+          {
+            "name": "KeyType",
+            "type": 18
+          }
+        ],
+        "path": [
+          "ink_storage",
+          "lazy",
+          "mapping",
+          "Mapping"
+        ]
+      }
+    },
+    {
+      "id": 17,
+      "type": {
+        "def": {
+          "tuple": [
+            2,
+            1
+          ]
+        }
+      }
+    },
+    {
+      "id": 18,
+      "type": {
+        "def": {
+          "composite": {}
+        },
+        "params": [
+          {
+            "name": "L",
+            "type": 12
+          },
+          {
+            "name": "R",
+            "type": 19
+          }
+        ],
+        "path": [
+          "ink_storage_traits",
+          "impls",
+          "ResolverKey"
+        ]
+      }
+    },
+    {
+      "id": 19,
+      "type": {
+        "def": {
+          "composite": {}
+        },
+        "params": [
+          {
+            "name": "ParentKey",
+            "type": 14
+          }
+        ],
+        "path": [
+          "ink_storage_traits",
+          "impls",
+          "ManualKey"
+        ]
+      }
+    },
+    {
+      "id": 20,
+      "type": {
+        "def": {
+          "composite": {}
+        },
+        "params": [
+          {
+            "name": "K",
+            "type": 8
+          },
+          {
+            "name": "V",
+            "type": 21
+          },
+          {
+            "name": "KeyType",
+            "type": 22
+          }
+        ],
+        "path": [
+          "ink_storage",
+          "lazy",
+          "mapping",
+          "Mapping"
+        ]
+      }
+    },
+    {
+      "id": 21,
+      "type": {
+        "def": {
+          "composite": {
+            "fields": [
+              {
+                "name": "id",
+                "type": 0,
+                "typeName": "TaoOfferId"
+              },
+              {
+                "name": "netuid",
+                "type": 1,
+                "typeName": "NetUid"
+              },
+              {
+                "name": "buyer",
+                "type": 2,
+                "typeName": "AccountId"
+              },
+              {
+                "name": "amount",
+                "type": 0,
+                "typeName": "TaoAmount"
+              },
+              {
+                "name": "price",
+                "type": 10,
+                "typeName": "FixedDecimal"
+              },
+              {
+                "name": "fee_rate",
+                "type": 10,
+                "typeName": "FixedDecimal"
+              },
+              {
+                "name": "created_at",
+                "type": 6,
+                "typeName": "BlockNumber"
+              }
+            ]
+          }
+        },
+        "path": [
+          "otc_contract",
+          "types",
+          "TaoOffer"
+        ]
+      }
+    },
+    {
+      "id": 22,
+      "type": {
+        "def": {
+          "composite": {}
+        },
+        "params": [
+          {
+            "name": "L",
+            "type": 12
+          },
+          {
+            "name": "R",
+            "type": 23
+          }
+        ],
+        "path": [
+          "ink_storage_traits",
+          "impls",
+          "ResolverKey"
+        ]
+      }
+    },
+    {
+      "id": 23,
+      "type": {
+        "def": {
+          "composite": {}
+        },
+        "params": [
+          {
+            "name": "ParentKey",
+            "type": 14
+          }
+        ],
+        "path": [
+          "ink_storage_traits",
+          "impls",
+          "ManualKey"
+        ]
+      }
+    },
+    {
+      "id": 24,
+      "type": {
+        "def": {
+          "composite": {}
+        },
+        "params": [
+          {
+            "name": "K",
+            "type": 17
+          },
+          {
+            "name": "V",
+            "type": 15
+          },
+          {
+            "name": "KeyType",
+            "type": 25
+          }
+        ],
+        "path": [
+          "ink_storage",
+          "lazy",
+          "mapping",
+          "Mapping"
+        ]
+      }
+    },
+    {
+      "id": 25,
+      "type": {
+        "def": {
+          "composite": {}
+        },
+        "params": [
+          {
+            "name": "L",
+            "type": 12
+          },
+          {
+            "name": "R",
+            "type": 26
+          }
+        ],
+        "path": [
+          "ink_storage_traits",
+          "impls",
+          "ResolverKey"
+        ]
+      }
+    },
+    {
+      "id": 26,
+      "type": {
+        "def": {
+          "composite": {}
+        },
+        "params": [
+          {
+            "name": "ParentKey",
+            "type": 14
+          }
+        ],
+        "path": [
+          "ink_storage_traits",
+          "impls",
+          "ManualKey"
+        ]
+      }
+    },
+    {
+      "id": 27,
+      "type": {
+        "def": {
+          "composite": {
+            "fields": [
+              {
+                "name": "alpha_listings",
+                "type": 7,
+                "typeName": "<AlphaListingsMapping as::ink::storage::traits::AutoStorableHint<::\nink::storage::traits::ManualKey<2253804718u32, ()>,>>::Type"
+              },
+              {
+                "name": "user_listings",
+                "type": 16,
+                "typeName": "<UserListingsMapping as::ink::storage::traits::AutoStorableHint<::\nink::storage::traits::ManualKey<3250155126u32, ()>,>>::Type"
+              },
+              {
+                "name": "tao_offers",
+                "type": 20,
+                "typeName": "<TaoOffersMapping as::ink::storage::traits::AutoStorableHint<::ink\n::storage::traits::ManualKey<3087640881u32, ()>,>>::Type"
+              },
+              {
+                "name": "user_offers",
+                "type": 24,
+                "typeName": "<UserOffersMapping as::ink::storage::traits::AutoStorableHint<::\nink::storage::traits::ManualKey<454162924u32, ()>,>>::Type"
+              },
+              {
+                "name": "next_alpha_listing_id",
+                "type": 0,
+                "typeName": "<AlphaListingId as::ink::storage::traits::AutoStorableHint<::ink\n::storage::traits::ManualKey<1218006540u32, ()>,>>::Type"
+              },
+              {
+                "name": "next_tao_offer_id",
+                "type": 0,
+                "typeName": "<TaoOfferId as::ink::storage::traits::AutoStorableHint<::ink::\nstorage::traits::ManualKey<6833057u32, ()>,>>::Type"
+              },
+              {
+                "name": "owner",
+                "type": 2,
+                "typeName": "<AccountId as::ink::storage::traits::AutoStorableHint<::ink::\nstorage::traits::ManualKey<4150720563u32, ()>,>>::Type"
+              },
+              {
+                "name": "hotkey",
+                "type": 2,
+                "typeName": "<AccountId as::ink::storage::traits::AutoStorableHint<::ink::\nstorage::traits::ManualKey<1434143195u32, ()>,>>::Type"
+              },
+              {
+                "name": "fee_rate",
+                "type": 10,
+                "typeName": "<FixedDecimal as::ink::storage::traits::AutoStorableHint<::ink::\nstorage::traits::ManualKey<268166585u32, ()>,>>::Type"
+              },
+              {
+                "name": "min_listing_amount",
+                "type": 0,
+                "typeName": "<AlphaAmount as::ink::storage::traits::AutoStorableHint<::ink::\nstorage::traits::ManualKey<851853488u32, ()>,>>::Type"
+              },
+              {
+                "name": "min_offer_amount",
+                "type": 0,
+                "typeName": "<TaoAmount as::ink::storage::traits::AutoStorableHint<::ink::\nstorage::traits::ManualKey<1137308775u32, ()>,>>::Type"
+              },
+              {
+                "name": "min_listing_age",
+                "type": 6,
+                "typeName": "<BlockAge as::ink::storage::traits::AutoStorableHint<::ink::\nstorage::traits::ManualKey<308562102u32, ()>,>>::Type"
+              }
+            ]
+          }
+        },
+        "path": [
+          "otc_contract",
+          "otc_contract",
+          "OtcContract"
+        ]
+      }
+    },
+    {
+      "id": 28,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 14
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 29
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 14
+          },
+          {
+            "name": "E",
+            "type": 29
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 29,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "index": 1,
+                "name": "CouldNotReadInput"
+              }
+            ]
+          }
+        },
+        "path": [
+          "ink_primitives",
+          "LangError"
+        ]
+      }
+    },
+    {
+      "id": 30,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 2
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 29
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 2
+          },
+          {
+            "name": "E",
+            "type": 29
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 31,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 10
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 29
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 10
+          },
+          {
+            "name": "E",
+            "type": 29
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 32,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 0
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 29
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 0
+          },
+          {
+            "name": "E",
+            "type": 29
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 33,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 6
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 29
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 6
+          },
+          {
+            "name": "E",
+            "type": 29
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 34,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 35
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 29
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 35
+          },
+          {
+            "name": "E",
+            "type": 29
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 35,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 14
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 36
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 14
+          },
+          {
+            "name": "E",
+            "type": 36
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 36,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "index": 0,
+                "name": "InsufficientAlphaBalance"
+              },
+              {
+                "index": 1,
+                "name": "InsufficientTaoBalance"
+              },
+              {
+                "index": 2,
+                "name": "ListingNotFound"
+              },
+              {
+                "index": 3,
+                "name": "OfferNotFound"
+              },
+              {
+                "index": 4,
+                "name": "NotOwner"
+              },
+              {
+                "index": 5,
+                "name": "AmountTooSmall"
+              },
+              {
+                "index": 6,
+                "name": "InvalidPrice"
+              },
+              {
+                "index": 7,
+                "name": "Unauthorized"
+              },
+              {
+                "index": 8,
+                "name": "ListingTooYoung"
+              },
+              {
+                "index": 9,
+                "name": "DivisionByZero"
+              },
+              {
+                "index": 10,
+                "name": "Overflow"
+              },
+              {
+                "index": 11,
+                "name": "RuntimeCallFailed"
+              },
+              {
+                "index": 12,
+                "name": "TransferFailed"
+              },
+              {
+                "index": 13,
+                "name": "InvalidHotkey"
+              },
+              {
+                "index": 14,
+                "name": "InvalidNetuid"
+              }
+            ]
+          }
+        },
+        "path": [
+          "otc_contract",
+          "errors",
+          "Error"
+        ]
+      }
+    },
+    {
+      "id": 37,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 38
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 29
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 38
+          },
+          {
+            "name": "E",
+            "type": 29
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 38,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 0
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 36
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 0
+          },
+          {
+            "name": "E",
+            "type": 36
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 39,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 40
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 29
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 40
+          },
+          {
+            "name": "E",
+            "type": 29
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 40,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "index": 0,
+                "name": "None"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 9
+                  }
+                ],
+                "index": 1,
+                "name": "Some"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 9
+          }
+        ],
+        "path": [
+          "Option"
+        ]
+      }
+    },
+    {
+      "id": 41,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 15
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 29
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 15
+          },
+          {
+            "name": "E",
+            "type": 29
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 42,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 43
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 29
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 43
+          },
+          {
+            "name": "E",
+            "type": 29
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 43,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "index": 0,
+                "name": "None"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 21
+                  }
+                ],
+                "index": 1,
+                "name": "Some"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 21
+          }
+        ],
+        "path": [
+          "Option"
+        ]
+      }
+    },
+    {
+      "id": 44,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "index": 0,
+                "name": "None"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 0
+                  }
+                ],
+                "index": 1,
+                "name": "Some"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 0
+          }
+        ],
+        "path": [
+          "Option"
+        ]
+      }
+    },
+    {
+      "id": 45,
+      "type": {
+        "def": {
+          "composite": {
+            "fields": [
+              {
+                "type": 3,
+                "typeName": "[u8; 32]"
+              }
+            ]
+          }
+        },
+        "path": [
+          "ink_primitives",
+          "types",
+          "Hash"
+        ]
+      }
+    },
+    {
+      "id": 46,
+      "type": {
+        "def": {
+          "variant": {}
+        },
+        "path": [
+          "ink_env",
+          "types",
+          "NoChainExtension"
+        ]
+      }
+    }
+  ],
+  "version": 5
+}
