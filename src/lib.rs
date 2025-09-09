@@ -1,5 +1,6 @@
 #![cfg_attr(not(feature = "std"), no_std, no_main)]
 
+pub mod chain_extension;
 pub mod errors;
 pub mod events;
 pub mod runtime;
@@ -16,7 +17,7 @@ impl ink::env::Environment for BittensorEnvironment {
     type Hash = ink::primitives::Hash;
     type Timestamp = u64;
     type BlockNumber = u32;
-    type ChainExtension = ::ink::env::NoChainExtension;
+    type ChainExtension = crate::chain_extension::SubtensorExtension;
 }
 
 #[ink::contract(env = crate::BittensorEnvironment)]
