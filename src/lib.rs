@@ -27,7 +27,7 @@ mod otc_contract {
         MinListingAgeUpdated, MinListingAmountUpdated, MinOfferAmountUpdated, OwnerUpdated,
         TaoOfferCancelled, TaoOfferCreated, TaoOfferTaken,
     };
-    use crate::runtime::{ProxyCall, RuntimeCall, SubtensorCall};
+    use crate::runtime::{AlphaCurrency, ProxyCall, RuntimeCall, SubtensorCall};
     use crate::types::{
         AlphaAmount, AlphaListing, AlphaListingId, AlphaListingsMapping, BlockAge, FixedDecimal,
         NetUid, TaoAmount, TaoOffer, TaoOfferId, TaoOffersMapping, UserListingsMapping,
@@ -264,9 +264,9 @@ mod otc_contract {
             let transfer_call = RuntimeCall::SubtensorModule(SubtensorCall::TransferStake {
                 destination_coldkey: self.env().account_id(),
                 hotkey,
-                origin_netuid: netuid,
-                destination_netuid: netuid,
-                alpha_amount: amount,
+                origin_netuid: crate::runtime::NetUid::from(netuid),
+                destination_netuid: crate::runtime::NetUid::from(netuid),
+                alpha_amount: AlphaCurrency::from(amount),
             });
 
             let proxy_call = RuntimeCall::Proxy(ProxyCall::Proxy {
@@ -284,9 +284,9 @@ mod otc_contract {
                 let move_call = RuntimeCall::SubtensorModule(SubtensorCall::MoveStake {
                     origin_hotkey: hotkey,
                     destination_hotkey: self.hotkey,
-                    origin_netuid: netuid,
-                    destination_netuid: netuid,
-                    alpha_amount: amount,
+                    origin_netuid: crate::runtime::NetUid::from(netuid),
+                    destination_netuid: crate::runtime::NetUid::from(netuid),
+                    alpha_amount: AlphaCurrency::from(amount),
                 });
 
                 self.env()
@@ -363,9 +363,9 @@ mod otc_contract {
             let transfer_call = RuntimeCall::SubtensorModule(SubtensorCall::TransferStake {
                 destination_coldkey: seller,
                 hotkey: self.hotkey,
-                origin_netuid: netuid,
-                destination_netuid: netuid,
-                alpha_amount: listing.amount,
+                origin_netuid: crate::runtime::NetUid::from(netuid),
+                destination_netuid: crate::runtime::NetUid::from(netuid),
+                alpha_amount: AlphaCurrency::from(listing.amount),
             });
 
             self.env()
@@ -556,9 +556,9 @@ mod otc_contract {
             let transfer_call = RuntimeCall::SubtensorModule(SubtensorCall::TransferStake {
                 destination_coldkey: buyer,
                 hotkey: self.hotkey,
-                origin_netuid: netuid,
-                destination_netuid: netuid,
-                alpha_amount: listing.amount,
+                origin_netuid: crate::runtime::NetUid::from(netuid),
+                destination_netuid: crate::runtime::NetUid::from(netuid),
+                alpha_amount: AlphaCurrency::from(listing.amount),
             });
 
             self.env()
@@ -641,9 +641,9 @@ mod otc_contract {
             let transfer_call = RuntimeCall::SubtensorModule(SubtensorCall::TransferStake {
                 destination_coldkey: buyer,
                 hotkey, // Seller's original hotkey - Alpha stays here
-                origin_netuid: netuid,
-                destination_netuid: netuid,
-                alpha_amount,
+                origin_netuid: crate::runtime::NetUid::from(netuid),
+                destination_netuid: crate::runtime::NetUid::from(netuid),
+                alpha_amount: AlphaCurrency::from(alpha_amount),
             });
 
             let proxy_call = RuntimeCall::Proxy(ProxyCall::Proxy {
