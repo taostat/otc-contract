@@ -1,8 +1,18 @@
 #![allow(clippy::cast_possible_truncation)]
 
-use crate::types::AlphaAmount;
 use ink::prelude::boxed::Box;
 use ink::primitives::AccountId;
+
+#[repr(transparent)]
+#[ink::scale_derive(Encode)]
+pub struct AlphaCurrency(pub u64);
+
+impl From<u64> for AlphaCurrency {
+    fn from(value: u64) -> Self {
+        AlphaCurrency(value)
+    }
+}
+
 
 /// Runtime call enum for interacting with Bittensor pallets
 #[ink::scale_derive(Encode)]
@@ -37,7 +47,7 @@ pub enum SubtensorCall {
         destination_hotkey: AccountId,
         origin_netuid: u16,
         destination_netuid: u16,
-        alpha_amount: AlphaAmount, // Alpha amount in rao
+        alpha_amount: AlphaCurrency,
     },
     /// transfer_stake - Transfers stake between coldkeys
     #[codec(index = 86)]
@@ -46,6 +56,6 @@ pub enum SubtensorCall {
         hotkey: AccountId,
         origin_netuid: u16,
         destination_netuid: u16,
-        alpha_amount: AlphaAmount, // Alpha amount in rao
+        alpha_amount: AlphaCurrency,
     },
 }
