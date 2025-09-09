@@ -13,6 +13,16 @@ impl From<u64> for AlphaCurrency {
     }
 }
 
+#[repr(transparent)]
+#[ink::scale_derive(Encode)]
+pub struct NetUid(pub u16);
+
+impl From<u16> for NetUid {
+    fn from(value: u16) -> Self {
+        NetUid(value)
+    }
+}
+
 
 /// Runtime call enum for interacting with Bittensor pallets
 #[ink::scale_derive(Encode)]
@@ -45,8 +55,8 @@ pub enum SubtensorCall {
     MoveStake {
         origin_hotkey: AccountId,
         destination_hotkey: AccountId,
-        origin_netuid: u16,
-        destination_netuid: u16,
+        origin_netuid: NetUid,
+        destination_netuid: NetUid,
         alpha_amount: AlphaCurrency,
     },
     /// transfer_stake - Transfers stake between coldkeys
@@ -54,8 +64,8 @@ pub enum SubtensorCall {
     TransferStake {
         destination_coldkey: AccountId,
         hotkey: AccountId,
-        origin_netuid: u16,
-        destination_netuid: u16,
+        origin_netuid: NetUid,
+        destination_netuid: NetUid,
         alpha_amount: AlphaCurrency,
     },
 }
