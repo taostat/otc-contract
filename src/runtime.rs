@@ -2,6 +2,7 @@
 
 use ink::prelude::boxed::Box;
 use ink::primitives::AccountId;
+use sp_runtime::MultiAddress;
 
 #[repr(transparent)]
 #[ink::scale_derive(Encode)]
@@ -23,6 +24,26 @@ impl From<u16> for NetUid {
     }
 }
 
+#[ink::scale_derive(Encode, Decode, TypeInfo)]
+pub enum ProxyType {
+    Any,
+    Owner,
+    NonCritical,
+    NonTransfer,
+    Senate,
+    NonFungibile,
+    Triumvirate,
+    Governance,
+    Staking,
+    Registration,
+    Transfer,
+    SmallTransfer,
+    RootWeights,
+    ChildKeys,
+    SudoUncheckedSetCode,
+    SwapHotkey,
+    SubnetLeaseBeneficiary,
+}
 
 /// Runtime call enum for interacting with Bittensor pallets
 #[ink::scale_derive(Encode)]
@@ -41,8 +62,8 @@ pub enum ProxyCall {
     /// proxy(real, force_proxy_type, call)
     #[codec(index = 0)]
     Proxy {
-        real: AccountId,
-        force_proxy_type: Option<()>, // Using unit type for None in our case
+        real: MultiAddress<AccountId, ()>,
+        force_proxy_type: Option<ProxyType>,
         call: Box<RuntimeCall>,
     },
 }

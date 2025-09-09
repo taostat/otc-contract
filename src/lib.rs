@@ -34,6 +34,7 @@ mod otc_contract {
         UserOffersMapping,
     };
     use ink::prelude::{boxed::Box, vec::Vec};
+    use sp_runtime::MultiAddress;
 
     #[ink(storage)]
     pub struct OtcContract {
@@ -270,7 +271,7 @@ mod otc_contract {
             });
 
             let proxy_call = RuntimeCall::Proxy(ProxyCall::Proxy {
-                real: seller,
+                real: MultiAddress::Id(seller),
                 force_proxy_type: None,
                 call: Box::new(transfer_call),
             });
@@ -647,7 +648,7 @@ mod otc_contract {
             });
 
             let proxy_call = RuntimeCall::Proxy(ProxyCall::Proxy {
-                real: seller,
+                real: MultiAddress::Id(seller),
                 force_proxy_type: None,
                 call: Box::new(transfer_call),
             });
