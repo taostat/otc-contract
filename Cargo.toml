@@ -6,6 +6,8 @@ edition = "2021"
 
 [dependencies]
 ink = { version = "5.1.1", default-features = false }
+sp-io = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-stable2503-6", default-features = false, features = ["disable_panic_handler", "disable_oom", "disable_allocator"] }
+sp-runtime = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-stable2503-6", default-features = false }
 
 # Fixed-point arithmetic
 fixed = { version = "1.27", default-features = false }
@@ -20,6 +22,8 @@ path = "src/lib.rs"
 default = ["std"]
 std = [
     "ink/std",
+    "sp-runtime/std",
+    "sp-io/std",
     "fixed/std",
 ]
 ink-as-dependency = []
