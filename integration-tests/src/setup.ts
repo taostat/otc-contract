@@ -1,4 +1,4 @@
-import { createClient, type PolkadotClient as Client, type TypedApi, Binary, TxEvent, TxFinalized } from "polkadot-api";
+import { createClient, type PolkadotClient as Client, type TypedApi, Binary, TxEvent, TxFinalized, FixedSizeBinary } from "polkadot-api";
 import { getWsProvider } from "polkadot-api/ws-provider/web";
 import { createInkSdk } from "@polkadot-api/sdk-ink";
 import { devnet, contracts } from "@polkadot-api/descriptors";
@@ -6,15 +6,40 @@ import { sr25519CreateDerive } from "@polkadot-labs/hdkd";
 import { DEV_PHRASE, entropyToMiniSecret, mnemonicToEntropy, ss58Address } from "@polkadot-labs/hdkd-helpers";
 import { getPolkadotSigner, type PolkadotSigner } from "polkadot-api/signer";
 import * as fs from "fs/promises";
+import * as fsSync from "fs";
 import * as path from "path";
 import { Observable } from "rxjs";
 
 export type ContractSdk = ReturnType<typeof createInkSdk<TypedApi<typeof devnet>, typeof contracts.otc_contract>>;
 
-export const CONTRACT_ADDRESS = "5FBn4jtSHJPoAwVrGx1UDLsjzxBH8KFvYnPUfU1jDWEUay25";
+// Contract address persistence file
+const CONTRACT_ADDRESS_FILE = path.join(process.cwd(), ".contract-address");
+
+// Load contract address from file if it exists
+function loadContractAddress(): string | null {
+    try {
+        if (fsSync.existsSync(CONTRACT_ADDRESS_FILE)) {
+            const address = fsSync.readFileSync(CONTRACT_ADDRESS_FILE, 'utf-8').trim();
+            console.log(`Loaded contract address from file: ${address}`);
+            return address;
+        }
+    } catch (error) {
+        console.error("Failed to load contract address:", error);
+    }
+    return null;
+}
+
+// Save contract address to file
+function saveContractAddress(address: string): void {
+    try {
+        fsSync.writeFileSync(CONTRACT_ADDRESS_FILE, address, 'utf-8');
+        console.log(`Saved contract address to file: ${address}`);
+    } catch (error) {
+        console.error("Failed to save contract address:", error);
+    }
+}
 
 export interface TestContext {
-    client: Client;
     api: TypedApi<typeof devnet>;
     contractSdk: ContractSdk;
     accounts: {
@@ -47,9 +72,9 @@ export class TestSetup {
         return TestSetup.instance;
     }
 
-    async connect(): Promise<{ client: Client; api: TypedApi<typeof devnet> }> {
+    async getApi(): Promise<TypedApi<typeof devnet>> {
         if (this.client && this.api) {
-            return { client: this.client, api: this.api };
+            return this.api;
         }
 
         const wsUrl = process.env.CONTRACTS_NODE_URL || "ws://127.0.0.1:9944";
@@ -59,15 +84,7 @@ export class TestSetup {
         this.client = createClient(provider);
         this.api = this.client.getTypedApi(devnet);
 
-        // Wait for connection
-        await new Promise((resolve) => {
-            this.client!.finalizedBlock$.subscribe((block) => {
-                console.log(`Connected! Current block: ${block.number}`);
-                resolve(undefined);
-            });
-        });
-
-        return { client: this.client, api: this.api };
+        return this.api;
     }
 
     createTestAccounts(): TestContext['accounts'] {
@@ -121,7 +138,7 @@ export class TestSetup {
 
         const constructorArgs = {
             owner: accounts.alice.address,
-            hotkey: accounts.alice.address, // Using alice as hotkey for simplicity
+            hotkey: accounts.eve.address,
             fee_rate: 92233720368547758n, // 0.5% as U64F64 bits (0.005 * 2^64)
             min_listing_amount: 1_000_000_000n, // 1 Alpha
             min_offer_amount: 1_000_000_000n, // 1 TAO
@@ -135,21 +152,28 @@ export class TestSetup {
             });
 
             if (!dryRunResult.success) {
-                if (dryRunResult.value.value?.value?.type === "DuplicateContract") {
-                    console.log("Contract already exists at predicted address (using existing)")
-                    // Contract already exists, just use the known address
-                    // This is deterministic based on the code and salt
-                    return CONTRACT_ADDRESS;
-                } else {
-                    console.log("Dry run did not succeed", dryRunResult.value)
-                    return Promise.reject(new Error(`Dry run failed: ${JSON.stringify(dryRunResult, bigintReplacer)}`));
+                // Check if it's a DuplicateContract error
+                const errorType = dryRunResult.value?.value?.value?.type;
+                console.log("Dry run failed with error:", errorType);
+                console.log("Full dry run result:", JSON.stringify(dryRunResult, null, 2));
+
+                if (errorType === 'DuplicateContract') {
+                    console.log("Contract already deployed, attempting to find and use it");
+                    const contractAddress = loadContractAddress();
+                    if (contractAddress) {
+                        console.log(`Using existing contract at ${contractAddress}`);
+                        return contractAddress;
+                    } else {
+                        return Promise.reject(new Error("Contract already deployed but address not found"));
+                    }
                 }
+
+                console.log("Dry run did not succeed", dryRunResult.value)
+                return Promise.reject(new Error(`Dry run failed: ${errorType || 'Unknown'}`));
             }
 
-            if (dryRunResult.value.address !== CONTRACT_ADDRESS) {
-                console.warn(`Warning: Predicted contract address ${dryRunResult.value.address} does not match expected ${CONTRACT_ADDRESS}`);
-            }
-
+            // Deploy the contract
+            console.log(`Deploying new contract...`)
             const fin = await this.trackTx(
                 dryRunResult.value.deploy().signSubmitAndWatch(accounts.alice.signer),
             )
@@ -157,6 +181,7 @@ export class TestSetup {
             console.log(contractSdk.readDeploymentEvents(fin.events))
 
             const contractAddress = dryRunResult.value.address;
+            saveContractAddress(contractAddress);
             return contractAddress;
         } catch (error) {
             console.error("Deployment error:", error);
@@ -188,12 +213,11 @@ export class TestSetup {
     }
 
     async createTestContext(): Promise<TestContext> {
-        const { client, api } = await this.connect();
+        const api = await this.getApi();
         const accounts = this.createTestAccounts();
         const contractSdk = createInkSdk(api, contracts.otc_contract);
 
         const context: TestContext = {
-            client,
             api,
             contractSdk,
             accounts,
@@ -206,7 +230,7 @@ export class TestSetup {
     }
 }
 
-function bigintReplacer(_key: any, value: any) {
+export function bigintReplacer(_key: any, value: any) {
     console.log(JSON.stringify(value, (_, value) =>
         typeof value === 'bigint' ? value.toString() : value
         , 2));
