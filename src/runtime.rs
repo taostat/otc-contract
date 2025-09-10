@@ -10,6 +10,13 @@ use sp_runtime::MultiAddress;
 #[ink::scale_derive(Encode, Decode, TypeInfo)]
 pub struct AlphaCurrency(u64);
 
+impl AlphaCurrency {
+    /// Get the inner u64 value
+    pub fn as_u64(&self) -> u64 {
+        self.0
+    }
+}
+
 impl From<u64> for AlphaCurrency {
     fn from(value: u64) -> Self {
         AlphaCurrency(value)
