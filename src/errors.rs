@@ -31,4 +31,12 @@ pub enum Error {
     InvalidHotkey,
     /// Invalid netuid
     InvalidNetuid,
+    /// Chain extension query failed
+    StakeQueryFailed,
+    /// Stake transfer verification failed
+    StakeTransferNotVerified,
+    /// Insufficient stake for operation
+    InsufficientStake,
+    /// TAO balance query failed
+    TaoBalanceQueryFailed,
 }
