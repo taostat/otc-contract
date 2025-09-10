@@ -33,6 +33,10 @@ mod otc_contract {
     use ink::prelude::{boxed::Box, vec::Vec};
     use sp_runtime::MultiAddress;
 
+    /// Tolerance for stake transfer verification (in rao)
+    /// Accounts for potential rounding or micro-fees in Subtensor pallet
+    const TRANSFER_TOLERANCE: u64 = 10;
+
     #[ink(storage)]
     pub struct OtcContract {
         /// Listings: (netuid, seller, listing_id) -> AlphaListing
@@ -294,8 +298,18 @@ mod otc_contract {
                 return Err(Error::InvalidPrice);
             }
 
-            // Transfer stake from seller to contract via proxy
-            // The seller must have added the contract as their proxy for this to work
+            let listing_id = self.next_alpha_listing_id;
+            let next_id = listing_id.checked_add(1).ok_or(Error::Overflow)?;
+
+            let seller_stake_before = self.get_stake_amount(seller, hotkey, netuid)?;
+            if seller_stake_before < amount {
+                return Err(Error::InsufficientStake);
+            }
+
+            let contract_stake_before = self
+                .get_stake_amount(self.env().account_id(), hotkey, netuid)
+                .unwrap_or(0);
+
             let transfer_call = RuntimeCall::SubtensorModule(SubtensorCall::TransferStake {
                 destination_coldkey: self.env().account_id(),
                 hotkey,
@@ -314,7 +328,26 @@ mod otc_contract {
                 .call_runtime(&proxy_call)
                 .map_err(|_| Error::RuntimeCallFailed)?;
 
-            // If the hotkey is different from contract's hotkey, consolidate stake
+            let seller_stake_after = self.get_stake_amount(seller, hotkey, netuid).unwrap_or(0);
+            let contract_stake_after =
+                self.get_stake_amount(self.env().account_id(), hotkey, netuid)?;
+
+            let seller_decrease = seller_stake_before.saturating_sub(seller_stake_after);
+            let contract_increase = contract_stake_after.saturating_sub(contract_stake_before);
+
+            // Verify transfer with tolerance for rounding/fees
+            // Allow up to TRANSFER_TOLERANCE less than expected
+            let seller_decrease_ok = seller_decrease >= amount.saturating_sub(TRANSFER_TOLERANCE)
+                && seller_decrease <= amount;
+            let contract_increase_ok = contract_increase
+                >= amount.saturating_sub(TRANSFER_TOLERANCE)
+                && contract_increase <= amount;
+
+            if !seller_decrease_ok || !contract_increase_ok {
+                return Err(Error::StakeTransferNotVerified);
+            }
+
+            // Consolidate stake if needed (move to contract's hotkey)
             if hotkey != self.hotkey {
                 let move_call = RuntimeCall::SubtensorModule(SubtensorCall::MoveStake {
                     origin_hotkey: hotkey,
@@ -329,8 +362,7 @@ mod otc_contract {
                     .map_err(|_| Error::RuntimeCallFailed)?;
             }
 
-            let listing_id = self.next_alpha_listing_id;
-            self.next_alpha_listing_id = listing_id.checked_add(1).ok_or(Error::Overflow)?;
+            self.next_alpha_listing_id = next_id;
 
             let listing = AlphaListing {
                 id: listing_id,
