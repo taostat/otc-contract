@@ -1,4 +1,5 @@
 use crate::runtime::{AlphaCurrency, NetUid, TaoCurrency};
+use crate::types::{AlphaAmount, Balance};
 use ink::primitives::AccountId;
 use ink::scale::Compact;
 
@@ -14,6 +15,14 @@ pub struct StakeInfo {
     tao_emission: Compact<TaoCurrency>,
     drain: Compact<u64>,
     is_registered: bool,
+}
+
+impl StakeInfo {
+    pub fn stake_amount(&self) -> AlphaAmount {
+        // Extract from Compact<AlphaCurrency>
+        let alpha_currency = self.stake.0.clone();
+        alpha_currency.as_u64()
+    }
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -44,9 +53,15 @@ pub trait SubtensorExtension {
     type ErrorCode = SubtensorError;
 
     #[ink(function = 1001)]
+    fn get_tao_balance(account: AccountId) -> Result<Balance, SubtensorError>;
+
+    #[ink(function = 1002)]
     fn get_stake_info(
         hotkey: AccountId,
         coldkey: AccountId,
         netuid: u16,
     ) -> Result<Option<StakeInfo>, SubtensorError>;
+
+    #[ink(function = 1003)]
+    fn get_total_stake(hotkey: AccountId, netuid: u16) -> Result<AlphaAmount, SubtensorError>;
 }
