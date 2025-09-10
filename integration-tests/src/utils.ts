@@ -229,10 +229,40 @@ export async function registerValidator(
             netuid,
             amount_staked: stakeAmount
         });
-
         await stakeTx.signAndSubmit(coldkeySigner);
         console.log(`Staked ${raoToTao(stakeAmount)} Alpha for validator on subnet ${netuid}`);
     }
+}
+
+/**
+ * Elevate registration limits (target per interval & max per block) via sudo for test environments.
+ */
+export async function elevateRegistrationLimits(
+    api: TypedApi<typeof devnet>,
+    netuid: number,
+    targetPerInterval: number,
+    maxPerBlock: number,
+    sudoSigner: PolkadotSigner
+): Promise<void> {
+    console.log(`Elevating registration limits on netuid ${netuid} (targetPerInterval=${targetPerInterval}, maxPerBlock=${maxPerBlock})`);
+    // Set target registrations per interval
+    const innerTarget = api.tx.AdminUtils.sudo_set_target_registrations_per_interval({
+        netuid,
+        target_registrations_per_interval: targetPerInterval,
+    });
+    const sudoTarget = api.tx.Sudo.sudo({ call: innerTarget.decodedCall });
+    await sudoTarget.signAndSubmit(sudoSigner);
+
+    const innerBlock = api.tx.AdminUtils.sudo_set_max_registrations_per_block({
+        netuid,
+        max_registrations_per_block: maxPerBlock,
+    });
+    const sudoBlock = api.tx.Sudo.sudo({ call: innerBlock.decodedCall });
+    await sudoBlock.signAndSubmit(sudoSigner);
+
+    const newTarget = await api.query.SubtensorModule.TargetRegistrationsPerInterval.getValue(netuid);
+    const newMaxPerBlock = await api.query.SubtensorModule.MaxRegistrationsPerBlock.getValue(netuid).catch(() => undefined);
+    console.log(`Updated registration params: targetPerInterval=${newTarget} maxPerBlock=${newMaxPerBlock}`);
 }
 
 /**

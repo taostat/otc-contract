@@ -10,6 +10,7 @@ import {
     registerValidator,
     addContractAsProxy,
     createHotkey,
+    elevateRegistrationLimits,
     type Wallet,
 } from "../utils";
 import {
@@ -36,6 +37,17 @@ describe("Alpha Listing Operations", () => {
         await fundAccount(context.api, aliceHotkey.address, taoToRao(10), context.accounts.alice.signer);
         netuid = await registerSubnet(context.api, aliceHotkey.address, context.accounts.alice.signer);
         console.log(`Created test subnet with netuid: ${netuid}`);
+
+        // Elevate registration limits so we can register multiple validators quickly
+        await elevateRegistrationLimits(
+            context.api,
+            netuid,
+            20, // target registrations per interval
+            20, // max registrations per block
+            context.accounts.alice.signer // sudo signer (alice)
+        );
+        // Small wait to ensure params applied in subsequent block
+        await waitForBlocks(context.api, 1);
 
         // Get the contract's hotkey and register it as a validator
         // The contract uses Alice as its hotkey, so we need to register it on the subnet
