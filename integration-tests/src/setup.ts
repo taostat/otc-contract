@@ -1,4 +1,4 @@
-import { createClient, type PolkadotClient as Client, type TypedApi, Binary, TxEvent, TxFinalized, FixedSizeBinary } from "polkadot-api";
+import { createClient, type PolkadotClient as Client, type TypedApi, Binary, TxEvent, TxFinalized } from "polkadot-api";
 import { getWsProvider } from "polkadot-api/ws-provider/web";
 import { createInkSdk } from "@polkadot-api/sdk-ink";
 import { devnet, contracts } from "@polkadot-api/descriptors";
