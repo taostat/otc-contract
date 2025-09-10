@@ -23,11 +23,7 @@ impl ink::env::Environment for BittensorEnvironment {
 #[ink::contract(env = crate::BittensorEnvironment)]
 mod otc_contract {
     use crate::errors::Error;
-    use crate::events::{
-        AlphaListed, AlphaListingCancelled, AlphaListingTaken, FeeRateUpdated, HotkeyUpdated,
-        MinListingAgeUpdated, MinListingAmountUpdated, MinOfferAmountUpdated, OwnerUpdated,
-        TaoOfferCancelled, TaoOfferCreated, TaoOfferTaken,
-    };
+    use crate::events::*;
     use crate::runtime::{AlphaCurrency, ProxyCall, RuntimeCall, SubtensorCall};
     use crate::types::{
         AlphaAmount, AlphaListing, AlphaListingId, AlphaListingsMapping, BlockAge, FixedDecimal,
