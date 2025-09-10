@@ -100,6 +100,43 @@ mod otc_contract {
             }
         }
 
+        /// Helper function to get TAO balance for a specific account
+        fn get_tao_balance(&self, account: AccountId) -> Result<TaoAmount, Error> {
+            self.env()
+                .extension()
+                .get_tao_balance(account)
+                .map_err(|_| Error::TaoBalanceQueryFailed)
+        }
+
+        /// Helper function to get stake amount for a specific account
+        fn get_stake_amount(
+            &self,
+            coldkey: AccountId,
+            hotkey: AccountId,
+            netuid: NetUid,
+        ) -> Result<AlphaAmount, Error> {
+            match self
+                .env()
+                .extension()
+                .get_stake_info(hotkey, coldkey, netuid)
+            {
+                Ok(Some(info)) => {
+                    let stake_amount = info.stake_amount();
+                    Ok(stake_amount)
+                }
+                Ok(None) => Ok(0),
+                Err(_) => Err(Error::StakeQueryFailed),
+            }
+        }
+
+        /// Helper function to get total stake for a hotkey on a specific subnet
+        fn get_total_stake(&self, hotkey: AccountId, netuid: NetUid) -> Result<AlphaAmount, Error> {
+            self.env()
+                .extension()
+                .get_total_stake(hotkey, netuid)
+                .map_err(|_| Error::StakeQueryFailed)
+        }
+
         /// Get the contract owner
         #[ink(message)]
         pub fn get_owner(&self) -> AccountId {
