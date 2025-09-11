@@ -757,6 +757,19 @@ mod otc_contract {
             Ok(())
         }
 
+        /// Replace contract code with new implementation
+        /// Only callable by contract owner
+        #[ink(message)]
+        pub fn set_code(&mut self, code_hash: Hash) -> Result<(), Error> {
+            self.ensure_owner()?;
+
+            self.env()
+                .set_code_hash(&code_hash)
+                .map_err(|_| Error::CodeUpgradeFailed)?;
+
+            Ok(())
+        }
+
         /// Access control helper: ensure caller is the owner
         fn ensure_owner(&self) -> Result<(), Error> {
             if self.env().caller() != self.owner {

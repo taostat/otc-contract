@@ -39,4 +39,6 @@ pub enum Error {
     InsufficientStake,
     /// TAO balance query failed
     TaoBalanceQueryFailed,
+    /// Code upgrade failed
+    CodeUpgradeFailed,
 }
