@@ -113,8 +113,8 @@ Sell Alpha tokens to a TAO offer. Requires proxy authorization.
 ```rust
 get_listing(netuid: u16, seller: AccountId, listing_id: u64) -> Option<AlphaListing>
 get_offer(netuid: u16, buyer: AccountId, offer_id: u64) -> Option<TaoOffer>
-get_user_listings(seller: AccountId, netuid: u16) -> Vec<u64>
-get_user_offers(buyer: AccountId, netuid: u16) -> Vec<u64>
+get_user_listings(seller: AccountId, netuid: u16) -> Vec<u64>  // Returns empty Vec if no listings
+get_user_offers(buyer: AccountId, netuid: u16) -> Vec<u64>     // Returns empty Vec if no offers
 ```
 
 ### Admin Methods
@@ -125,9 +125,19 @@ update_hotkey(new_hotkey: AccountId) -> Result<()>
 update_fee_rate(new_rate: u128) -> Result<()>
 update_min_listing_amount(new_amount: u64) -> Result<()>
 update_min_offer_amount(new_amount: u64) -> Result<()>
+update_min_listing_age(new_age: u32) -> Result<()>
 ```
 
 ## Architecture
+
+### Module Structure
+
+- `lib.rs` - Main contract logic with all public functions and tests
+- `types.rs` - Type definitions including FixedDecimal wrapper for U64F64 fixed-point math
+- `errors.rs` - Comprehensive error enum for all failure cases
+- `events.rs` - Event definitions with proper indexing for off-chain monitoring
+- `runtime.rs` - Bittensor Subtensor pallet integration via runtime calls
+- `chain_extension.rs` - Chain extension interface for querying stake information
 
 ### Key Components
 
@@ -135,6 +145,7 @@ update_min_offer_amount(new_amount: u64) -> Result<()>
 - **Proxy Integration**: All stake transfers use Bittensor's Proxy pallet for authorization
 - **Composite Storage**: Multi-dimensional lookups using `(netuid, user, id)` tuples
 - **Event System**: Comprehensive events for off-chain monitoring
+- **Transfer Tolerance**: Stake transfers verified with 10 rao tolerance to account for rounding/micro-fees
 
 ### Storage Pattern
 
