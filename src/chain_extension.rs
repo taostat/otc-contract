@@ -1,5 +1,5 @@
 use crate::runtime::{AlphaCurrency, NetUid, TaoCurrency};
-use crate::types::{AlphaAmount, Balance};
+use crate::types::AlphaAmount;
 use ink::primitives::AccountId;
 use ink::scale::Compact;
 
@@ -53,15 +53,9 @@ pub trait SubtensorExtension {
     type ErrorCode = SubtensorError;
 
     #[ink(function = 1001)]
-    fn get_tao_balance(account: AccountId) -> Result<Balance, SubtensorError>;
-
-    #[ink(function = 1002)]
     fn get_stake_info(
         hotkey: AccountId,
         coldkey: AccountId,
         netuid: u16,
     ) -> Result<Option<StakeInfo>, SubtensorError>;
-
-    #[ink(function = 1003)]
-    fn get_total_stake(hotkey: AccountId, netuid: u16) -> Result<AlphaAmount, SubtensorError>;
 }
