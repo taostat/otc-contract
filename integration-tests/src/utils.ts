@@ -69,11 +69,19 @@ export function createHotkey(coldkeyDerivePath: string): Wallet {
  * Used for fee rates in the contract
  */
 export function percentageToFixedPoint(percentage: number): bigint {
-    // U64F64 has 64 fractional bits
-    // So 1.0 is represented as 2^64
+    // Convert percentage to decimal (e.g., 0.5% -> 0.005)
+    const decimalStr = (percentage / 100).toString();
+    const [integerPart, decimalPart = ''] = decimalStr.split('.');
+    
+    // Combine integer and decimal parts as a single number
+    const numerator = BigInt(integerPart + decimalPart);
+    const denominator = 10n ** BigInt(decimalPart.length || 0);
+    
+    // U64F64 has 64 fractional bits (2^64)
     const one = 1n << 64n;
-    const feeAsDecimal = percentage / 100;
-    return BigInt(Math.floor(feeAsDecimal * Number(one)));
+    
+    // Calculate the fixed-point representation
+    return (numerator * one) / denominator;
 }
 
 /**
@@ -297,8 +305,19 @@ export function formatAddress(address: string): string {
  * Convert a price (TAO per Alpha) to U64F64 fixed-point representation
  */
 export function priceToFixedPoint(pricePerAlpha: number): bigint {
+    // Convert to string to handle decimals precisely
+    const priceStr = pricePerAlpha.toString();
+    const [integerPart, decimalPart = ''] = priceStr.split('.');
+    
+    // Combine integer and decimal parts as a single number
+    const numerator = BigInt(integerPart + decimalPart);
+    const denominator = 10n ** BigInt(decimalPart.length || 0);
+    
+    // U64F64 has 64 fractional bits (2^64)
     const one = 1n << 64n;
-    return BigInt(Math.floor(pricePerAlpha * Number(one)));
+    
+    // Calculate the fixed-point representation
+    return (numerator * one) / denominator;
 }
 
 /**
