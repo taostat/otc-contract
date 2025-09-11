@@ -693,21 +693,16 @@ mod otc_contract {
                 .div_by_decimal(tao_for_seller)
                 .map_err(|_| Error::Overflow)?;
 
-            self.tao_offers.remove((netuid, buyer, offer_id));
-
-            let mut user_offers = self.user_offers.get((buyer, netuid)).unwrap_or_default();
-            user_offers.retain(|&id| id != offer_id);
-
-            if user_offers.is_empty() {
-                self.user_offers.remove((buyer, netuid));
-            } else {
-                self.user_offers.insert((buyer, netuid), &user_offers);
+            let seller_stake_before = self.get_stake_amount(seller, hotkey, netuid)?;
+            if seller_stake_before < alpha_amount {
+                return Err(Error::InsufficientStake);
             }
+            let buyer_stake_before = self.get_stake_amount(buyer, hotkey, netuid).unwrap_or(0);
 
-            // Transfer Alpha directly from seller to buyer
+            // Transfer Alpha directly from seller to buyer via proxy
             let transfer_call = RuntimeCall::SubtensorModule(SubtensorCall::TransferStake {
                 destination_coldkey: buyer,
-                hotkey, // Seller's original hotkey - Alpha stays here
+                hotkey, // Seller's original hotkey
                 origin_netuid: crate::runtime::NetUid::from(netuid),
                 destination_netuid: crate::runtime::NetUid::from(netuid),
                 alpha_amount: AlphaCurrency::from(alpha_amount),
@@ -722,6 +717,36 @@ mod otc_contract {
             self.env()
                 .call_runtime(&proxy_call)
                 .map_err(|_| Error::RuntimeCallFailed)?;
+
+            let seller_stake_after = self.get_stake_amount(seller, hotkey, netuid).unwrap_or(0);
+            let buyer_stake_after = self.get_stake_amount(buyer, hotkey, netuid)?;
+
+            let seller_decrease = seller_stake_before.saturating_sub(seller_stake_after);
+            let buyer_increase = buyer_stake_after.saturating_sub(buyer_stake_before);
+
+            // Verify transfer with tolerance for rounding/fees
+            // Allow up to TRANSFER_TOLERANCE less than expected
+            let seller_decrease_ok = seller_decrease
+                >= alpha_amount.saturating_sub(TRANSFER_TOLERANCE)
+                && seller_decrease <= alpha_amount;
+            let buyer_increase_ok = buyer_increase
+                >= alpha_amount.saturating_sub(TRANSFER_TOLERANCE)
+                && buyer_increase <= alpha_amount;
+
+            if !seller_decrease_ok || !buyer_increase_ok {
+                return Err(Error::StakeTransferNotVerified);
+            }
+
+            self.tao_offers.remove((netuid, buyer, offer_id));
+
+            let mut user_offers = self.user_offers.get((buyer, netuid)).unwrap_or_default();
+            user_offers.retain(|&id| id != offer_id);
+
+            if user_offers.is_empty() {
+                self.user_offers.remove((buyer, netuid));
+            } else {
+                self.user_offers.insert((buyer, netuid), &user_offers);
+            }
 
             // Transfer TAO to seller (minus fee)
             self.env()
