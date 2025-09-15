@@ -1,6 +1,8 @@
 use crate::types::{
-    AlphaAmount, AlphaListingId, Balance, BlockAge, FixedDecimal, NetUid, TaoAmount, TaoOfferId,
+    AlphaAmount, AlphaListingId, Balance, BlockAge, FixedDecimal, NetUid, PauseState, TaoAmount,
+    TaoOfferId,
 };
+use ink::prelude::vec::Vec;
 use ink::primitives::AccountId;
 
 #[ink::event]
@@ -110,4 +112,17 @@ pub struct MinListingAmountUpdated {
 pub struct MinListingAgeUpdated {
     pub old_age: BlockAge,
     pub new_age: BlockAge,
+}
+
+#[ink::event]
+pub struct ContractPaused {
+    #[ink(topic)]
+    pub pause_state: PauseState,
+    pub reason: Vec<u8>,
+    pub paused_by: AccountId,
+}
+
+#[ink::event]
+pub struct ContractResumed {
+    pub resumed_by: AccountId,
 }

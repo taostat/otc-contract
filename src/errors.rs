@@ -41,4 +41,8 @@ pub enum Error {
     TaoBalanceQueryFailed,
     /// Code upgrade failed
     CodeUpgradeFailed,
+    /// Contract is fully paused
+    ContractFullyPaused,
+    /// Trading is paused
+    TradingPaused,
 }

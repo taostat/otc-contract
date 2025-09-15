@@ -4,6 +4,18 @@ use ink::prelude::vec::Vec;
 use ink::primitives::AccountId;
 use ink::storage::Mapping;
 
+// Pause state for emergency control
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[ink::scale_derive(Encode, Decode, TypeInfo)]
+#[cfg_attr(feature = "std", derive(ink::storage::traits::StorageLayout))]
+#[derive(Default)]
+pub enum PauseState {
+    #[default]
+    NotPaused, // Normal operation
+    TradingPaused, // No trading, but cancellations allowed
+    FullyPaused,   // All operations frozen except admin functions
+}
+
 // ID types
 pub type AlphaListingId = u64;
 pub type TaoOfferId = u64;
