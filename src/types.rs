@@ -82,10 +82,11 @@ impl FixedDecimal {
         self.value == 0
     }
 
-    /// Divide a u64 value by this decimal (value / self)
+    /// Use this decimal as the divisor of the given value (value / self)
     /// Used for calculating how much Alpha is needed for a given TAO amount
+    /// Example: If price is 2 TAO per Alpha, price.as_divisor_of(10 TAO) returns 5 Alpha
     /// Returns the result as a u64
-    pub fn div_by_decimal(&self, value: u64) -> Result<u64, Error> {
+    pub fn as_divisor_of(&self, value: u64) -> Result<u64, Error> {
         if self.is_zero() {
             return Err(Error::DivisionByZero);
         }
@@ -167,33 +168,33 @@ mod tests {
     }
 
     #[test]
-    fn fixed_decimal_div_by_decimal_works() {
+    fn fixed_decimal_as_divisor_of_works() {
         // Create a decimal representing 2.0 (price of 2 TAO per Alpha)
         let price = FixedDecimal::from_bits(U64F64::from_num(2u64).to_bits());
 
         // If we have 100 TAO, we should get 50 Alpha
-        assert_eq!(price.div_by_decimal(100).unwrap(), 50);
+        assert_eq!(price.as_divisor_of(100).unwrap(), 50);
 
         // If we have 0 TAO, we should get 0 Alpha
-        assert_eq!(price.div_by_decimal(0).unwrap(), 0);
+        assert_eq!(price.as_divisor_of(0).unwrap(), 0);
 
         // Test with TAO amounts (1 TAO = 10^9 rao)
         let tao_amount = 10_000_000_000u64; // 10 TAO
-        assert_eq!(price.div_by_decimal(tao_amount).unwrap(), 5_000_000_000); // 5 Alpha
+        assert_eq!(price.as_divisor_of(tao_amount).unwrap(), 5_000_000_000); // 5 Alpha
 
         // Test with fractional price (1.5 TAO per Alpha)
         let price_fractional = FixedDecimal::from_bits(U64F64::from_num(1.5).to_bits());
-        assert_eq!(price_fractional.div_by_decimal(150).unwrap(), 100);
+        assert_eq!(price_fractional.as_divisor_of(150).unwrap(), 100);
         assert_eq!(
-            price_fractional.div_by_decimal(15_000_000_000).unwrap(),
+            price_fractional.as_divisor_of(15_000_000_000).unwrap(),
             10_000_000_000
         );
     }
 
     #[test]
-    fn fixed_decimal_div_by_decimal_division_by_zero() {
+    fn fixed_decimal_as_divisor_of_division_by_zero() {
         let zero = FixedDecimal::from_bits(0);
-        let result = zero.div_by_decimal(100);
+        let result = zero.as_divisor_of(100);
         assert_eq!(result, Err(Error::DivisionByZero));
     }
 }

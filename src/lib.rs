@@ -674,7 +674,7 @@ mod otc_contract {
             // offer.price is TAO per Alpha, so alpha_amount = tao_for_seller / price
             let alpha_amount = offer
                 .price
-                .div_by_decimal(tao_for_seller)
+                .as_divisor_of(tao_for_seller)
                 .map_err(|_| Error::Overflow)?;
 
             let seller_stake_before = self.get_stake_amount(seller, hotkey, netuid)?;
@@ -1644,7 +1644,7 @@ mod otc_contract {
             let expected_alpha = 4_950_000_000u64; // 4.95 Alpha in rao
 
             // Test the calculation using the same logic as the contract
-            let calculated_alpha = offer.price.div_by_decimal(tao_for_seller).unwrap();
+            let calculated_alpha = offer.price.as_divisor_of(tao_for_seller).unwrap();
             assert_eq!(calculated_alpha, expected_alpha);
         }
 
@@ -1981,8 +1981,8 @@ mod otc_contract {
             let result = price.mul(max_tao);
             assert_eq!(result, Ok(1_500_000_000_000_000));
 
-            // Test div_by_decimal with large amounts
-            let alpha_result = price.div_by_decimal(max_tao);
+            // Test as_divisor_of with large amounts
+            let alpha_result = price.as_divisor_of(max_tao);
             assert_eq!(alpha_result, Ok(666_666_666_666_666)); // Approximately 2/3 of max_tao
         }
 
@@ -2428,7 +2428,7 @@ mod otc_contract {
                 let price = FixedDecimal::from_bits(U64F64::from_num(price_float).to_bits());
                 let fee_amount = contract.fee_rate.mul(tao_amount).unwrap();
                 let tao_for_seller = tao_amount - fee_amount;
-                let calculated_alpha = price.div_by_decimal(tao_for_seller).unwrap();
+                let calculated_alpha = price.as_divisor_of(tao_for_seller).unwrap();
 
                 // Allow for small rounding differences (within 1000 rao)
                 let diff = if calculated_alpha > expected_alpha {
