@@ -27,7 +27,7 @@ mod otc_contract {
     use crate::runtime::{AlphaCurrency, ProxyCall, RuntimeCall, SubtensorCall};
     use crate::types::{
         AlphaAmount, AlphaListing, AlphaListingId, AlphaListingsMapping, BlockAge, FixedDecimal,
-        NetUid, TaoAmount, TaoOffer, TaoOfferId, TaoOffersMapping, UserListingsMapping,
+        NetUid, PauseState, TaoAmount, TaoOffer, TaoOfferId, TaoOffersMapping, UserListingsMapping,
         UserOffersMapping,
     };
     use ink::prelude::{boxed::Box, vec::Vec};
@@ -74,6 +74,9 @@ mod otc_contract {
 
         /// Minimum age before listing can be cancelled (in blocks)
         min_listing_age: BlockAge,
+
+        /// Pause state for emergency control
+        pause_state: PauseState,
     }
 
     impl OtcContract {
@@ -101,6 +104,7 @@ mod otc_contract {
                 min_listing_amount,
                 min_offer_amount,
                 min_listing_age,
+                pause_state: PauseState::NotPaused,
             }
         }
 
@@ -271,6 +275,8 @@ mod otc_contract {
             amount: AlphaAmount,
             price: u128, // Price as FixedDecimal bits (TAO per Alpha)
         ) -> Result<AlphaListingId, Error> {
+            self.ensure_trading_enabled()?;
+
             let seller = self.env().caller();
             let price = FixedDecimal::from_bits(price);
 
@@ -385,6 +391,8 @@ mod otc_contract {
             netuid: NetUid,
             listing_id: AlphaListingId,
         ) -> Result<(), Error> {
+            self.ensure_not_fully_paused()?;
+
             let seller = self.env().caller();
 
             let listing = self
@@ -458,6 +466,8 @@ mod otc_contract {
             netuid: NetUid,
             price: u128, // Price as FixedDecimal bits
         ) -> Result<TaoOfferId, Error> {
+            self.ensure_trading_enabled()?;
+
             let buyer = self.env().caller();
             let amount = self.env().transferred_value();
             let price = FixedDecimal::from_bits(price);
@@ -508,6 +518,8 @@ mod otc_contract {
             netuid: NetUid,
             offer_id: TaoOfferId,
         ) -> Result<(), Error> {
+            self.ensure_not_fully_paused()?;
+
             let buyer = self.env().caller();
 
             let offer = self
@@ -568,6 +580,8 @@ mod otc_contract {
             seller: AccountId,
             listing_id: AlphaListingId,
         ) -> Result<(), Error> {
+            self.ensure_trading_enabled()?;
+
             let buyer = self.env().caller();
             let tao_received = self.env().transferred_value();
 
@@ -652,6 +666,8 @@ mod otc_contract {
             offer_id: TaoOfferId,
             hotkey: AccountId,
         ) -> Result<(), Error> {
+            self.ensure_trading_enabled()?;
+
             let seller = self.env().caller();
 
             let offer = self
@@ -770,12 +786,84 @@ mod otc_contract {
             Ok(())
         }
 
+        /// Pause trading operations (no new trades, but cancellations allowed)
+        /// Only callable by contract owner
+        #[ink(message)]
+        pub fn pause_trading(&mut self, reason: Vec<u8>) -> Result<(), Error> {
+            self.ensure_owner()?;
+
+            self.pause_state = PauseState::TradingPaused;
+
+            self.env().emit_event(ContractPaused {
+                pause_state: PauseState::TradingPaused,
+                reason,
+                paused_by: self.env().caller(),
+            });
+
+            Ok(())
+        }
+
+        /// Fully pause the contract (no operations except admin functions)
+        /// Only callable by contract owner
+        #[ink(message)]
+        pub fn pause_fully(&mut self, reason: Vec<u8>) -> Result<(), Error> {
+            self.ensure_owner()?;
+
+            self.pause_state = PauseState::FullyPaused;
+
+            self.env().emit_event(ContractPaused {
+                pause_state: PauseState::FullyPaused,
+                reason,
+                paused_by: self.env().caller(),
+            });
+
+            Ok(())
+        }
+
+        /// Resume normal contract operations
+        /// Only callable by contract owner
+        #[ink(message)]
+        pub fn resume(&mut self) -> Result<(), Error> {
+            self.ensure_owner()?;
+
+            self.pause_state = PauseState::NotPaused;
+
+            self.env().emit_event(ContractResumed {
+                resumed_by: self.env().caller(),
+            });
+
+            Ok(())
+        }
+
+        /// Get the current pause state
+        #[ink(message)]
+        pub fn get_pause_state(&self) -> PauseState {
+            self.pause_state
+        }
+
         /// Access control helper: ensure caller is the owner
         fn ensure_owner(&self) -> Result<(), Error> {
             if self.env().caller() != self.owner {
                 return Err(Error::Unauthorized);
             }
             Ok(())
+        }
+
+        /// Pause guard: ensure contract is not fully paused
+        fn ensure_not_fully_paused(&self) -> Result<(), Error> {
+            if self.pause_state == PauseState::FullyPaused {
+                return Err(Error::ContractFullyPaused);
+            }
+            Ok(())
+        }
+
+        /// Pause guard: ensure trading is enabled (not paused or trading paused)
+        fn ensure_trading_enabled(&self) -> Result<(), Error> {
+            match self.pause_state {
+                PauseState::NotPaused => Ok(()),
+                PauseState::TradingPaused => Err(Error::TradingPaused),
+                PauseState::FullyPaused => Err(Error::ContractFullyPaused),
+            }
         }
     }
 
@@ -2710,6 +2798,258 @@ mod otc_contract {
             assert!(contract
                 .get_offer(max_netuid, accounts.charlie, offer2.unwrap())
                 .is_some());
+        }
+
+        #[ink::test]
+        fn pause_state_initialization() {
+            let accounts = ink::env::test::default_accounts::<Environment>();
+            let fee_rate = fee_rate_from_percentage(0.5);
+
+            let contract = OtcContract::new(
+                accounts.alice,
+                accounts.bob,
+                fee_rate,
+                1_000_000_000,
+                1_000_000_000,
+                100,
+            );
+
+            // Contract should start in NotPaused state
+            assert_eq!(contract.get_pause_state(), PauseState::NotPaused);
+        }
+
+        #[ink::test]
+        fn pause_trading_only_owner() {
+            let accounts = ink::env::test::default_accounts::<Environment>();
+            let fee_rate = fee_rate_from_percentage(0.5);
+
+            let mut contract = OtcContract::new(
+                accounts.alice,
+                accounts.bob,
+                fee_rate,
+                1_000_000_000,
+                1_000_000_000,
+                100,
+            );
+
+            // Non-owner should not be able to pause
+            ink::env::test::set_caller::<Environment>(accounts.bob);
+            let result = contract.pause_trading(b"test".to_vec());
+            assert_eq!(result, Err(Error::Unauthorized));
+
+            // Owner should be able to pause trading
+            ink::env::test::set_caller::<Environment>(accounts.alice);
+            let result = contract.pause_trading(b"maintenance".to_vec());
+            assert!(result.is_ok());
+            assert_eq!(contract.get_pause_state(), PauseState::TradingPaused);
+        }
+
+        #[ink::test]
+        fn pause_fully_only_owner() {
+            let accounts = ink::env::test::default_accounts::<Environment>();
+            let fee_rate = fee_rate_from_percentage(0.5);
+
+            let mut contract = OtcContract::new(
+                accounts.alice,
+                accounts.bob,
+                fee_rate,
+                1_000_000_000,
+                1_000_000_000,
+                100,
+            );
+
+            // Owner should be able to fully pause
+            ink::env::test::set_caller::<Environment>(accounts.alice);
+            let result = contract.pause_fully(b"emergency".to_vec());
+            assert!(result.is_ok());
+            assert_eq!(contract.get_pause_state(), PauseState::FullyPaused);
+        }
+
+        #[ink::test]
+        fn resume_only_owner() {
+            let accounts = ink::env::test::default_accounts::<Environment>();
+            let fee_rate = fee_rate_from_percentage(0.5);
+
+            let mut contract = OtcContract::new(
+                accounts.alice,
+                accounts.bob,
+                fee_rate,
+                1_000_000_000,
+                1_000_000_000,
+                100,
+            );
+
+            // Pause the contract first
+            ink::env::test::set_caller::<Environment>(accounts.alice);
+            contract.pause_fully(b"emergency".to_vec()).unwrap();
+
+            // Non-owner should not be able to resume
+            ink::env::test::set_caller::<Environment>(accounts.bob);
+            let result = contract.resume();
+            assert_eq!(result, Err(Error::Unauthorized));
+
+            // Owner should be able to resume
+            ink::env::test::set_caller::<Environment>(accounts.alice);
+            let result = contract.resume();
+            assert!(result.is_ok());
+            assert_eq!(contract.get_pause_state(), PauseState::NotPaused);
+        }
+
+        #[ink::test]
+        fn trading_blocked_when_trading_paused() {
+            let accounts = ink::env::test::default_accounts::<Environment>();
+            let fee_rate = fee_rate_from_percentage(0.5);
+
+            let mut contract = OtcContract::new(
+                accounts.alice,
+                accounts.bob,
+                fee_rate,
+                1_000_000_000,
+                1_000_000_000,
+                100,
+            );
+
+            // Pause trading
+            ink::env::test::set_caller::<Environment>(accounts.alice);
+            contract.pause_trading(b"maintenance".to_vec()).unwrap();
+
+            // Try to list alpha - should fail
+            ink::env::test::set_caller::<Environment>(accounts.charlie);
+            let result = contract.list_alpha(
+                accounts.charlie,
+                1,
+                2_000_000_000,
+                U64F64::from_num(1u64).to_bits(),
+            );
+            assert_eq!(result, Err(Error::TradingPaused));
+
+            // Try to create TAO offer - should fail
+            ink::env::test::set_value_transferred::<ink::env::DefaultEnvironment>(2_000_000_000);
+            let result = contract.create_tao_offer(1, U64F64::from_num(1u64).to_bits());
+            assert_eq!(result, Err(Error::TradingPaused));
+        }
+
+        #[ink::test]
+        fn cancel_allowed_when_trading_paused() {
+            let accounts = ink::env::test::default_accounts::<Environment>();
+            let fee_rate = fee_rate_from_percentage(0.5);
+
+            let mut contract = OtcContract::new(
+                accounts.alice,
+                accounts.bob,
+                fee_rate,
+                1_000_000_000,
+                1_000_000_000,
+                0, // No minimum age for testing
+            );
+
+            // Create a TAO offer first
+            ink::env::test::set_caller::<Environment>(accounts.charlie);
+            ink::env::test::set_value_transferred::<ink::env::DefaultEnvironment>(2_000_000_000);
+            let offer_id = contract
+                .create_tao_offer(1, U64F64::from_num(1u64).to_bits())
+                .unwrap();
+
+            // Pause trading
+            ink::env::test::set_caller::<Environment>(accounts.alice);
+            contract.pause_trading(b"maintenance".to_vec()).unwrap();
+
+            // Cancel should be allowed when trading is paused (but will fail at runtime call)
+            // In unit tests, we can only verify that the pause check passes
+            ink::env::test::set_caller::<Environment>(accounts.charlie);
+
+            // Verify the offer exists before attempting cancel
+            let offer = contract.get_offer(1, accounts.charlie, offer_id);
+            assert!(offer.is_some());
+
+            // In unit tests, the cancel will fail at the runtime call to transfer TAO back,
+            // but the pause state check should pass. We verify the pause state allows cancellation.
+            assert_eq!(contract.pause_state, PauseState::TradingPaused);
+
+            // The ensure_not_fully_paused check should pass
+            let pause_check = contract.ensure_not_fully_paused();
+            assert!(pause_check.is_ok());
+        }
+
+        #[ink::test]
+        fn all_operations_blocked_when_fully_paused() {
+            let accounts = ink::env::test::default_accounts::<Environment>();
+            let fee_rate = fee_rate_from_percentage(0.5);
+
+            let mut contract = OtcContract::new(
+                accounts.alice,
+                accounts.bob,
+                fee_rate,
+                1_000_000_000,
+                1_000_000_000,
+                0,
+            );
+
+            // Create a TAO offer first
+            ink::env::test::set_caller::<Environment>(accounts.charlie);
+            ink::env::test::set_value_transferred::<ink::env::DefaultEnvironment>(2_000_000_000);
+            let offer_id = contract
+                .create_tao_offer(1, U64F64::from_num(1u64).to_bits())
+                .unwrap();
+
+            // Fully pause the contract
+            ink::env::test::set_caller::<Environment>(accounts.alice);
+            contract.pause_fully(b"emergency".to_vec()).unwrap();
+
+            // Try to list alpha - should fail
+            ink::env::test::set_caller::<Environment>(accounts.charlie);
+            let result = contract.list_alpha(
+                accounts.charlie,
+                1,
+                2_000_000_000,
+                U64F64::from_num(1u64).to_bits(),
+            );
+            assert_eq!(result, Err(Error::ContractFullyPaused));
+
+            // Try to cancel offer - should also fail
+            let result = contract.cancel_tao_offer(1, offer_id);
+            assert_eq!(result, Err(Error::ContractFullyPaused));
+
+            // Try to create TAO offer - should fail
+            ink::env::test::set_value_transferred::<ink::env::DefaultEnvironment>(2_000_000_000);
+            let result = contract.create_tao_offer(1, U64F64::from_num(1u64).to_bits());
+            assert_eq!(result, Err(Error::ContractFullyPaused));
+        }
+
+        #[ink::test]
+        fn admin_functions_work_when_paused() {
+            let accounts = ink::env::test::default_accounts::<Environment>();
+            let fee_rate = fee_rate_from_percentage(0.5);
+
+            let mut contract = OtcContract::new(
+                accounts.alice,
+                accounts.bob,
+                fee_rate,
+                1_000_000_000,
+                1_000_000_000,
+                100,
+            );
+
+            // Fully pause the contract
+            ink::env::test::set_caller::<Environment>(accounts.alice);
+            contract.pause_fully(b"emergency".to_vec()).unwrap();
+
+            // Admin functions should still work
+            let result = contract.update_fee_rate(fee_rate_from_percentage(1.0));
+            assert!(result.is_ok());
+
+            let result = contract.update_min_listing_amount(2_000_000_000);
+            assert!(result.is_ok());
+
+            // Can transition between pause states
+            let result = contract.pause_trading(b"downgrade".to_vec());
+            assert!(result.is_ok());
+            assert_eq!(contract.get_pause_state(), PauseState::TradingPaused);
+
+            // Can resume
+            let result = contract.resume();
+            assert!(result.is_ok());
+            assert_eq!(contract.get_pause_state(), PauseState::NotPaused);
         }
     }
 }
