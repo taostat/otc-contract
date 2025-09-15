@@ -1,6 +1,6 @@
 {
   "source": {
-    "hash": "0x50a58459a99cfce8a9ce77091d79830de01b4c173ddb0664c3d4412cddf69541",
+    "hash": "0xee256b87444128f2086a79c581a0d71cbb1f47304504bc9a71f403e090be7aec",
     "language": "ink! 5.1.1",
     "compiler": "rustc 1.85.0",
     "build_info": {
@@ -865,6 +865,25 @@
           "type": 33
         },
         "selector": "0xf8382780"
+      },
+      {
+        "args": [],
+        "default": false,
+        "docs": [
+          " Get contract version",
+          " This method is added in V2 to test upgrade functionality"
+        ],
+        "label": "get_version",
+        "mutates": false,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 33
+        },
+        "selector": "0x0c1a1d77"
       },
       {
         "args": [

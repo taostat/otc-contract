@@ -10,11 +10,19 @@
         "test:watch": "vitest watch",
         "generate-types": "papi add devnet -w ws://localhost:9944",
         "generate-contract": "papi ink add ../target/ink/otc_contract.contract",
+        "build-contracts": "cd .. && cargo contract build --release && ./scripts/build-v2.sh",
+        "generate-contract-v1": "papi ink add ../target/ink/otc_contract.contract",
+        "generate-contract-v2": "papi ink add ../target/ink/v2/otc_contract_v2.contract",
+        "generate-contracts": "npm run generate-contract-v1 && npm run generate-contract-v2",
+        "prepare-tests": "npm run build-contracts && npm run generate-contracts",
+        "test:upgrade": "npm run prepare-tests && vitest run upgrade",
         "postinstall": "papi && patch-package"
     },
     "dependencies": {
         "@polkadot-api/descriptors": "file:.papi/descriptors",
         "@polkadot-api/sdk-ink": "^0.4.0",
+        "@polkadot/util": "^13.5.6",
+        "@polkadot/util-crypto": "^13.5.6",
         "polkadot-api": "^1.16.4"
     },
     "devDependencies": {
