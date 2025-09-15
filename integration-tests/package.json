@@ -15,6 +15,7 @@
     "dependencies": {
         "@polkadot-api/descriptors": "file:.papi/descriptors",
         "@polkadot-api/sdk-ink": "^0.4.0",
+        "@polkadot/util": "^13.2.4",
         "polkadot-api": "^1.16.4"
     },
     "devDependencies": {
