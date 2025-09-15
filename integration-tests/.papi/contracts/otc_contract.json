@@ -1,6 +1,6 @@
 {
   "source": {
-    "hash": "0x50a58459a99cfce8a9ce77091d79830de01b4c173ddb0664c3d4412cddf69541",
+    "hash": "0x47b05a073f6432adbc0b5321d015ece15a1e81abe8a6face2b1c58bc608449d8",
     "language": "ink! 5.1.1",
     "compiler": "rustc 1.85.0",
     "build_info": {
@@ -89,7 +89,7 @@
             "ink_primitives",
             "ConstructorResult"
           ],
-          "type": 28
+          "type": 29
         },
         "selector": "0x9bae9d5e"
       }
@@ -118,13 +118,13 @@
         "displayName": [
           "ChainExtension"
         ],
-        "type": 46
+        "type": 49
       },
       "hash": {
         "displayName": [
           "Hash"
         ],
-        "type": 44
+        "type": 45
       },
       "maxEventTopics": 4,
       "staticBufferSize": 16384,
@@ -464,7 +464,7 @@
               "displayName": [
                 "Option"
               ],
-              "type": 45
+              "type": 48
             }
           }
         ],
@@ -560,7 +560,7 @@
               "displayName": [
                 "Option"
               ],
-              "type": 45
+              "type": 48
             }
           }
         ],
@@ -748,6 +748,66 @@
         "label": "MinListingAgeUpdated",
         "module_path": "otc_contract::events",
         "signature_topic": "0xafd61dbed2c977b796520f3e6d2daf4cb9b196a21e4377feccd45eefc8d29825"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "pause_state",
+            "type": {
+              "displayName": [
+                "PauseState"
+              ],
+              "type": 28
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "reason",
+            "type": {
+              "displayName": [
+                "Vec"
+              ],
+              "type": 46
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "paused_by",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          }
+        ],
+        "docs": [],
+        "label": "ContractPaused",
+        "module_path": "otc_contract::events",
+        "signature_topic": "0x81e82cae4be8480f08cbd0c1d486626d63ea65b8c45c17f58cb329f0351f1e18"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "resumed_by",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          }
+        ],
+        "docs": [],
+        "label": "ContractResumed",
+        "module_path": "otc_contract::events",
+        "signature_topic": "0x6d6589490722aa3ed333fb6dc341c5d9ba411635aa69665c1a07a97162f5dfba"
       }
     ],
     "lang_error": {
@@ -755,7 +815,7 @@
         "ink",
         "LangError"
       ],
-      "type": 29
+      "type": 30
     },
     "messages": [
       {
@@ -772,7 +832,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 30
+          "type": 31
         },
         "selector": "0x07fcd0b1"
       },
@@ -790,7 +850,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 30
+          "type": 31
         },
         "selector": "0xead097fa"
       },
@@ -808,7 +868,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 31
+          "type": 32
         },
         "selector": "0xcf886b41"
       },
@@ -826,7 +886,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 32
+          "type": 33
         },
         "selector": "0xba57e251"
       },
@@ -844,7 +904,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 32
+          "type": 33
         },
         "selector": "0x0314e2e2"
       },
@@ -862,7 +922,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 33
+          "type": 34
         },
         "selector": "0xf8382780"
       },
@@ -891,7 +951,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 34
+          "type": 35
         },
         "selector": "0x22a8dc8f"
       },
@@ -920,7 +980,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 34
+          "type": 35
         },
         "selector": "0x512fb5ad"
       },
@@ -949,7 +1009,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 34
+          "type": 35
         },
         "selector": "0x8a268b92"
       },
@@ -978,7 +1038,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 34
+          "type": 35
         },
         "selector": "0x2a3d49c5"
       },
@@ -1007,7 +1067,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 34
+          "type": 35
         },
         "selector": "0x969fe9d9"
       },
@@ -1036,7 +1096,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 34
+          "type": 35
         },
         "selector": "0x2cbc2626"
       },
@@ -1094,7 +1154,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 37
+          "type": 38
         },
         "selector": "0x19ebe71d"
       },
@@ -1132,7 +1192,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 34
+          "type": 35
         },
         "selector": "0x1301f414"
       },
@@ -1178,7 +1238,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 39
+          "type": 40
         },
         "selector": "0xfd34226e"
       },
@@ -1215,7 +1275,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 41
+          "type": 42
         },
         "selector": "0x24011d31"
       },
@@ -1253,7 +1313,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 37
+          "type": 38
         },
         "selector": "0x30834e95"
       },
@@ -1291,7 +1351,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 34
+          "type": 35
         },
         "selector": "0x14384403"
       },
@@ -1337,7 +1397,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 42
+          "type": 43
         },
         "selector": "0xdd4e4ee2"
       },
@@ -1374,7 +1434,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 41
+          "type": 42
         },
         "selector": "0xd6692f17"
       },
@@ -1422,7 +1482,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 34
+          "type": 35
         },
         "selector": "0x7506dd44"
       },
@@ -1479,7 +1539,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 34
+          "type": 35
         },
         "selector": "0x3a2ae37d"
       },
@@ -1491,7 +1551,7 @@
               "displayName": [
                 "Hash"
               ],
-              "type": 44
+              "type": 45
             }
           }
         ],
@@ -1508,9 +1568,104 @@
             "ink",
             "MessageResult"
           ],
-          "type": 34
+          "type": 35
         },
         "selector": "0x694fb50f"
+      },
+      {
+        "args": [
+          {
+            "label": "reason",
+            "type": {
+              "displayName": [
+                "Vec"
+              ],
+              "type": 46
+            }
+          }
+        ],
+        "default": false,
+        "docs": [
+          " Pause trading operations (no new trades, but cancellations allowed)",
+          " Only callable by contract owner"
+        ],
+        "label": "pause_trading",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 35
+        },
+        "selector": "0x2a25fd77"
+      },
+      {
+        "args": [
+          {
+            "label": "reason",
+            "type": {
+              "displayName": [
+                "Vec"
+              ],
+              "type": 46
+            }
+          }
+        ],
+        "default": false,
+        "docs": [
+          " Fully pause the contract (no operations except admin functions)",
+          " Only callable by contract owner"
+        ],
+        "label": "pause_fully",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 35
+        },
+        "selector": "0x114a6b2a"
+      },
+      {
+        "args": [],
+        "default": false,
+        "docs": [
+          " Resume normal contract operations",
+          " Only callable by contract owner"
+        ],
+        "label": "resume",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 35
+        },
+        "selector": "0xc3a8f39e"
+      },
+      {
+        "args": [],
+        "default": false,
+        "docs": [
+          " Get the current pause state"
+        ],
+        "label": "get_pause_state",
+        "mutates": false,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 47
+        },
+        "selector": "0x05478dce"
       }
     ]
   },
@@ -1828,6 +1983,29 @@
                 }
               },
               "name": "min_listing_age"
+            },
+            {
+              "layout": {
+                "enum": {
+                  "dispatchKey": "0x00000000",
+                  "name": "PauseState",
+                  "variants": {
+                    "0": {
+                      "fields": [],
+                      "name": "NotPaused"
+                    },
+                    "1": {
+                      "fields": [],
+                      "name": "TradingPaused"
+                    },
+                    "2": {
+                      "fields": [],
+                      "name": "FullyPaused"
+                    }
+                  }
+                }
+              },
+              "name": "pause_state"
             }
           ],
           "name": "OtcContract"
@@ -2431,6 +2609,11 @@
                 "name": "min_listing_age",
                 "type": 6,
                 "typeName": "<BlockAge as::ink::storage::traits::AutoStorableHint<::ink::\nstorage::traits::ManualKey<308562102u32, ()>,>>::Type"
+              },
+              {
+                "name": "pause_state",
+                "type": 28,
+                "typeName": "<PauseState as::ink::storage::traits::AutoStorableHint<::ink::\nstorage::traits::ManualKey<1282337562u32, ()>,>>::Type"
               }
             ]
           }
@@ -2449,6 +2632,34 @@
           "variant": {
             "variants": [
               {
+                "index": 0,
+                "name": "NotPaused"
+              },
+              {
+                "index": 1,
+                "name": "TradingPaused"
+              },
+              {
+                "index": 2,
+                "name": "FullyPaused"
+              }
+            ]
+          }
+        },
+        "path": [
+          "otc_contract",
+          "types",
+          "PauseState"
+        ]
+      }
+    },
+    {
+      "id": 29,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
                 "fields": [
                   {
                     "type": 14
@@ -2460,7 +2671,7 @@
               {
                 "fields": [
                   {
-                    "type": 29
+                    "type": 30
                   }
                 ],
                 "index": 1,
@@ -2476,7 +2687,7 @@
           },
           {
             "name": "E",
-            "type": 29
+            "type": 30
           }
         ],
         "path": [
@@ -2485,7 +2696,7 @@
       }
     },
     {
-      "id": 29,
+      "id": 30,
       "type": {
         "def": {
           "variant": {
@@ -2504,7 +2715,7 @@
       }
     },
     {
-      "id": 30,
+      "id": 31,
       "type": {
         "def": {
           "variant": {
@@ -2521,7 +2732,7 @@
               {
                 "fields": [
                   {
-                    "type": 29
+                    "type": 30
                   }
                 ],
                 "index": 1,
@@ -2537,49 +2748,7 @@
           },
           {
             "name": "E",
-            "type": 29
-          }
-        ],
-        "path": [
-          "Result"
-        ]
-      }
-    },
-    {
-      "id": 31,
-      "type": {
-        "def": {
-          "variant": {
-            "variants": [
-              {
-                "fields": [
-                  {
-                    "type": 10
-                  }
-                ],
-                "index": 0,
-                "name": "Ok"
-              },
-              {
-                "fields": [
-                  {
-                    "type": 29
-                  }
-                ],
-                "index": 1,
-                "name": "Err"
-              }
-            ]
-          }
-        },
-        "params": [
-          {
-            "name": "T",
-            "type": 10
-          },
-          {
-            "name": "E",
-            "type": 29
+            "type": 30
           }
         ],
         "path": [
@@ -2596,7 +2765,7 @@
               {
                 "fields": [
                   {
-                    "type": 0
+                    "type": 10
                   }
                 ],
                 "index": 0,
@@ -2605,7 +2774,7 @@
               {
                 "fields": [
                   {
-                    "type": 29
+                    "type": 30
                   }
                 ],
                 "index": 1,
@@ -2617,11 +2786,11 @@
         "params": [
           {
             "name": "T",
-            "type": 0
+            "type": 10
           },
           {
             "name": "E",
-            "type": 29
+            "type": 30
           }
         ],
         "path": [
@@ -2638,7 +2807,7 @@
               {
                 "fields": [
                   {
-                    "type": 6
+                    "type": 0
                   }
                 ],
                 "index": 0,
@@ -2647,7 +2816,7 @@
               {
                 "fields": [
                   {
-                    "type": 29
+                    "type": 30
                   }
                 ],
                 "index": 1,
@@ -2659,11 +2828,11 @@
         "params": [
           {
             "name": "T",
-            "type": 6
+            "type": 0
           },
           {
             "name": "E",
-            "type": 29
+            "type": 30
           }
         ],
         "path": [
@@ -2680,7 +2849,7 @@
               {
                 "fields": [
                   {
-                    "type": 35
+                    "type": 6
                   }
                 ],
                 "index": 0,
@@ -2689,7 +2858,7 @@
               {
                 "fields": [
                   {
-                    "type": 29
+                    "type": 30
                   }
                 ],
                 "index": 1,
@@ -2701,11 +2870,11 @@
         "params": [
           {
             "name": "T",
-            "type": 35
+            "type": 6
           },
           {
             "name": "E",
-            "type": 29
+            "type": 30
           }
         ],
         "path": [
@@ -2722,6 +2891,48 @@
               {
                 "fields": [
                   {
+                    "type": 36
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 30
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 36
+          },
+          {
+            "name": "E",
+            "type": 30
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 36,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
                     "type": 14
                   }
                 ],
@@ -2731,7 +2942,7 @@
               {
                 "fields": [
                   {
-                    "type": 36
+                    "type": 37
                   }
                 ],
                 "index": 1,
@@ -2747,7 +2958,7 @@
           },
           {
             "name": "E",
-            "type": 36
+            "type": 37
           }
         ],
         "path": [
@@ -2756,7 +2967,7 @@
       }
     },
     {
-      "id": 36,
+      "id": 37,
       "type": {
         "def": {
           "variant": {
@@ -2840,6 +3051,14 @@
               {
                 "index": 19,
                 "name": "CodeUpgradeFailed"
+              },
+              {
+                "index": 20,
+                "name": "ContractFullyPaused"
+              },
+              {
+                "index": 21,
+                "name": "TradingPaused"
               }
             ]
           }
@@ -2852,48 +3071,6 @@
       }
     },
     {
-      "id": 37,
-      "type": {
-        "def": {
-          "variant": {
-            "variants": [
-              {
-                "fields": [
-                  {
-                    "type": 38
-                  }
-                ],
-                "index": 0,
-                "name": "Ok"
-              },
-              {
-                "fields": [
-                  {
-                    "type": 29
-                  }
-                ],
-                "index": 1,
-                "name": "Err"
-              }
-            ]
-          }
-        },
-        "params": [
-          {
-            "name": "T",
-            "type": 38
-          },
-          {
-            "name": "E",
-            "type": 29
-          }
-        ],
-        "path": [
-          "Result"
-        ]
-      }
-    },
-    {
       "id": 38,
       "type": {
         "def": {
@@ -2902,7 +3079,7 @@
               {
                 "fields": [
                   {
-                    "type": 0
+                    "type": 39
                   }
                 ],
                 "index": 0,
@@ -2911,7 +3088,7 @@
               {
                 "fields": [
                   {
-                    "type": 36
+                    "type": 30
                   }
                 ],
                 "index": 1,
@@ -2923,11 +3100,11 @@
         "params": [
           {
             "name": "T",
-            "type": 0
+            "type": 39
           },
           {
             "name": "E",
-            "type": 36
+            "type": 30
           }
         ],
         "path": [
@@ -2944,7 +3121,7 @@
               {
                 "fields": [
                   {
-                    "type": 40
+                    "type": 0
                   }
                 ],
                 "index": 0,
@@ -2953,7 +3130,7 @@
               {
                 "fields": [
                   {
-                    "type": 29
+                    "type": 37
                   }
                 ],
                 "index": 1,
@@ -2965,11 +3142,11 @@
         "params": [
           {
             "name": "T",
-            "type": 40
+            "type": 0
           },
           {
             "name": "E",
-            "type": 29
+            "type": 37
           }
         ],
         "path": [
@@ -2979,6 +3156,48 @@
     },
     {
       "id": 40,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 41
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 30
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 41
+          },
+          {
+            "name": "E",
+            "type": 30
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 41,
       "type": {
         "def": {
           "variant": {
@@ -3011,7 +3230,7 @@
       }
     },
     {
-      "id": 41,
+      "id": 42,
       "type": {
         "def": {
           "variant": {
@@ -3028,7 +3247,7 @@
               {
                 "fields": [
                   {
-                    "type": 29
+                    "type": 30
                   }
                 ],
                 "index": 1,
@@ -3044,7 +3263,7 @@
           },
           {
             "name": "E",
-            "type": 29
+            "type": 30
           }
         ],
         "path": [
@@ -3053,7 +3272,7 @@
       }
     },
     {
-      "id": 42,
+      "id": 43,
       "type": {
         "def": {
           "variant": {
@@ -3061,7 +3280,7 @@
               {
                 "fields": [
                   {
-                    "type": 43
+                    "type": 44
                   }
                 ],
                 "index": 0,
@@ -3070,7 +3289,7 @@
               {
                 "fields": [
                   {
-                    "type": 29
+                    "type": 30
                   }
                 ],
                 "index": 1,
@@ -3082,11 +3301,11 @@
         "params": [
           {
             "name": "T",
-            "type": 43
+            "type": 44
           },
           {
             "name": "E",
-            "type": 29
+            "type": 30
           }
         ],
         "path": [
@@ -3095,7 +3314,7 @@
       }
     },
     {
-      "id": 43,
+      "id": 44,
       "type": {
         "def": {
           "variant": {
@@ -3128,7 +3347,7 @@
       }
     },
     {
-      "id": 44,
+      "id": 45,
       "type": {
         "def": {
           "composite": {
@@ -3148,7 +3367,59 @@
       }
     },
     {
-      "id": 45,
+      "id": 46,
+      "type": {
+        "def": {
+          "sequence": {
+            "type": 4
+          }
+        }
+      }
+    },
+    {
+      "id": 47,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 28
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 30
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 28
+          },
+          {
+            "name": "E",
+            "type": 30
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 48,
       "type": {
         "def": {
           "variant": {
@@ -3181,7 +3452,7 @@
       }
     },
     {
-      "id": 46,
+      "id": 49,
       "type": {
         "def": {
           "variant": {}
