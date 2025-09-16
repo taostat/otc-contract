@@ -27,8 +27,8 @@ mod otc_contract {
     use crate::runtime::{AlphaCurrency, ProxyCall, RuntimeCall, SubtensorCall};
     use crate::types::{
         AlphaAmount, AlphaListing, AlphaListingId, AlphaListingsMapping, BlockAge, FixedDecimal,
-        NetUid, PauseState, TaoAmount, TaoOffer, TaoOfferId, TaoOffersMapping, UserListingsMapping,
-        UserOffersMapping,
+        NetUid, PauseState, ReservedAlphaMapping, TaoAmount, TaoOffer, TaoOfferId,
+        TaoOffersMapping, UserListingsMapping, UserOffersMapping,
     };
     use ink::prelude::{boxed::Box, vec::Vec};
     use sp_runtime::MultiAddress;
@@ -50,6 +50,9 @@ mod otc_contract {
 
         /// User's offer IDs for iteration: (buyer, netuid) -> Vec<offer_id>
         user_offers: UserOffersMapping,
+
+        /// Alpha currently reserved for open listings per subnet
+        reserved_alpha: ReservedAlphaMapping,
 
         /// Global listing counter
         next_alpha_listing_id: AlphaListingId,
@@ -96,6 +99,7 @@ mod otc_contract {
                 user_listings: Default::default(),
                 tao_offers: Default::default(),
                 user_offers: Default::default(),
+                reserved_alpha: Default::default(),
                 next_alpha_listing_id: 1,
                 next_tao_offer_id: 1,
                 owner,
@@ -127,6 +131,60 @@ mod otc_contract {
                 Ok(None) => Ok(0),
                 Err(_) => Err(Error::StakeQueryFailed),
             }
+        }
+
+        fn reserved_alpha_for(&self, netuid: NetUid) -> AlphaAmount {
+            self.reserved_alpha.get(netuid).unwrap_or(0)
+        }
+
+        fn increase_reserved_alpha(
+            &mut self,
+            netuid: NetUid,
+            amount: AlphaAmount,
+        ) -> Result<(), Error> {
+            if amount == 0 {
+                return Ok(());
+            }
+
+            let current = self.reserved_alpha_for(netuid);
+            let new_total = current.checked_add(amount).ok_or(Error::Overflow)?;
+            self.reserved_alpha.insert(netuid, &new_total);
+            Ok(())
+        }
+
+        fn decrease_reserved_alpha(
+            &mut self,
+            netuid: NetUid,
+            amount: AlphaAmount,
+        ) -> Result<(), Error> {
+            if amount == 0 {
+                return Ok(());
+            }
+
+            let current = self.reserved_alpha_for(netuid);
+            let new_total = current.checked_sub(amount).ok_or(Error::Overflow)?;
+
+            if new_total == 0 {
+                self.reserved_alpha.remove(netuid);
+            } else {
+                self.reserved_alpha.insert(netuid, &new_total);
+            }
+
+            Ok(())
+        }
+
+        fn calculate_claimable_dividends(
+            &self,
+            netuid: NetUid,
+            contract_stake: AlphaAmount,
+        ) -> Result<AlphaAmount, Error> {
+            let reserved = self.reserved_alpha_for(netuid);
+
+            if contract_stake <= reserved {
+                return Err(Error::NoDividendsAvailable);
+            }
+
+            Ok(contract_stake - reserved)
         }
 
         /// Get the contract owner
@@ -163,6 +221,12 @@ mod otc_contract {
         #[ink(message)]
         pub fn get_min_listing_age(&self) -> BlockAge {
             self.min_listing_age
+        }
+
+        /// Get Alpha currently reserved for listings on a subnet
+        #[ink(message)]
+        pub fn get_reserved_alpha(&self, netuid: NetUid) -> AlphaAmount {
+            self.reserved_alpha_for(netuid)
         }
 
         /// Update the contract owner
@@ -337,6 +401,8 @@ mod otc_contract {
                 return Err(Error::StakeTransferNotVerified);
             }
 
+            self.increase_reserved_alpha(netuid, contract_increase)?;
+
             // Consolidate stake if needed (move to contract's hotkey)
             if hotkey != self.hotkey {
                 let move_call = RuntimeCall::SubtensorModule(SubtensorCall::MoveStake {
@@ -400,6 +466,9 @@ mod otc_contract {
                 .get((netuid, seller, listing_id))
                 .ok_or(Error::ListingNotFound)?;
 
+            let contract_stake_before =
+                self.get_stake_amount(self.env().account_id(), self.hotkey, netuid)?;
+
             let current_block = self.env().block_number();
             let listing_age = current_block.saturating_sub(listing.created_at);
 
@@ -430,6 +499,17 @@ mod otc_contract {
             self.env()
                 .call_runtime(&transfer_call)
                 .map_err(|_| Error::RuntimeCallFailed)?;
+
+            let contract_stake_after =
+                self.get_stake_amount(self.env().account_id(), self.hotkey, netuid)?;
+            let contract_decrease = contract_stake_before.saturating_sub(contract_stake_after);
+            let contract_decrease_ok = contract_decrease
+                >= listing.amount.saturating_sub(TRANSFER_TOLERANCE)
+                && contract_decrease <= listing.amount;
+
+            if contract_decrease_ok {
+                self.decrease_reserved_alpha(netuid, contract_decrease)?;
+            }
 
             self.env().emit_event(AlphaListingCancelled {
                 seller,
@@ -590,6 +670,9 @@ mod otc_contract {
                 .get((netuid, seller, listing_id))
                 .ok_or(Error::ListingNotFound)?;
 
+            let contract_stake_before =
+                self.get_stake_amount(self.env().account_id(), self.hotkey, netuid)?;
+
             let tao_amount = listing
                 .price
                 .mul(listing.amount)
@@ -630,6 +713,17 @@ mod otc_contract {
                 .call_runtime(&transfer_call)
                 .map_err(|_| Error::RuntimeCallFailed)?;
 
+            let contract_stake_after =
+                self.get_stake_amount(self.env().account_id(), self.hotkey, netuid)?;
+            let contract_decrease = contract_stake_before.saturating_sub(contract_stake_after);
+            let contract_decrease_ok = contract_decrease
+                >= listing.amount.saturating_sub(TRANSFER_TOLERANCE)
+                && contract_decrease <= listing.amount;
+
+            if contract_decrease_ok {
+                self.decrease_reserved_alpha(netuid, contract_decrease)?;
+            }
+
             // Transfer TAO to seller (minus fee)
             self.env()
                 .transfer(listing.seller, tao_amount)
@@ -650,6 +744,52 @@ mod otc_contract {
                 price: listing.price,
                 fee: fee_amount,
                 alpha_listing_id: Some(listing_id),
+            });
+
+            Ok(())
+        }
+
+        /// Claim staking rewards accumulated by the contract for a subnet
+        /// Only callable by the contract owner while the contract is not fully paused
+        #[ink(message)]
+        pub fn claim_dividends(&mut self, netuid: NetUid) -> Result<(), Error> {
+            self.ensure_owner()?;
+            self.ensure_not_fully_paused()?;
+
+            let contract_coldkey = self.env().account_id();
+            let contract_stake_before =
+                self.get_stake_amount(contract_coldkey, self.hotkey, netuid)?;
+
+            let claimable = self.calculate_claimable_dividends(netuid, contract_stake_before)?;
+
+            let transfer_call = RuntimeCall::SubtensorModule(SubtensorCall::TransferStake {
+                destination_coldkey: self.owner,
+                hotkey: self.hotkey,
+                origin_netuid: crate::runtime::NetUid::from(netuid),
+                destination_netuid: crate::runtime::NetUid::from(netuid),
+                alpha_amount: AlphaCurrency::from(claimable),
+            });
+
+            self.env()
+                .call_runtime(&transfer_call)
+                .map_err(|_| Error::RuntimeCallFailed)?;
+
+            let contract_stake_after =
+                self.get_stake_amount(contract_coldkey, self.hotkey, netuid)?;
+            let contract_decrease = contract_stake_before.saturating_sub(contract_stake_after);
+
+            let decrease_ok = contract_decrease >= claimable.saturating_sub(TRANSFER_TOLERANCE)
+                && contract_decrease <= claimable;
+
+            if !decrease_ok {
+                return Err(Error::StakeTransferNotVerified);
+            }
+
+            self.env().emit_event(DividendsClaimed {
+                owner: self.owner,
+                netuid,
+                amount: contract_decrease,
+                reserved_after: self.reserved_alpha_for(netuid),
             });
 
             Ok(())
@@ -870,7 +1010,42 @@ mod otc_contract {
     #[cfg(test)]
     mod tests {
         use super::*;
+        use crate::chain_extension::StakeInfo;
         use fixed::types::U64F64;
+        use ink::scale::{Decode, Encode};
+
+        const SUBTENSOR_EXTENSION_ID: u16 = 0;
+        const GET_STAKE_INFO_FN_ID: u16 = 1001;
+        type TestAccountId = <Environment as ink::env::Environment>::AccountId;
+
+        #[derive(Clone, Copy)]
+        struct MockStakeExtension;
+
+        impl ink::env::test::ChainExtension for MockStakeExtension {
+            fn ext_id(&self) -> u16 {
+                SUBTENSOR_EXTENSION_ID
+            }
+
+            fn call(&mut self, func_id: u16, input: &[u8], output: &mut Vec<u8>) -> u32 {
+                if func_id != GET_STAKE_INFO_FN_ID {
+                    return 1;
+                }
+
+                let mut input = input;
+                let hotkey = TestAccountId::decode(&mut input).expect("mock decode hotkey");
+                let coldkey = TestAccountId::decode(&mut input).expect("mock decode coldkey");
+                let netuid = u16::decode(&mut input).expect("mock decode netuid");
+
+                let _ = (hotkey, coldkey, netuid);
+
+                output.extend(Encode::encode(&Option::<StakeInfo>::None));
+                0
+            }
+        }
+
+        fn register_mock_stake_extension() {
+            ink::env::test::register_chain_extension(MockStakeExtension);
+        }
 
         /// Helper function to create fee rate bits from percentage
         fn fee_rate_from_percentage(percentage: f64) -> u128 {
@@ -1413,6 +1588,8 @@ mod otc_contract {
             let accounts = ink::env::test::default_accounts::<Environment>();
             let fee_rate = fee_rate_from_percentage(0.5);
 
+            register_mock_stake_extension();
+
             let mut contract = OtcContract::new(
                 accounts.alice,
                 accounts.bob,
@@ -1434,6 +1611,8 @@ mod otc_contract {
         fn cancel_alpha_listing_fails_when_too_young() {
             let accounts = ink::env::test::default_accounts::<Environment>();
             let fee_rate = fee_rate_from_percentage(0.5);
+
+            register_mock_stake_extension();
 
             let mut contract = OtcContract::new(
                 accounts.alice,
@@ -1926,6 +2105,8 @@ mod otc_contract {
             let accounts = ink::env::test::default_accounts::<Environment>();
             let fee_rate = fee_rate_from_percentage(1.0);
 
+            register_mock_stake_extension();
+
             let mut contract = OtcContract::new(
                 accounts.alice,
                 accounts.bob,
@@ -1967,6 +2148,8 @@ mod otc_contract {
         fn take_alpha_listing_fails_when_not_found() {
             let accounts = ink::env::test::default_accounts::<Environment>();
             let fee_rate = fee_rate_from_percentage(1.0);
+
+            register_mock_stake_extension();
 
             let mut contract = OtcContract::new(
                 accounts.alice,
@@ -2057,6 +2240,89 @@ mod otc_contract {
             assert_eq!(fee_0_5_percent.mul(amount), Ok(50_000_000)); // 0.05 TAO
             assert_eq!(fee_1_percent.mul(amount), Ok(100_000_000)); // 0.1 TAO
             assert_eq!(fee_2_5_percent.mul(amount), Ok(250_000_000)); // 0.25 TAO
+        }
+
+        #[ink::test]
+        fn reserved_alpha_tracking_updates() {
+            let accounts = ink::env::test::default_accounts::<Environment>();
+            let fee_rate = fee_rate_from_percentage(0.5);
+
+            let mut contract = OtcContract::new(
+                accounts.alice,
+                accounts.bob,
+                fee_rate,
+                1_000_000_000,
+                1_000_000_000,
+                100,
+            );
+
+            assert_eq!(contract.get_reserved_alpha(1), 0);
+
+            contract.increase_reserved_alpha(1, 50).unwrap();
+            assert_eq!(contract.get_reserved_alpha(1), 50);
+
+            contract.increase_reserved_alpha(1, 25).unwrap();
+            assert_eq!(contract.get_reserved_alpha(1), 75);
+
+            contract.decrease_reserved_alpha(1, 25).unwrap();
+            assert_eq!(contract.get_reserved_alpha(1), 50);
+
+            contract.decrease_reserved_alpha(1, 50).unwrap();
+            assert_eq!(contract.get_reserved_alpha(1), 0);
+        }
+
+        #[ink::test]
+        fn calculate_claimable_dividends_behaviour() {
+            let accounts = ink::env::test::default_accounts::<Environment>();
+            let fee_rate = fee_rate_from_percentage(0.5);
+
+            let mut contract = OtcContract::new(
+                accounts.alice,
+                accounts.bob,
+                fee_rate,
+                1_000_000_000,
+                1_000_000_000,
+                100,
+            );
+
+            // No reserved stake means zero dividends available
+            assert_eq!(
+                contract.calculate_claimable_dividends(1, 0),
+                Err(Error::NoDividendsAvailable)
+            );
+
+            contract.increase_reserved_alpha(1, 100).unwrap();
+
+            // Contract stake equal to reserved -> still nothing to claim
+            assert_eq!(
+                contract.calculate_claimable_dividends(1, 100),
+                Err(Error::NoDividendsAvailable)
+            );
+
+            // Excess stake becomes claimable dividends
+            assert_eq!(contract.calculate_claimable_dividends(1, 175), Ok(75));
+        }
+
+        #[ink::test]
+        fn decrease_reserved_alpha_prevents_underflow() {
+            let accounts = ink::env::test::default_accounts::<Environment>();
+            let fee_rate = fee_rate_from_percentage(0.5);
+
+            let mut contract = OtcContract::new(
+                accounts.alice,
+                accounts.bob,
+                fee_rate,
+                1_000_000_000,
+                1_000_000_000,
+                100,
+            );
+
+            contract.increase_reserved_alpha(1, 25).unwrap();
+            let result = contract.decrease_reserved_alpha(1, 50);
+            assert_eq!(result, Err(Error::Overflow));
+
+            // ensure original value unchanged after failed attempt
+            assert_eq!(contract.get_reserved_alpha(1), 25);
         }
 
         #[ink::test]
@@ -2435,6 +2701,8 @@ mod otc_contract {
         fn test_take_listing_exact_payment_required() {
             let accounts = ink::env::test::default_accounts::<Environment>();
             let fee_rate = fee_rate_from_percentage(1.0);
+
+            register_mock_stake_extension();
 
             let mut contract = OtcContract::new(
                 accounts.alice,

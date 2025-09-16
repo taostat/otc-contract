@@ -126,3 +126,13 @@ pub struct ContractPaused {
 pub struct ContractResumed {
     pub resumed_by: AccountId,
 }
+
+#[ink::event]
+pub struct DividendsClaimed {
+    #[ink(topic)]
+    pub owner: AccountId,
+    #[ink(topic)]
+    pub netuid: NetUid,
+    pub amount: AlphaAmount,
+    pub reserved_after: AlphaAmount,
+}
