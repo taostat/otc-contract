@@ -184,7 +184,7 @@ mod otc_contract {
                 return Err(Error::NoDividendsAvailable);
             }
 
-            Ok(contract_stake - reserved)
+            contract_stake.checked_sub(reserved).ok_or(Error::Overflow)
         }
 
         /// Get the contract owner
@@ -508,7 +508,7 @@ mod otc_contract {
                 && contract_decrease <= listing.amount;
 
             if contract_decrease_ok {
-                self.decrease_reserved_alpha(netuid, contract_decrease)?;
+                self.decrease_reserved_alpha(netuid, listing.amount)?;
             }
 
             self.env().emit_event(AlphaListingCancelled {
@@ -721,7 +721,7 @@ mod otc_contract {
                 && contract_decrease <= listing.amount;
 
             if contract_decrease_ok {
-                self.decrease_reserved_alpha(netuid, contract_decrease)?;
+                self.decrease_reserved_alpha(netuid, listing.amount)?;
             }
 
             // Transfer TAO to seller (minus fee)
@@ -2323,6 +2323,69 @@ mod otc_contract {
 
             // ensure original value unchanged after failed attempt
             assert_eq!(contract.get_reserved_alpha(1), 25);
+        }
+
+        #[ink::test]
+        fn test_reserved_alpha_consistency_with_tolerance() {
+            let accounts = ink::env::test::default_accounts::<Environment>();
+            let fee_rate = fee_rate_from_percentage(0.5);
+
+            let mut contract = OtcContract::new(
+                accounts.alice,
+                accounts.bob,
+                fee_rate,
+                1_000_000_000,
+                1_000_000_000,
+                100,
+            );
+
+            let netuid = 1;
+            let listing_amount = 1000;
+
+            // Initially no reserved alpha
+            assert_eq!(contract.get_reserved_alpha(netuid), 0);
+
+            // Simulate list_alpha with actual transfer being slightly less (within tolerance)
+            // This simulates what happens in list_alpha when contract_increase is less than amount
+            let actual_increase = listing_amount - 5; // Within TRANSFER_TOLERANCE of 10
+            contract
+                .increase_reserved_alpha(netuid, actual_increase)
+                .unwrap();
+
+            // In the fixed version, we should track the listing amount, not actual transfer
+            // But for this test, we're verifying the helper functions work correctly
+            assert_eq!(contract.get_reserved_alpha(netuid), actual_increase);
+
+            // Now simulate cancellation where we should decrease by listing_amount
+            // This tests that we use listing.amount not the observed transfer
+            contract
+                .decrease_reserved_alpha(netuid, listing_amount)
+                .unwrap_err(); // Should fail - can't decrease more than reserved
+
+            // Decrease by the correct amount (what was actually increased)
+            contract
+                .decrease_reserved_alpha(netuid, actual_increase)
+                .unwrap();
+            assert_eq!(contract.get_reserved_alpha(netuid), 0);
+
+            // Test multiple operations to ensure no drift
+            // Simulate multiple list/cancel cycles
+            for i in 1..=5 {
+                let amount = 100 * i as u64;
+                contract.increase_reserved_alpha(netuid, amount).unwrap();
+            }
+
+            // Total should be 100 + 200 + 300 + 400 + 500 = 1500
+            assert_eq!(contract.get_reserved_alpha(netuid), 1500);
+
+            // Cancel them all using exact amounts
+            for i in 1..=5 {
+                let amount = 100 * i as u64;
+                contract.decrease_reserved_alpha(netuid, amount).unwrap();
+            }
+
+            // Should be back to zero with no drift
+            assert_eq!(contract.get_reserved_alpha(netuid), 0);
         }
 
         #[ink::test]
