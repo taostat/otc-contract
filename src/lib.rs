@@ -37,6 +37,12 @@ mod otc_contract {
     /// Accounts for potential rounding or micro-fees in Subtensor pallet
     const TRANSFER_TOLERANCE: u64 = 10;
 
+    /// Maximum number of active listings a user can maintain per subnet
+    const MAX_LISTINGS_PER_USER_PER_NETUID: usize = 25;
+
+    /// Maximum number of active offers a user can maintain per subnet
+    const MAX_OFFERS_PER_USER_PER_NETUID: usize = 25;
+
     #[ink(storage)]
     pub struct OtcContract {
         /// Listings: (netuid, seller, listing_id) -> AlphaListing
@@ -352,6 +358,11 @@ mod otc_contract {
                 return Err(Error::InvalidPrice);
             }
 
+            let mut user_listings = self.user_listings.get((seller, netuid)).unwrap_or_default();
+            if user_listings.len() >= MAX_LISTINGS_PER_USER_PER_NETUID {
+                return Err(Error::TooManyListings);
+            }
+
             let listing_id = self.next_alpha_listing_id;
             let next_id = listing_id.checked_add(1).ok_or(Error::Overflow)?;
 
@@ -433,7 +444,6 @@ mod otc_contract {
             self.alpha_listings
                 .insert((netuid, seller, listing_id), &listing);
 
-            let mut user_listings = self.user_listings.get((seller, netuid)).unwrap_or_default();
             user_listings.push(listing_id);
             self.user_listings.insert((seller, netuid), &user_listings);
 
@@ -560,6 +570,11 @@ mod otc_contract {
                 return Err(Error::InvalidPrice);
             }
 
+            let mut user_offers = self.user_offers.get((buyer, netuid)).unwrap_or_default();
+            if user_offers.len() >= MAX_OFFERS_PER_USER_PER_NETUID {
+                return Err(Error::TooManyOffers);
+            }
+
             let offer_id = self.next_tao_offer_id;
             self.next_tao_offer_id = offer_id.checked_add(1).ok_or(Error::Overflow)?;
 
@@ -575,7 +590,6 @@ mod otc_contract {
 
             self.tao_offers.insert((netuid, buyer, offer_id), &offer);
 
-            let mut user_offers = self.user_offers.get((buyer, netuid)).unwrap_or_default();
             user_offers.push(offer_id);
             self.user_offers.insert((buyer, netuid), &user_offers);
 
@@ -1011,6 +1025,7 @@ mod otc_contract {
     mod tests {
         use super::*;
         use crate::chain_extension::StakeInfo;
+        use core::convert::TryFrom;
         use fixed::types::U64F64;
         use ink::scale::{Decode, Encode};
 
@@ -1546,6 +1561,37 @@ mod otc_contract {
         }
 
         #[ink::test]
+        fn list_alpha_fails_when_user_reaches_listing_cap() {
+            let accounts = ink::env::test::default_accounts::<Environment>();
+            let fee_rate = fee_rate_from_percentage(0.5);
+
+            let mut contract = OtcContract::new(
+                accounts.alice,
+                accounts.bob,
+                fee_rate,
+                1_000_000_000,
+                1_000_000_000,
+                100,
+            );
+
+            let netuid = 1u16;
+            let existing_ids: Vec<AlphaListingId> = (0..MAX_LISTINGS_PER_USER_PER_NETUID)
+                .map(|i| u64::try_from(i + 1).expect("id fits in u64"))
+                .collect();
+            contract
+                .user_listings
+                .insert((accounts.charlie, netuid), &existing_ids);
+
+            ink::env::test::set_caller::<Environment>(accounts.charlie);
+
+            let price = U64F64::from_num(2u64).to_bits();
+            let amount = contract.get_min_listing_amount();
+
+            let result = contract.list_alpha(accounts.django, netuid, amount, price);
+            assert_eq!(result, Err(Error::TooManyListings));
+        }
+
+        #[ink::test]
         fn get_listing_works() {
             let accounts = ink::env::test::default_accounts::<Environment>();
             let fee_rate = fee_rate_from_percentage(0.5);
@@ -1844,6 +1890,39 @@ mod otc_contract {
             // Should fail due to zero price
             let result = contract.create_tao_offer(netuid, price);
             assert_eq!(result, Err(Error::InvalidPrice));
+        }
+
+        #[ink::test]
+        fn create_tao_offer_fails_when_user_reaches_offer_cap() {
+            let accounts = ink::env::test::default_accounts::<Environment>();
+            let fee_rate = fee_rate_from_percentage(0.5);
+
+            let mut contract = OtcContract::new(
+                accounts.alice,
+                accounts.bob,
+                fee_rate,
+                1_000_000_000,
+                1_000_000_000,
+                100,
+            );
+
+            let netuid = 1u16;
+            let existing_ids: Vec<TaoOfferId> = (0..MAX_OFFERS_PER_USER_PER_NETUID)
+                .map(|i| u64::try_from(i + 1).expect("id fits in u64"))
+                .collect();
+            contract
+                .user_offers
+                .insert((accounts.charlie, netuid), &existing_ids);
+
+            ink::env::test::set_caller::<Environment>(accounts.charlie);
+            ink::env::test::set_value_transferred::<ink::env::DefaultEnvironment>(
+                contract.get_min_offer_amount().into(),
+            );
+
+            let price = U64F64::from_num(2u64).to_bits();
+
+            let result = contract.create_tao_offer(netuid, price);
+            assert_eq!(result, Err(Error::TooManyOffers));
         }
 
         #[ink::test]
