@@ -47,4 +47,8 @@ pub enum Error {
     ContractFullyPaused,
     /// Trading is paused
     TradingPaused,
+    /// Maximum active listings reached
+    TooManyListings,
+    /// Maximum active offers reached
+    TooManyOffers,
 }
