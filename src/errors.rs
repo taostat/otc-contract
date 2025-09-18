@@ -51,4 +51,6 @@ pub enum Error {
     TooManyListings,
     /// Maximum active offers reached
     TooManyOffers,
+    /// Listings are frozen for the subnet
+    SubnetListingsFrozen,
 }

@@ -39,6 +39,18 @@ pub struct AlphaListingCancelled {
 }
 
 #[ink::event]
+pub struct AlphaListingForceCancelled {
+    #[ink(topic)]
+    pub seller: AccountId,
+    #[ink(topic)]
+    pub initiated_by: AccountId,
+    #[ink(topic)]
+    pub netuid: NetUid,
+    pub listing_id: AlphaListingId,
+    pub amount_returned: AlphaAmount,
+}
+
+#[ink::event]
 pub struct TaoOfferCancelled {
     #[ink(topic)]
     pub buyer: AccountId,
@@ -135,4 +147,13 @@ pub struct DividendsClaimed {
     pub netuid: NetUid,
     pub amount: AlphaAmount,
     pub reserved_after: AlphaAmount,
+}
+
+#[ink::event]
+pub struct SubnetListingStatusChanged {
+    #[ink(topic)]
+    pub netuid: NetUid,
+    pub frozen: bool,
+    pub reason: Vec<u8>,
+    pub changed_by: AccountId,
 }

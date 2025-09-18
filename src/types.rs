@@ -35,6 +35,7 @@ pub type UserListingsMapping = Mapping<(AccountId, NetUid), Vec<AlphaListingId>>
 pub type TaoOffersMapping = Mapping<(NetUid, AccountId, TaoOfferId), TaoOffer>;
 pub type UserOffersMapping = Mapping<(AccountId, NetUid), Vec<TaoOfferId>>;
 pub type ReservedAlphaMapping = Mapping<NetUid, AlphaAmount>;
+pub type FrozenSubnetsMapping = Mapping<NetUid, bool>;
 
 /// Fixed-point decimal representation with 64 bits integer, 64 bits fraction
 /// Used for prices (TAO per Alpha ratios) and rates (fee percentages)

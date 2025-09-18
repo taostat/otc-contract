@@ -27,8 +27,8 @@ mod otc_contract {
     use crate::runtime::{AlphaCurrency, ProxyCall, RuntimeCall, SubtensorCall};
     use crate::types::{
         AlphaAmount, AlphaListing, AlphaListingId, AlphaListingsMapping, BlockAge, FixedDecimal,
-        NetUid, PauseState, ReservedAlphaMapping, TaoAmount, TaoOffer, TaoOfferId,
-        TaoOffersMapping, UserListingsMapping, UserOffersMapping,
+        FrozenSubnetsMapping, NetUid, PauseState, ReservedAlphaMapping, TaoAmount, TaoOffer,
+        TaoOfferId, TaoOffersMapping, UserListingsMapping, UserOffersMapping,
     };
     use ink::prelude::{boxed::Box, vec::Vec};
     use sp_runtime::MultiAddress;
@@ -59,6 +59,9 @@ mod otc_contract {
 
         /// Alpha currently reserved for open listings per subnet
         reserved_alpha: ReservedAlphaMapping,
+
+        /// Subnets that are currently frozen for new listings
+        frozen_subnets: FrozenSubnetsMapping,
 
         /// Global listing counter
         next_alpha_listing_id: AlphaListingId,
@@ -106,6 +109,7 @@ mod otc_contract {
                 tao_offers: Default::default(),
                 user_offers: Default::default(),
                 reserved_alpha: Default::default(),
+                frozen_subnets: Default::default(),
                 next_alpha_listing_id: 1,
                 next_tao_offer_id: 1,
                 owner,
@@ -179,6 +183,17 @@ mod otc_contract {
             Ok(())
         }
 
+        fn is_subnet_frozen_internal(&self, netuid: NetUid) -> bool {
+            self.frozen_subnets.get(netuid).unwrap_or(false)
+        }
+
+        fn ensure_subnet_not_frozen(&self, netuid: NetUid) -> Result<(), Error> {
+            if self.is_subnet_frozen_internal(netuid) {
+                return Err(Error::SubnetListingsFrozen);
+            }
+            Ok(())
+        }
+
         fn calculate_claimable_dividends(
             &self,
             netuid: NetUid,
@@ -233,6 +248,12 @@ mod otc_contract {
         #[ink(message)]
         pub fn get_reserved_alpha(&self, netuid: NetUid) -> AlphaAmount {
             self.reserved_alpha_for(netuid)
+        }
+
+        /// Check if listings are frozen for a subnet
+        #[ink(message)]
+        pub fn is_subnet_frozen(&self, netuid: NetUid) -> bool {
+            self.is_subnet_frozen_internal(netuid)
         }
 
         /// Update the contract owner
@@ -333,6 +354,33 @@ mod otc_contract {
             Ok(())
         }
 
+        /// Update subnet listing status (freeze/unfreeze)
+        /// Can only be called by the contract owner
+        #[ink(message)]
+        pub fn set_subnet_listing_status(
+            &mut self,
+            netuid: NetUid,
+            frozen: bool,
+            reason: Vec<u8>,
+        ) -> Result<(), Error> {
+            self.ensure_owner()?;
+
+            if frozen {
+                self.frozen_subnets.insert(netuid, &true);
+            } else {
+                self.frozen_subnets.remove(netuid);
+            }
+
+            self.env().emit_event(SubnetListingStatusChanged {
+                netuid,
+                frozen,
+                reason,
+                changed_by: self.env().caller(),
+            });
+
+            Ok(())
+        }
+
         /// List Alpha tokens for sale
         /// Prerequisites: The seller must have added the contract as their proxy
         /// This will transfer the stake from the seller to the contract via proxy
@@ -346,6 +394,7 @@ mod otc_contract {
             price: u128, // Price as FixedDecimal bits (TAO per Alpha)
         ) -> Result<AlphaListingId, Error> {
             self.ensure_trading_enabled()?;
+            self.ensure_subnet_not_frozen(netuid)?;
 
             let seller = self.env().caller();
             let price = FixedDecimal::from_bits(price);
@@ -412,7 +461,7 @@ mod otc_contract {
                 return Err(Error::StakeTransferNotVerified);
             }
 
-            self.increase_reserved_alpha(netuid, contract_increase)?;
+            self.increase_reserved_alpha(netuid, amount)?;
 
             // Consolidate stake if needed (move to contract's hotkey)
             if hotkey != self.hotkey {
@@ -471,64 +520,38 @@ mod otc_contract {
 
             let seller = self.env().caller();
 
+            let current_block = self.env().block_number();
             let listing = self
                 .alpha_listings
                 .get((netuid, seller, listing_id))
                 .ok_or(Error::ListingNotFound)?;
-
-            let contract_stake_before =
-                self.get_stake_amount(self.env().account_id(), self.hotkey, netuid)?;
-
-            let current_block = self.env().block_number();
             let listing_age = current_block.saturating_sub(listing.created_at);
 
             if listing_age < self.min_listing_age {
                 return Err(Error::ListingTooYoung);
             }
 
-            self.alpha_listings.remove((netuid, seller, listing_id));
+            self.execute_listing_cancellation(listing, seller, false)
+        }
 
-            let mut user_listings = self.user_listings.get((seller, netuid)).unwrap_or_default();
-            user_listings.retain(|&id| id != listing_id);
+        /// Force-cancel an Alpha listing as the contract owner
+        #[ink(message)]
+        pub fn force_cancel_alpha_listing(
+            &mut self,
+            netuid: NetUid,
+            seller: AccountId,
+            listing_id: AlphaListingId,
+        ) -> Result<(), Error> {
+            self.ensure_owner()?;
 
-            if user_listings.is_empty() {
-                self.user_listings.remove((seller, netuid));
-            } else {
-                self.user_listings.insert((seller, netuid), &user_listings);
-            }
+            let listing = self
+                .alpha_listings
+                .get((netuid, seller, listing_id))
+                .ok_or(Error::ListingNotFound)?;
 
-            // Return stake from contract to seller
-            let transfer_call = RuntimeCall::SubtensorModule(SubtensorCall::TransferStake {
-                destination_coldkey: seller,
-                hotkey: self.hotkey,
-                origin_netuid: crate::runtime::NetUid::from(netuid),
-                destination_netuid: crate::runtime::NetUid::from(netuid),
-                alpha_amount: AlphaCurrency::from(listing.amount),
-            });
+            let initiator = self.env().caller();
 
-            self.env()
-                .call_runtime(&transfer_call)
-                .map_err(|_| Error::RuntimeCallFailed)?;
-
-            let contract_stake_after =
-                self.get_stake_amount(self.env().account_id(), self.hotkey, netuid)?;
-            let contract_decrease = contract_stake_before.saturating_sub(contract_stake_after);
-            let contract_decrease_ok = contract_decrease
-                >= listing.amount.saturating_sub(TRANSFER_TOLERANCE)
-                && contract_decrease <= listing.amount;
-
-            if contract_decrease_ok {
-                self.decrease_reserved_alpha(netuid, listing.amount)?;
-            }
-
-            self.env().emit_event(AlphaListingCancelled {
-                seller,
-                netuid,
-                listing_id,
-                amount_returned: listing.amount,
-            });
-
-            Ok(())
+            self.execute_listing_cancellation(listing, initiator, true)
         }
 
         /// Get a specific Alpha listing
@@ -993,6 +1016,74 @@ mod otc_contract {
         #[ink(message)]
         pub fn get_pause_state(&self) -> PauseState {
             self.pause_state
+        }
+
+        fn execute_listing_cancellation(
+            &mut self,
+            listing: AlphaListing,
+            initiated_by: AccountId,
+            forced: bool,
+        ) -> Result<(), Error> {
+            let contract_coldkey = self.env().account_id();
+            let netuid = listing.netuid;
+            let seller = listing.seller;
+            let listing_id = listing.id;
+
+            let contract_stake_before =
+                self.get_stake_amount(contract_coldkey, self.hotkey, netuid)?;
+
+            self.alpha_listings.remove((netuid, seller, listing_id));
+
+            let mut user_listings = self.user_listings.get((seller, netuid)).unwrap_or_default();
+            user_listings.retain(|&id| id != listing_id);
+
+            if user_listings.is_empty() {
+                self.user_listings.remove((seller, netuid));
+            } else {
+                self.user_listings.insert((seller, netuid), &user_listings);
+            }
+
+            let transfer_call = RuntimeCall::SubtensorModule(SubtensorCall::TransferStake {
+                destination_coldkey: seller,
+                hotkey: self.hotkey,
+                origin_netuid: crate::runtime::NetUid::from(netuid),
+                destination_netuid: crate::runtime::NetUid::from(netuid),
+                alpha_amount: AlphaCurrency::from(listing.amount),
+            });
+
+            self.env()
+                .call_runtime(&transfer_call)
+                .map_err(|_| Error::RuntimeCallFailed)?;
+
+            let contract_stake_after =
+                self.get_stake_amount(contract_coldkey, self.hotkey, netuid)?;
+            let contract_decrease = contract_stake_before.saturating_sub(contract_stake_after);
+            let contract_decrease_ok = contract_decrease
+                >= listing.amount.saturating_sub(TRANSFER_TOLERANCE)
+                && contract_decrease <= listing.amount;
+
+            if contract_decrease_ok {
+                self.decrease_reserved_alpha(netuid, listing.amount)?;
+            }
+
+            if forced {
+                self.env().emit_event(AlphaListingForceCancelled {
+                    seller,
+                    initiated_by,
+                    netuid,
+                    listing_id,
+                    amount_returned: listing.amount,
+                });
+            } else {
+                self.env().emit_event(AlphaListingCancelled {
+                    seller,
+                    netuid,
+                    listing_id,
+                    amount_returned: listing.amount,
+                });
+            }
+
+            Ok(())
         }
 
         /// Access control helper: ensure caller is the owner
@@ -1701,6 +1792,26 @@ mod otc_contract {
         }
 
         #[ink::test]
+        fn force_cancel_alpha_listing_requires_owner() {
+            let accounts = ink::env::test::default_accounts::<Environment>();
+            let fee_rate = fee_rate_from_percentage(0.5);
+
+            let mut contract = OtcContract::new(
+                accounts.alice,
+                accounts.bob,
+                fee_rate,
+                1_000_000_000,
+                1_000_000_000,
+                100,
+            );
+
+            ink::env::test::set_caller::<Environment>(accounts.bob);
+
+            let result = contract.force_cancel_alpha_listing(1, accounts.charlie, 1);
+            assert_eq!(result, Err(Error::Unauthorized));
+        }
+
+        #[ink::test]
         fn cancel_alpha_listing_cleans_up_storage() {
             let accounts = ink::env::test::default_accounts::<Environment>();
             let fee_rate = fee_rate_from_percentage(0.5);
@@ -1863,6 +1974,79 @@ mod otc_contract {
             // Should fail due to amount being too small
             let result = contract.create_tao_offer(netuid, price);
             assert_eq!(result, Err(Error::AmountTooSmall));
+        }
+
+        #[ink::test]
+        fn set_subnet_listing_status_updates_mapping() {
+            let accounts = ink::env::test::default_accounts::<Environment>();
+            let fee_rate = fee_rate_from_percentage(0.5);
+
+            let mut contract = OtcContract::new(
+                accounts.alice,
+                accounts.bob,
+                fee_rate,
+                1_000_000_000,
+                1_000_000_000,
+                100,
+            );
+
+            ink::env::test::set_caller::<Environment>(accounts.alice);
+
+            assert!(!contract.is_subnet_frozen(42));
+
+            let freeze_reason = b"at-risk".to_vec();
+            assert_eq!(
+                contract.set_subnet_listing_status(42, true, freeze_reason.clone()),
+                Ok(())
+            );
+
+            assert!(contract.is_subnet_frozen(42));
+
+            let events = ink::env::test::recorded_events().collect::<Vec<_>>();
+            assert_eq!(events.len(), 1);
+
+            let decoded = <SubnetListingStatusChanged as ink::scale::Decode>::decode(
+                &mut &events[0].data[..],
+            )
+            .expect("decode freeze event");
+            assert_eq!(decoded.netuid, 42);
+            assert!(decoded.frozen);
+            assert_eq!(decoded.reason, freeze_reason);
+            assert_eq!(decoded.changed_by, accounts.alice);
+
+            assert_eq!(
+                contract.set_subnet_listing_status(42, false, b"clear".to_vec()),
+                Ok(())
+            );
+
+            assert!(!contract.is_subnet_frozen(42));
+        }
+
+        #[ink::test]
+        fn list_alpha_rejects_when_subnet_frozen() {
+            let accounts = ink::env::test::default_accounts::<Environment>();
+            let fee_rate = fee_rate_from_percentage(0.5);
+
+            let mut contract = OtcContract::new(
+                accounts.alice,
+                accounts.bob,
+                fee_rate,
+                1_000_000_000,
+                1_000_000_000,
+                100,
+            );
+
+            ink::env::test::set_caller::<Environment>(accounts.alice);
+            contract
+                .set_subnet_listing_status(7, true, b"risk".to_vec())
+                .expect("freeze subnet");
+
+            ink::env::test::set_caller::<Environment>(accounts.charlie);
+
+            let price_bits = U64F64::from_num(2u64).to_bits();
+            let result = contract.list_alpha(accounts.bob, 7, 1_000_000_000, price_bits);
+
+            assert_eq!(result, Err(Error::SubnetListingsFrozen));
         }
 
         #[ink::test]
