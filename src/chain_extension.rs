@@ -43,7 +43,7 @@ impl ink::env::chain_extension::FromStatusCode for SubtensorError {
         match status_code {
             0 => Ok(()),
             1 => Err(Self::GetStakeInfoFailed),
-            _ => panic!("encountered unknown status code"),
+            _ => Err(Self::Unknown),
         }
     }
 }
