@@ -72,14 +72,14 @@ export function percentageToFixedPoint(percentage: number): bigint {
     // Convert percentage to decimal (e.g., 0.5% -> 0.005)
     const decimalStr = (percentage / 100).toString();
     const [integerPart, decimalPart = ''] = decimalStr.split('.');
-    
+
     // Combine integer and decimal parts as a single number
     const numerator = BigInt(integerPart + decimalPart);
     const denominator = 10n ** BigInt(decimalPart.length || 0);
-    
+
     // U64F64 has 64 fractional bits (2^64)
     const one = 1n << 64n;
-    
+
     // Calculate the fixed-point representation
     return (numerator * one) / denominator;
 }
@@ -253,6 +253,11 @@ export async function elevateRegistrationLimits(
     sudoSigner: PolkadotSigner
 ): Promise<void> {
     console.log(`Elevating registration limits on netuid ${netuid} (targetPerInterval=${targetPerInterval}, maxPerBlock=${maxPerBlock})`);
+
+    // Disable freeze window to allow immediate changes
+    const setFreezeWindow = api.tx.AdminUtils.sudo_set_admin_freeze_window({ window: 0 });
+    await api.tx.Sudo.sudo({ call: setFreezeWindow.decodedCall }).signAndSubmit(sudoSigner);
+
     // Set target registrations per interval
     const innerTarget = api.tx.AdminUtils.sudo_set_target_registrations_per_interval({
         netuid,
@@ -308,14 +313,14 @@ export function priceToFixedPoint(pricePerAlpha: number): bigint {
     // Convert to string to handle decimals precisely
     const priceStr = pricePerAlpha.toString();
     const [integerPart, decimalPart = ''] = priceStr.split('.');
-    
+
     // Combine integer and decimal parts as a single number
     const numerator = BigInt(integerPart + decimalPart);
     const denominator = 10n ** BigInt(decimalPart.length || 0);
-    
+
     // U64F64 has 64 fractional bits (2^64)
     const one = 1n << 64n;
-    
+
     // Calculate the fixed-point representation
     return (numerator * one) / denominator;
 }
