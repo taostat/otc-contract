@@ -1,6 +1,6 @@
 {
   "source": {
-    "hash": "0x854c408b0354f54d6b23af910fb7945d9eb5022d3562b4a0677e3d6600d8c5f3",
+    "hash": "0xdea6b7688f75b7ab8ad5a23f5e00ee2be361d3d28b11963140f5e684e84bb54c",
     "language": "ink! 5.1.1",
     "compiler": "rustc 1.85.0",
     "build_info": {
@@ -89,7 +89,7 @@
             "ink_primitives",
             "ConstructorResult"
           ],
-          "type": 32
+          "type": 36
         },
         "selector": "0x9bae9d5e"
       }
@@ -118,13 +118,13 @@
         "displayName": [
           "ChainExtension"
         ],
-        "type": 52
+        "type": 57
       },
       "hash": {
         "displayName": [
           "Hash"
         ],
-        "type": 48
+        "type": 54
       },
       "maxEventTopics": 4,
       "staticBufferSize": 16384,
@@ -330,6 +330,69 @@
           {
             "docs": [],
             "indexed": true,
+            "label": "seller",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "initiated_by",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "netuid",
+            "type": {
+              "displayName": [
+                "NetUid"
+              ],
+              "type": 1
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "listing_id",
+            "type": {
+              "displayName": [
+                "AlphaListingId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "amount_returned",
+            "type": {
+              "displayName": [
+                "AlphaAmount"
+              ],
+              "type": 0
+            }
+          }
+        ],
+        "docs": [],
+        "label": "AlphaListingForceCancelled",
+        "module_path": "otc_contract::events",
+        "signature_topic": "0x71efb315f0a46033dfd90a41d21f0d61fa5062e6bb249d41d418244d937c1411"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
             "label": "buyer",
             "type": {
               "displayName": [
@@ -464,7 +527,7 @@
               "displayName": [
                 "Option"
               ],
-              "type": 51
+              "type": 56
             }
           }
         ],
@@ -560,7 +623,7 @@
               "displayName": [
                 "Option"
               ],
-              "type": 51
+              "type": 56
             }
           }
         ],
@@ -759,7 +822,7 @@
               "displayName": [
                 "PauseState"
               ],
-              "type": 31
+              "type": 35
             }
           },
           {
@@ -770,7 +833,7 @@
               "displayName": [
                 "Vec"
               ],
-              "type": 49
+              "type": 46
             }
           },
           {
@@ -860,6 +923,58 @@
         "label": "DividendsClaimed",
         "module_path": "otc_contract::events",
         "signature_topic": "0xa87bd19160e81a8e08af9fef79deec49da452db672dac2b1187077cc2f5a1a77"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "netuid",
+            "type": {
+              "displayName": [
+                "NetUid"
+              ],
+              "type": 1
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "frozen",
+            "type": {
+              "displayName": [
+                "bool"
+              ],
+              "type": 30
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "reason",
+            "type": {
+              "displayName": [
+                "Vec"
+              ],
+              "type": 46
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "changed_by",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          }
+        ],
+        "docs": [],
+        "label": "SubnetListingStatusChanged",
+        "module_path": "otc_contract::events",
+        "signature_topic": "0xcc84d517a37eb68d44811145a57f8b0dfaba507aed385ae1bb943e681b29c353"
       }
     ],
     "lang_error": {
@@ -867,7 +982,7 @@
         "ink",
         "LangError"
       ],
-      "type": 33
+      "type": 37
     },
     "messages": [
       {
@@ -884,7 +999,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 34
+          "type": 38
         },
         "selector": "0x07fcd0b1"
       },
@@ -902,7 +1017,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 34
+          "type": 38
         },
         "selector": "0xead097fa"
       },
@@ -920,7 +1035,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 35
+          "type": 39
         },
         "selector": "0xcf886b41"
       },
@@ -938,7 +1053,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 36
+          "type": 40
         },
         "selector": "0xba57e251"
       },
@@ -956,7 +1071,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 36
+          "type": 40
         },
         "selector": "0x0314e2e2"
       },
@@ -974,7 +1089,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 37
+          "type": 41
         },
         "selector": "0xf8382780"
       },
@@ -1002,9 +1117,37 @@
             "ink",
             "MessageResult"
           ],
-          "type": 36
+          "type": 40
         },
         "selector": "0x13e16c4f"
+      },
+      {
+        "args": [
+          {
+            "label": "netuid",
+            "type": {
+              "displayName": [
+                "NetUid"
+              ],
+              "type": 1
+            }
+          }
+        ],
+        "default": false,
+        "docs": [
+          " Check if listings are frozen for a subnet"
+        ],
+        "label": "is_subnet_frozen",
+        "mutates": false,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 42
+        },
+        "selector": "0x6e5825f4"
       },
       {
         "args": [
@@ -1031,7 +1174,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 38
+          "type": 43
         },
         "selector": "0x22a8dc8f"
       },
@@ -1060,7 +1203,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 38
+          "type": 43
         },
         "selector": "0x512fb5ad"
       },
@@ -1089,7 +1232,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 38
+          "type": 43
         },
         "selector": "0x8a268b92"
       },
@@ -1118,7 +1261,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 38
+          "type": 43
         },
         "selector": "0x2a3d49c5"
       },
@@ -1147,7 +1290,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 38
+          "type": 43
         },
         "selector": "0x969fe9d9"
       },
@@ -1176,9 +1319,56 @@
             "ink",
             "MessageResult"
           ],
-          "type": 38
+          "type": 43
         },
         "selector": "0x2cbc2626"
+      },
+      {
+        "args": [
+          {
+            "label": "netuid",
+            "type": {
+              "displayName": [
+                "NetUid"
+              ],
+              "type": 1
+            }
+          },
+          {
+            "label": "frozen",
+            "type": {
+              "displayName": [
+                "bool"
+              ],
+              "type": 30
+            }
+          },
+          {
+            "label": "reason",
+            "type": {
+              "displayName": [
+                "Vec"
+              ],
+              "type": 46
+            }
+          }
+        ],
+        "default": false,
+        "docs": [
+          " Update subnet listing status (freeze/unfreeze)",
+          " Can only be called by the contract owner"
+        ],
+        "label": "set_subnet_listing_status",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 43
+        },
+        "selector": "0xbd0d9965"
       },
       {
         "args": [
@@ -1234,7 +1424,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 41
+          "type": 47
         },
         "selector": "0x19ebe71d"
       },
@@ -1272,9 +1462,55 @@
             "ink",
             "MessageResult"
           ],
-          "type": 38
+          "type": 43
         },
         "selector": "0x1301f414"
+      },
+      {
+        "args": [
+          {
+            "label": "netuid",
+            "type": {
+              "displayName": [
+                "NetUid"
+              ],
+              "type": 1
+            }
+          },
+          {
+            "label": "seller",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "label": "listing_id",
+            "type": {
+              "displayName": [
+                "AlphaListingId"
+              ],
+              "type": 0
+            }
+          }
+        ],
+        "default": false,
+        "docs": [
+          " Force-cancel an Alpha listing as the contract owner"
+        ],
+        "label": "force_cancel_alpha_listing",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 43
+        },
+        "selector": "0xe6482dd5"
       },
       {
         "args": [
@@ -1318,7 +1554,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 43
+          "type": 49
         },
         "selector": "0xfd34226e"
       },
@@ -1355,7 +1591,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 45
+          "type": 51
         },
         "selector": "0x24011d31"
       },
@@ -1393,7 +1629,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 41
+          "type": 47
         },
         "selector": "0x30834e95"
       },
@@ -1431,7 +1667,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 38
+          "type": 43
         },
         "selector": "0x14384403"
       },
@@ -1477,7 +1713,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 46
+          "type": 52
         },
         "selector": "0xdd4e4ee2"
       },
@@ -1514,7 +1750,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 45
+          "type": 51
         },
         "selector": "0xd6692f17"
       },
@@ -1562,7 +1798,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 38
+          "type": 43
         },
         "selector": "0x7506dd44"
       },
@@ -1591,7 +1827,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 38
+          "type": 43
         },
         "selector": "0x1958ed23"
       },
@@ -1648,7 +1884,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 38
+          "type": 43
         },
         "selector": "0x3a2ae37d"
       },
@@ -1660,7 +1896,7 @@
               "displayName": [
                 "Hash"
               ],
-              "type": 48
+              "type": 54
             }
           }
         ],
@@ -1677,7 +1913,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 38
+          "type": 43
         },
         "selector": "0x694fb50f"
       },
@@ -1689,7 +1925,7 @@
               "displayName": [
                 "Vec"
               ],
-              "type": 49
+              "type": 46
             }
           }
         ],
@@ -1706,7 +1942,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 38
+          "type": 43
         },
         "selector": "0x2a25fd77"
       },
@@ -1718,7 +1954,7 @@
               "displayName": [
                 "Vec"
               ],
-              "type": 49
+              "type": 46
             }
           }
         ],
@@ -1735,7 +1971,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 38
+          "type": 43
         },
         "selector": "0x114a6b2a"
       },
@@ -1754,7 +1990,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 38
+          "type": 43
         },
         "selector": "0xc3a8f39e"
       },
@@ -1772,7 +2008,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 50
+          "type": 55
         },
         "selector": "0x05478dce"
       }
@@ -2028,6 +2264,21 @@
             },
             {
               "layout": {
+                "root": {
+                  "layout": {
+                    "leaf": {
+                      "key": "0xf8c35bc5",
+                      "ty": 30
+                    }
+                  },
+                  "root_key": "0xf8c35bc5",
+                  "ty": 31
+                }
+              },
+              "name": "frozen_subnets"
+            },
+            {
+              "layout": {
                 "leaf": {
                   "key": "0x00000000",
                   "ty": 0
@@ -2136,7 +2387,7 @@
         }
       },
       "root_key": "0x00000000",
-      "ty": 30
+      "ty": 34
     }
   },
   "types": [
@@ -2742,6 +2993,84 @@
       "id": 30,
       "type": {
         "def": {
+          "primitive": "bool"
+        }
+      }
+    },
+    {
+      "id": 31,
+      "type": {
+        "def": {
+          "composite": {}
+        },
+        "params": [
+          {
+            "name": "K",
+            "type": 1
+          },
+          {
+            "name": "V",
+            "type": 30
+          },
+          {
+            "name": "KeyType",
+            "type": 32
+          }
+        ],
+        "path": [
+          "ink_storage",
+          "lazy",
+          "mapping",
+          "Mapping"
+        ]
+      }
+    },
+    {
+      "id": 32,
+      "type": {
+        "def": {
+          "composite": {}
+        },
+        "params": [
+          {
+            "name": "L",
+            "type": 12
+          },
+          {
+            "name": "R",
+            "type": 33
+          }
+        ],
+        "path": [
+          "ink_storage_traits",
+          "impls",
+          "ResolverKey"
+        ]
+      }
+    },
+    {
+      "id": 33,
+      "type": {
+        "def": {
+          "composite": {}
+        },
+        "params": [
+          {
+            "name": "ParentKey",
+            "type": 14
+          }
+        ],
+        "path": [
+          "ink_storage_traits",
+          "impls",
+          "ManualKey"
+        ]
+      }
+    },
+    {
+      "id": 34,
+      "type": {
+        "def": {
           "composite": {
             "fields": [
               {
@@ -2768,6 +3097,11 @@
                 "name": "reserved_alpha",
                 "type": 27,
                 "typeName": "<ReservedAlphaMapping as::ink::storage::traits::AutoStorableHint<::\nink::storage::traits::ManualKey<2602476346u32, ()>,>>::Type"
+              },
+              {
+                "name": "frozen_subnets",
+                "type": 31,
+                "typeName": "<FrozenSubnetsMapping as::ink::storage::traits::AutoStorableHint<::\nink::storage::traits::ManualKey<3311125496u32, ()>,>>::Type"
               },
               {
                 "name": "next_alpha_listing_id",
@@ -2811,7 +3145,7 @@
               },
               {
                 "name": "pause_state",
-                "type": 31,
+                "type": 35,
                 "typeName": "<PauseState as::ink::storage::traits::AutoStorableHint<::ink::\nstorage::traits::ManualKey<1282337562u32, ()>,>>::Type"
               }
             ]
@@ -2825,7 +3159,7 @@
       }
     },
     {
-      "id": 31,
+      "id": 35,
       "type": {
         "def": {
           "variant": {
@@ -2853,7 +3187,7 @@
       }
     },
     {
-      "id": 32,
+      "id": 36,
       "type": {
         "def": {
           "variant": {
@@ -2870,7 +3204,7 @@
               {
                 "fields": [
                   {
-                    "type": 33
+                    "type": 37
                   }
                 ],
                 "index": 1,
@@ -2886,7 +3220,7 @@
           },
           {
             "name": "E",
-            "type": 33
+            "type": 37
           }
         ],
         "path": [
@@ -2895,7 +3229,7 @@
       }
     },
     {
-      "id": 33,
+      "id": 37,
       "type": {
         "def": {
           "variant": {
@@ -2914,7 +3248,7 @@
       }
     },
     {
-      "id": 34,
+      "id": 38,
       "type": {
         "def": {
           "variant": {
@@ -2931,7 +3265,7 @@
               {
                 "fields": [
                   {
-                    "type": 33
+                    "type": 37
                   }
                 ],
                 "index": 1,
@@ -2947,175 +3281,7 @@
           },
           {
             "name": "E",
-            "type": 33
-          }
-        ],
-        "path": [
-          "Result"
-        ]
-      }
-    },
-    {
-      "id": 35,
-      "type": {
-        "def": {
-          "variant": {
-            "variants": [
-              {
-                "fields": [
-                  {
-                    "type": 10
-                  }
-                ],
-                "index": 0,
-                "name": "Ok"
-              },
-              {
-                "fields": [
-                  {
-                    "type": 33
-                  }
-                ],
-                "index": 1,
-                "name": "Err"
-              }
-            ]
-          }
-        },
-        "params": [
-          {
-            "name": "T",
-            "type": 10
-          },
-          {
-            "name": "E",
-            "type": 33
-          }
-        ],
-        "path": [
-          "Result"
-        ]
-      }
-    },
-    {
-      "id": 36,
-      "type": {
-        "def": {
-          "variant": {
-            "variants": [
-              {
-                "fields": [
-                  {
-                    "type": 0
-                  }
-                ],
-                "index": 0,
-                "name": "Ok"
-              },
-              {
-                "fields": [
-                  {
-                    "type": 33
-                  }
-                ],
-                "index": 1,
-                "name": "Err"
-              }
-            ]
-          }
-        },
-        "params": [
-          {
-            "name": "T",
-            "type": 0
-          },
-          {
-            "name": "E",
-            "type": 33
-          }
-        ],
-        "path": [
-          "Result"
-        ]
-      }
-    },
-    {
-      "id": 37,
-      "type": {
-        "def": {
-          "variant": {
-            "variants": [
-              {
-                "fields": [
-                  {
-                    "type": 6
-                  }
-                ],
-                "index": 0,
-                "name": "Ok"
-              },
-              {
-                "fields": [
-                  {
-                    "type": 33
-                  }
-                ],
-                "index": 1,
-                "name": "Err"
-              }
-            ]
-          }
-        },
-        "params": [
-          {
-            "name": "T",
-            "type": 6
-          },
-          {
-            "name": "E",
-            "type": 33
-          }
-        ],
-        "path": [
-          "Result"
-        ]
-      }
-    },
-    {
-      "id": 38,
-      "type": {
-        "def": {
-          "variant": {
-            "variants": [
-              {
-                "fields": [
-                  {
-                    "type": 39
-                  }
-                ],
-                "index": 0,
-                "name": "Ok"
-              },
-              {
-                "fields": [
-                  {
-                    "type": 33
-                  }
-                ],
-                "index": 1,
-                "name": "Err"
-              }
-            ]
-          }
-        },
-        "params": [
-          {
-            "name": "T",
-            "type": 39
-          },
-          {
-            "name": "E",
-            "type": 33
+            "type": 37
           }
         ],
         "path": [
@@ -3132,6 +3298,216 @@
               {
                 "fields": [
                   {
+                    "type": 10
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 37
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 10
+          },
+          {
+            "name": "E",
+            "type": 37
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 40,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 0
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 37
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 0
+          },
+          {
+            "name": "E",
+            "type": 37
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 41,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 6
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 37
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 6
+          },
+          {
+            "name": "E",
+            "type": 37
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 42,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 30
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 37
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 30
+          },
+          {
+            "name": "E",
+            "type": 37
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 43,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 44
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 37
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 44
+          },
+          {
+            "name": "E",
+            "type": 37
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 44,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
                     "type": 14
                   }
                 ],
@@ -3141,7 +3517,7 @@
               {
                 "fields": [
                   {
-                    "type": 40
+                    "type": 45
                   }
                 ],
                 "index": 1,
@@ -3157,7 +3533,7 @@
           },
           {
             "name": "E",
-            "type": 40
+            "type": 45
           }
         ],
         "path": [
@@ -3166,7 +3542,7 @@
       }
     },
     {
-      "id": 40,
+      "id": 45,
       "type": {
         "def": {
           "variant": {
@@ -3262,6 +3638,18 @@
               {
                 "index": 22,
                 "name": "TradingPaused"
+              },
+              {
+                "index": 23,
+                "name": "TooManyListings"
+              },
+              {
+                "index": 24,
+                "name": "TooManyOffers"
+              },
+              {
+                "index": 25,
+                "name": "SubnetListingsFrozen"
               }
             ]
           }
@@ -3274,7 +3662,17 @@
       }
     },
     {
-      "id": 41,
+      "id": 46,
+      "type": {
+        "def": {
+          "sequence": {
+            "type": 4
+          }
+        }
+      }
+    },
+    {
+      "id": 47,
       "type": {
         "def": {
           "variant": {
@@ -3282,7 +3680,7 @@
               {
                 "fields": [
                   {
-                    "type": 42
+                    "type": 48
                   }
                 ],
                 "index": 0,
@@ -3291,7 +3689,7 @@
               {
                 "fields": [
                   {
-                    "type": 33
+                    "type": 37
                   }
                 ],
                 "index": 1,
@@ -3303,11 +3701,11 @@
         "params": [
           {
             "name": "T",
-            "type": 42
+            "type": 48
           },
           {
             "name": "E",
-            "type": 33
+            "type": 37
           }
         ],
         "path": [
@@ -3316,7 +3714,7 @@
       }
     },
     {
-      "id": 42,
+      "id": 48,
       "type": {
         "def": {
           "variant": {
@@ -3333,7 +3731,7 @@
               {
                 "fields": [
                   {
-                    "type": 40
+                    "type": 45
                   }
                 ],
                 "index": 1,
@@ -3349,7 +3747,7 @@
           },
           {
             "name": "E",
-            "type": 40
+            "type": 45
           }
         ],
         "path": [
@@ -3358,7 +3756,7 @@
       }
     },
     {
-      "id": 43,
+      "id": 49,
       "type": {
         "def": {
           "variant": {
@@ -3366,7 +3764,7 @@
               {
                 "fields": [
                   {
-                    "type": 44
+                    "type": 50
                   }
                 ],
                 "index": 0,
@@ -3375,7 +3773,7 @@
               {
                 "fields": [
                   {
-                    "type": 33
+                    "type": 37
                   }
                 ],
                 "index": 1,
@@ -3387,11 +3785,11 @@
         "params": [
           {
             "name": "T",
-            "type": 44
+            "type": 50
           },
           {
             "name": "E",
-            "type": 33
+            "type": 37
           }
         ],
         "path": [
@@ -3400,7 +3798,7 @@
       }
     },
     {
-      "id": 44,
+      "id": 50,
       "type": {
         "def": {
           "variant": {
@@ -3433,7 +3831,7 @@
       }
     },
     {
-      "id": 45,
+      "id": 51,
       "type": {
         "def": {
           "variant": {
@@ -3450,7 +3848,7 @@
               {
                 "fields": [
                   {
-                    "type": 33
+                    "type": 37
                   }
                 ],
                 "index": 1,
@@ -3466,7 +3864,7 @@
           },
           {
             "name": "E",
-            "type": 33
+            "type": 37
           }
         ],
         "path": [
@@ -3475,7 +3873,7 @@
       }
     },
     {
-      "id": 46,
+      "id": 52,
       "type": {
         "def": {
           "variant": {
@@ -3483,7 +3881,7 @@
               {
                 "fields": [
                   {
-                    "type": 47
+                    "type": 53
                   }
                 ],
                 "index": 0,
@@ -3492,7 +3890,7 @@
               {
                 "fields": [
                   {
-                    "type": 33
+                    "type": 37
                   }
                 ],
                 "index": 1,
@@ -3504,11 +3902,11 @@
         "params": [
           {
             "name": "T",
-            "type": 47
+            "type": 53
           },
           {
             "name": "E",
-            "type": 33
+            "type": 37
           }
         ],
         "path": [
@@ -3517,7 +3915,7 @@
       }
     },
     {
-      "id": 47,
+      "id": 53,
       "type": {
         "def": {
           "variant": {
@@ -3550,7 +3948,7 @@
       }
     },
     {
-      "id": 48,
+      "id": 54,
       "type": {
         "def": {
           "composite": {
@@ -3570,17 +3968,7 @@
       }
     },
     {
-      "id": 49,
-      "type": {
-        "def": {
-          "sequence": {
-            "type": 4
-          }
-        }
-      }
-    },
-    {
-      "id": 50,
+      "id": 55,
       "type": {
         "def": {
           "variant": {
@@ -3588,7 +3976,7 @@
               {
                 "fields": [
                   {
-                    "type": 31
+                    "type": 35
                   }
                 ],
                 "index": 0,
@@ -3597,7 +3985,7 @@
               {
                 "fields": [
                   {
-                    "type": 33
+                    "type": 37
                   }
                 ],
                 "index": 1,
@@ -3609,11 +3997,11 @@
         "params": [
           {
             "name": "T",
-            "type": 31
+            "type": 35
           },
           {
             "name": "E",
-            "type": 33
+            "type": 37
           }
         ],
         "path": [
@@ -3622,7 +4010,7 @@
       }
     },
     {
-      "id": 51,
+      "id": 56,
       "type": {
         "def": {
           "variant": {
@@ -3655,7 +4043,7 @@
       }
     },
     {
-      "id": 52,
+      "id": 57,
       "type": {
         "def": {
           "variant": {}
