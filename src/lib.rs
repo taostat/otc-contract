@@ -465,16 +465,15 @@ mod otc_contract {
 
             // Consolidate stake if needed (move to contract's hotkey)
             if hotkey != self.hotkey {
-                let move_call = RuntimeCall::SubtensorModule(SubtensorCall::MoveStake {
-                    origin_hotkey: hotkey,
-                    destination_hotkey: self.hotkey,
-                    origin_netuid: crate::runtime::NetUid::from(netuid),
-                    destination_netuid: crate::runtime::NetUid::from(netuid),
-                    alpha_amount: AlphaCurrency::from(amount),
-                });
-
                 self.env()
-                    .call_runtime(&move_call)
+                    .extension()
+                    .move_stake(
+                        hotkey,
+                        self.hotkey,
+                        netuid,
+                        netuid,
+                        AlphaCurrency::from(amount),
+                    )
                     .map_err(|_| Error::RuntimeCallFailed)?;
             }
 
@@ -738,16 +737,15 @@ mod otc_contract {
             }
 
             // Transfer Alpha from contract to buyer
-            let transfer_call = RuntimeCall::SubtensorModule(SubtensorCall::TransferStake {
-                destination_coldkey: buyer,
-                hotkey: self.hotkey,
-                origin_netuid: crate::runtime::NetUid::from(netuid),
-                destination_netuid: crate::runtime::NetUid::from(netuid),
-                alpha_amount: AlphaCurrency::from(listing.amount),
-            });
-
             self.env()
-                .call_runtime(&transfer_call)
+                .extension()
+                .transfer_stake(
+                    buyer,
+                    self.hotkey,
+                    netuid,
+                    netuid,
+                    AlphaCurrency::from(listing.amount),
+                )
                 .map_err(|_| Error::RuntimeCallFailed)?;
 
             let contract_stake_after =
@@ -799,16 +797,15 @@ mod otc_contract {
 
             let claimable = self.calculate_claimable_dividends(netuid, contract_stake_before)?;
 
-            let transfer_call = RuntimeCall::SubtensorModule(SubtensorCall::TransferStake {
-                destination_coldkey: self.owner,
-                hotkey: self.hotkey,
-                origin_netuid: crate::runtime::NetUid::from(netuid),
-                destination_netuid: crate::runtime::NetUid::from(netuid),
-                alpha_amount: AlphaCurrency::from(claimable),
-            });
-
             self.env()
-                .call_runtime(&transfer_call)
+                .extension()
+                .transfer_stake(
+                    self.owner,
+                    self.hotkey,
+                    netuid,
+                    netuid,
+                    AlphaCurrency::from(claimable),
+                )
                 .map_err(|_| Error::RuntimeCallFailed)?;
 
             let contract_stake_after =
@@ -1043,16 +1040,15 @@ mod otc_contract {
                 self.user_listings.insert((seller, netuid), &user_listings);
             }
 
-            let transfer_call = RuntimeCall::SubtensorModule(SubtensorCall::TransferStake {
-                destination_coldkey: seller,
-                hotkey: self.hotkey,
-                origin_netuid: crate::runtime::NetUid::from(netuid),
-                destination_netuid: crate::runtime::NetUid::from(netuid),
-                alpha_amount: AlphaCurrency::from(listing.amount),
-            });
-
             self.env()
-                .call_runtime(&transfer_call)
+                .extension()
+                .transfer_stake(
+                    seller,
+                    self.hotkey,
+                    netuid,
+                    netuid,
+                    AlphaCurrency::from(listing.amount),
+                )
                 .map_err(|_| Error::RuntimeCallFailed)?;
 
             let contract_stake_after =
