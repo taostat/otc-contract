@@ -290,7 +290,7 @@ export async function addContractAsProxy(
     // Add the contract as a proxy with appropriate permissions
     const tx = api.tx.Proxy.add_proxy({
         delegate: MultiAddress.Id(contractAddress),
-        proxy_type: Enum("Any"),
+        proxy_type: Enum("Transfer"),
         delay: 0
     });
 

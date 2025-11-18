@@ -96,7 +96,7 @@ export async function hasProxyPermission(
         // Check if the delegate is in the proxy list with appropriate permissions
         return proxies[0].some(proxy => {
             return proxy.delegate === delegate &&
-                (proxy.proxy_type.type === "Staking" || proxy.proxy_type.type === "Any");
+                (proxy.proxy_type.type === "Transfer" || proxy.proxy_type.type === "Any");
         });
     } catch (error) {
         console.error(`Error checking proxy permissions:`, error);
