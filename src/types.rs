@@ -30,6 +30,11 @@ pub type Balance = u64; // Generic balance/amount type
 pub type AlphaAmount = u64; // Amount of Alpha tokens in rao
 pub type TaoAmount = u64; // Amount of TAO tokens in rao
 
+/// Price offset in basis points (1 bp = 0.01%)
+/// -500 = -5% below market, 1000 = +10% above market
+/// Range: -10000 to i32::MAX (cannot go below -100%)
+pub type PriceOffsetBps = i32;
+
 pub type AlphaListingsMapping = Mapping<(NetUid, AccountId, AlphaListingId), AlphaListing>;
 pub type UserListingsMapping = Mapping<(AccountId, NetUid), Vec<AlphaListingId>>;
 pub type TaoOffersMapping = Mapping<(NetUid, AccountId, TaoOfferId), TaoOffer>;
@@ -221,8 +226,8 @@ pub struct AlphaListing {
     pub id: AlphaListingId,
     pub netuid: NetUid,
     pub seller: AccountId,
-    pub amount: AlphaAmount,    // Alpha amount in rao
-    pub price: FixedDecimal,    // TAO price per Alpha token
+    pub amount: AlphaAmount,              // Alpha amount in rao
+    pub price_offset_bps: PriceOffsetBps, // Price offset from market in basis points
     pub fee_rate: FixedDecimal, // Fee rate at listing time (as decimal, e.g., 0.005 = 0.5%)
     pub created_at: BlockNumber,
 }
@@ -235,8 +240,8 @@ pub struct TaoOffer {
     pub id: TaoOfferId,
     pub netuid: NetUid,
     pub buyer: AccountId,
-    pub amount: TaoAmount,      // TAO amount offered in rao
-    pub price: FixedDecimal,    // TAO price willing to pay per Alpha
-    pub fee_rate: FixedDecimal, // Fee rate at offer time (as decimal, e.g., 0.005 = 0.5%)
+    pub amount: TaoAmount,                // TAO amount offered in rao
+    pub price_offset_bps: PriceOffsetBps, // Price offset from market in basis points
+    pub fee_rate: FixedDecimal,           // Fee rate at offer time (as decimal, e.g., 0.005 = 0.5%)
     pub created_at: BlockNumber,
 }

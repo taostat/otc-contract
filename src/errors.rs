@@ -53,4 +53,10 @@ pub enum Error {
     TooManyOffers,
     /// Listings are frozen for the subnet
     SubnetListingsFrozen,
+    /// Failed to fetch market price from chain extension
+    MarketPriceFetchFailed,
+    /// Invalid price offset (e.g., <= -100%)
+    InvalidPriceOffset,
+    /// Insufficient payment (buyer sent less TAO than required)
+    InsufficientPayment,
 }

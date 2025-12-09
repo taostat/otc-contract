@@ -27,9 +27,10 @@ mod otc_contract {
     use crate::runtime::{AlphaCurrency, ProxyCall, RuntimeCall, SubtensorCall};
     use crate::types::{
         AlphaAmount, AlphaListing, AlphaListingId, AlphaListingsMapping, BlockAge, FixedDecimal,
-        FrozenSubnetsMapping, NetUid, PauseState, ReservedAlphaMapping, TaoAmount, TaoOffer,
-        TaoOfferId, TaoOffersMapping, UserListingsMapping, UserOffersMapping,
+        FrozenSubnetsMapping, NetUid, PauseState, PriceOffsetBps, ReservedAlphaMapping, TaoAmount,
+        TaoOffer, TaoOfferId, TaoOffersMapping, UserListingsMapping, UserOffersMapping,
     };
+    use fixed::types::U64F64;
     use ink::prelude::{boxed::Box, vec::Vec};
     use sp_runtime::MultiAddress;
 
@@ -208,6 +209,51 @@ mod otc_contract {
             contract_stake.checked_sub(reserved).ok_or(Error::Overflow)
         }
 
+        /// Get the current market price for an Alpha token on a subnet
+        fn get_market_price(&self, netuid: NetUid) -> Result<u64, Error> {
+            self.env()
+                .extension()
+                .get_current_alpha_price(netuid)
+                .map_err(|_| Error::MarketPriceFetchFailed)
+        }
+
+        /// Calculate actual price from market price and basis points offset
+        /// market_price is in format: TAO_per_Alpha * 1e9
+        /// Returns: adjusted price in same format (TAO_per_Alpha * 1e9)
+        fn apply_price_offset(market_price: u64, offset_bps: PriceOffsetBps) -> Result<u64, Error> {
+            // offset_bps: -500 = -5%, 1000 = +10%
+            // formula: market_price * (10000 + offset_bps) / 10000
+            let base: i64 = 10000;
+            let offset = i64::from(offset_bps);
+            let multiplier = base.checked_add(offset).ok_or(Error::Overflow)?;
+
+            if multiplier <= 0 {
+                return Err(Error::InvalidPriceOffset);
+            }
+
+            // Safe cast: multiplier is guaranteed positive after the check above
+            let multiplier_u128 = u128::try_from(multiplier).map_err(|_| Error::Overflow)?;
+
+            let result = u128::from(market_price)
+                .checked_mul(multiplier_u128)
+                .ok_or(Error::Overflow)?
+                .checked_div(10000)
+                .ok_or(Error::Overflow)?;
+
+            u64::try_from(result).map_err(|_| Error::Overflow)
+        }
+
+        /// Convert price from chain extension format (price * 1e9) to FixedDecimal
+        fn price_to_fixed_decimal(scaled_price: u64) -> FixedDecimal {
+            // scaled_price = TAO_per_Alpha * 1e9
+            // We need FixedDecimal representing TAO_per_Alpha
+            let divisor = U64F64::from_num(1_000_000_000u64);
+            let price = U64F64::from_num(scaled_price)
+                .checked_div(divisor)
+                .unwrap_or_default();
+            FixedDecimal::from_bits(price.to_bits())
+        }
+
         /// Get the contract owner
         #[ink(message)]
         pub fn get_owner(&self) -> AccountId {
@@ -381,30 +427,31 @@ mod otc_contract {
             Ok(())
         }
 
-        /// List Alpha tokens for sale
+        /// List Alpha tokens for sale with dynamic market-relative pricing
         /// Prerequisites: The seller must have added the contract as their proxy
         /// This will transfer the stake from the seller to the contract via proxy
         /// and consolidate it under the contract's hotkey if needed
+        /// price_offset_bps: Price offset from market in basis points (-500 = -5%, 1000 = +10%)
         #[ink(message)]
         pub fn list_alpha(
             &mut self,
             hotkey: AccountId,
             netuid: NetUid,
             amount: AlphaAmount,
-            price: u128, // Price as FixedDecimal bits (TAO per Alpha)
+            price_offset_bps: PriceOffsetBps,
         ) -> Result<AlphaListingId, Error> {
             self.ensure_trading_enabled()?;
             self.ensure_subnet_not_frozen(netuid)?;
 
             let seller = self.env().caller();
-            let price = FixedDecimal::from_bits(price);
 
             if amount < self.min_listing_amount {
                 return Err(Error::AmountTooSmall);
             }
 
-            if price.is_zero() {
-                return Err(Error::InvalidPrice);
+            // Validate price offset (cannot be <= -100% as that would result in zero or negative price)
+            if price_offset_bps <= -10000 {
+                return Err(Error::InvalidPriceOffset);
             }
 
             let mut user_listings = self.user_listings.get((seller, netuid)).unwrap_or_default();
@@ -484,7 +531,7 @@ mod otc_contract {
                 netuid,
                 seller,
                 amount,
-                price,
+                price_offset_bps,
                 fee_rate: self.fee_rate,
                 created_at: self.env().block_number(),
             };
@@ -501,7 +548,7 @@ mod otc_contract {
                 netuid,
                 alpha_listing_id: listing_id,
                 amount,
-                price,
+                price_offset_bps,
             });
 
             Ok(listing_id)
@@ -570,26 +617,27 @@ mod otc_contract {
             self.user_listings.get((seller, netuid)).unwrap_or_default()
         }
 
-        /// Create a TAO offer by depositing TAO into the contract
-        /// The buyer sends TAO with the transaction and specifies their desired price
+        /// Create a TAO offer by depositing TAO into the contract with dynamic market-relative pricing
+        /// The buyer sends TAO with the transaction and specifies their price offset from market
+        /// price_offset_bps: Price offset from market in basis points (-500 = -5%, 1000 = +10%)
         #[ink(message, payable)]
         pub fn create_tao_offer(
             &mut self,
             netuid: NetUid,
-            price: u128, // Price as FixedDecimal bits
+            price_offset_bps: PriceOffsetBps,
         ) -> Result<TaoOfferId, Error> {
             self.ensure_trading_enabled()?;
 
             let buyer = self.env().caller();
             let amount = self.env().transferred_value();
-            let price = FixedDecimal::from_bits(price);
 
             if amount < self.min_offer_amount {
                 return Err(Error::AmountTooSmall);
             }
 
-            if price.is_zero() {
-                return Err(Error::InvalidPrice);
+            // Validate price offset (cannot be <= -100% as that would result in zero or negative price)
+            if price_offset_bps <= -10000 {
+                return Err(Error::InvalidPriceOffset);
             }
 
             let mut user_offers = self.user_offers.get((buyer, netuid)).unwrap_or_default();
@@ -605,7 +653,7 @@ mod otc_contract {
                 netuid,
                 buyer,
                 amount,
-                price,
+                price_offset_bps,
                 fee_rate: self.fee_rate,
                 created_at: self.env().block_number(),
             };
@@ -620,7 +668,7 @@ mod otc_contract {
                 netuid,
                 tao_offer_id: offer_id,
                 amount,
-                price,
+                price_offset_bps,
             });
 
             Ok(offer_id)
@@ -686,9 +734,74 @@ mod otc_contract {
             self.user_offers.get((buyer, netuid)).unwrap_or_default()
         }
 
-        /// Take an Alpha listing by paying TAO
-        /// The buyer sends TAO with the transaction to purchase Alpha tokens at the listing price
-        /// Prerequisites: Buyer must send exact TAO amount (price * amount + fees)
+        /// Estimate the price for taking an Alpha listing at current market price
+        /// Returns: (executed_price * 1e9, tao_amount, total_with_fee)
+        #[ink(message)]
+        pub fn estimate_listing_price(
+            &self,
+            netuid: NetUid,
+            seller: AccountId,
+            listing_id: AlphaListingId,
+        ) -> Result<(u64, TaoAmount, TaoAmount), Error> {
+            let listing = self
+                .alpha_listings
+                .get((netuid, seller, listing_id))
+                .ok_or(Error::ListingNotFound)?;
+
+            let market_price = self.get_market_price(listing.netuid)?;
+            let executed_price = Self::apply_price_offset(market_price, listing.price_offset_bps)?;
+            let price_decimal = Self::price_to_fixed_decimal(executed_price);
+
+            let tao_amount = price_decimal
+                .mul(listing.amount)
+                .map_err(|_| Error::Overflow)?;
+            let fee_amount = listing
+                .fee_rate
+                .mul(tao_amount)
+                .map_err(|_| Error::Overflow)?;
+            let total_required = tao_amount.checked_add(fee_amount).ok_or(Error::Overflow)?;
+
+            Ok((executed_price, tao_amount, total_required))
+        }
+
+        /// Estimate the Alpha amount needed to take a TAO offer at current market price
+        /// Returns: (executed_price * 1e9, alpha_amount_needed, tao_for_seller)
+        #[ink(message)]
+        pub fn estimate_offer_price(
+            &self,
+            netuid: NetUid,
+            buyer: AccountId,
+            offer_id: TaoOfferId,
+        ) -> Result<(u64, AlphaAmount, TaoAmount), Error> {
+            let offer = self
+                .tao_offers
+                .get((netuid, buyer, offer_id))
+                .ok_or(Error::OfferNotFound)?;
+
+            let fee_amount = offer
+                .fee_rate
+                .mul(offer.amount)
+                .map_err(|_| Error::Overflow)?;
+            let tao_for_seller = offer
+                .amount
+                .checked_sub(fee_amount)
+                .ok_or(Error::Overflow)?;
+
+            let market_price = self.get_market_price(offer.netuid)?;
+            let executed_price = Self::apply_price_offset(market_price, offer.price_offset_bps)?;
+            let price_decimal = Self::price_to_fixed_decimal(executed_price);
+
+            let alpha_amount = price_decimal
+                .as_divisor_of(tao_for_seller)
+                .map_err(|_| Error::Overflow)?;
+
+            Ok((executed_price, alpha_amount, tao_for_seller))
+        }
+
+        /// Take an Alpha listing by paying TAO with dynamic market-relative pricing
+        /// The buyer sends TAO with the transaction to purchase Alpha tokens
+        /// Price is calculated based on current market price + listing's price offset
+        /// Allows overpayment and refunds excess TAO to buyer
         #[ink(message, payable)]
         pub fn take_alpha_listing(
             &mut self,
@@ -709,11 +822,21 @@ mod otc_contract {
             let contract_stake_before =
                 self.get_stake_amount(self.env().account_id(), self.hotkey, netuid)?;
 
-            let tao_amount = listing
-                .price
+            // Fetch current market price (returns TAO_per_Alpha * 1e9)
+            let market_price = self.get_market_price(listing.netuid)?;
+
+            // Apply offset to get executed price
+            let executed_price = Self::apply_price_offset(market_price, listing.price_offset_bps)?;
+
+            // Convert to FixedDecimal for calculation
+            let price_decimal = Self::price_to_fixed_decimal(executed_price);
+
+            // Calculate TAO required: price * alpha_amount
+            let tao_amount = price_decimal
                 .mul(listing.amount)
                 .map_err(|_| Error::Overflow)?;
 
+            // Calculate fee
             let fee_amount = listing
                 .fee_rate
                 .mul(tao_amount)
@@ -721,9 +844,14 @@ mod otc_contract {
 
             let total_tao_required = tao_amount.checked_add(fee_amount).ok_or(Error::Overflow)?;
 
-            if tao_received != total_tao_required {
-                return Err(Error::InvalidPrice);
+            // Verify payment (allow overpayment, will refund excess)
+            if tao_received < total_tao_required {
+                return Err(Error::InsufficientPayment);
             }
+
+            let excess_tao = tao_received
+                .checked_sub(total_tao_required)
+                .ok_or(Error::Overflow)?;
 
             self.alpha_listings.remove((netuid, seller, listing_id));
 
@@ -770,13 +898,21 @@ mod otc_contract {
                     .map_err(|_| Error::TransferFailed)?;
             }
 
+            // Refund excess TAO to buyer if any
+            if excess_tao > 0 {
+                self.env()
+                    .transfer(buyer, excess_tao)
+                    .map_err(|_| Error::TransferFailed)?;
+            }
+
             self.env().emit_event(AlphaListingTaken {
                 seller,
                 buyer,
                 netuid,
                 alpha_amount: listing.amount,
                 tao_amount,
-                price: listing.price,
+                price_offset_bps: listing.price_offset_bps,
+                executed_price,
                 fee: fee_amount,
                 alpha_listing_id: Some(listing_id),
             });
@@ -829,8 +965,8 @@ mod otc_contract {
             Ok(())
         }
 
-        /// Take a TAO offer by providing Alpha tokens
-        /// The seller provides Alpha tokens to claim the TAO at the offer price
+        /// Take a TAO offer by providing Alpha tokens with dynamic market-relative pricing
+        /// The seller provides Alpha tokens to claim the TAO at the market price + offer's offset
         /// Prerequisites: The seller must have added the contract as their proxy
         #[ink(message)]
         pub fn take_tao_offer(
@@ -860,10 +996,17 @@ mod otc_contract {
                 .checked_sub(fee_amount)
                 .ok_or(Error::Overflow)?;
 
-            // Calculate Alpha amount needed
-            // offer.price is TAO per Alpha, so alpha_amount = tao_for_seller / price
-            let alpha_amount = offer
-                .price
+            // Fetch current market price (returns TAO_per_Alpha * 1e9)
+            let market_price = self.get_market_price(offer.netuid)?;
+
+            // Apply offset to get executed price
+            let executed_price = Self::apply_price_offset(market_price, offer.price_offset_bps)?;
+
+            // Convert to FixedDecimal for calculation
+            let price_decimal = Self::price_to_fixed_decimal(executed_price);
+
+            // Calculate Alpha amount needed: tao_for_seller / price
+            let alpha_amount = price_decimal
                 .as_divisor_of(tao_for_seller)
                 .map_err(|_| Error::Overflow)?;
 
@@ -939,7 +1082,8 @@ mod otc_contract {
                 netuid,
                 alpha_amount,
                 tao_amount: offer.amount,
-                price: offer.price,
+                price_offset_bps: offer.price_offset_bps,
+                executed_price,
                 fee: fee_amount,
                 tao_offer_id: Some(offer_id),
             });
@@ -1117,8 +1261,12 @@ mod otc_contract {
         use ink::scale::{Decode, Encode};
 
         const SUBTENSOR_EXTENSION_ID: u16 = 0;
-        const GET_STAKE_INFO_FN_ID: u16 = 1001;
+        const GET_STAKE_INFO_FN_ID: u16 = 0;
+        const GET_CURRENT_ALPHA_PRICE_FN_ID: u16 = 15;
         type TestAccountId = <Environment as ink::env::Environment>::AccountId;
+
+        // Mock market price: 2 TAO per Alpha (2 * 1e9)
+        const MOCK_MARKET_PRICE: u64 = 2_000_000_000;
 
         #[derive(Clone, Copy)]
         struct MockStakeExtension;
@@ -1129,19 +1277,26 @@ mod otc_contract {
             }
 
             fn call(&mut self, func_id: u16, input: &[u8], output: &mut Vec<u8>) -> u32 {
-                if func_id != GET_STAKE_INFO_FN_ID {
-                    return 1;
+                match func_id {
+                    GET_STAKE_INFO_FN_ID => {
+                        let mut input = input;
+                        let hotkey = TestAccountId::decode(&mut input).expect("mock decode hotkey");
+                        let coldkey =
+                            TestAccountId::decode(&mut input).expect("mock decode coldkey");
+                        let netuid = u16::decode(&mut input).expect("mock decode netuid");
+
+                        let _ = (hotkey, coldkey, netuid);
+
+                        output.extend(Encode::encode(&Option::<StakeInfo>::None));
+                        0
+                    }
+                    GET_CURRENT_ALPHA_PRICE_FN_ID => {
+                        // Return mock market price: 2 TAO per Alpha
+                        output.extend(Encode::encode(&MOCK_MARKET_PRICE));
+                        0
+                    }
+                    _ => 1,
                 }
-
-                let mut input = input;
-                let hotkey = TestAccountId::decode(&mut input).expect("mock decode hotkey");
-                let coldkey = TestAccountId::decode(&mut input).expect("mock decode coldkey");
-                let netuid = u16::decode(&mut input).expect("mock decode netuid");
-
-                let _ = (hotkey, coldkey, netuid);
-
-                output.extend(Encode::encode(&Option::<StakeInfo>::None));
-                0
             }
         }
 
@@ -1612,17 +1767,17 @@ mod otc_contract {
             // Set caller to Charlie (the seller)
             ink::env::test::set_caller::<Environment>(accounts.charlie);
 
-            let price = U64F64::from_num(2u64).to_bits();
+            let price_offset_bps = 0; // Market price
             let netuid = 1u16;
             let amount = 500_000_000u64; // Below minimum
 
             // Should fail due to amount being too small
-            let result = contract.list_alpha(accounts.django, netuid, amount, price);
+            let result = contract.list_alpha(accounts.django, netuid, amount, price_offset_bps);
             assert_eq!(result, Err(Error::AmountTooSmall));
         }
 
         #[ink::test]
-        fn list_alpha_fails_with_zero_price() {
+        fn list_alpha_fails_with_invalid_price_offset() {
             let accounts = ink::env::test::default_accounts::<Environment>();
             let fee_rate = fee_rate_from_percentage(0.5);
 
@@ -1638,13 +1793,13 @@ mod otc_contract {
             // Set caller to Charlie (the seller)
             ink::env::test::set_caller::<Environment>(accounts.charlie);
 
-            let price = 0u128; // Zero price
+            let price_offset_bps = -10000; // -100% offset (invalid)
             let netuid = 1u16;
             let amount = 5_000_000_000u64;
 
-            // Should fail due to zero price
-            let result = contract.list_alpha(accounts.django, netuid, amount, price);
-            assert_eq!(result, Err(Error::InvalidPrice));
+            // Should fail due to invalid price offset (<= -100%)
+            let result = contract.list_alpha(accounts.django, netuid, amount, price_offset_bps);
+            assert_eq!(result, Err(Error::InvalidPriceOffset));
         }
 
         #[ink::test]
@@ -1671,10 +1826,10 @@ mod otc_contract {
 
             ink::env::test::set_caller::<Environment>(accounts.charlie);
 
-            let price = U64F64::from_num(2u64).to_bits();
+            let price_offset_bps = 0; // Market price
             let amount = contract.get_min_listing_amount();
 
-            let result = contract.list_alpha(accounts.django, netuid, amount, price);
+            let result = contract.list_alpha(accounts.django, netuid, amount, price_offset_bps);
             assert_eq!(result, Err(Error::TooManyListings));
         }
 
@@ -1763,7 +1918,7 @@ mod otc_contract {
                 netuid: 1,
                 seller: accounts.charlie,
                 amount: 5_000_000_000,
-                price: FixedDecimal::from_bits(U64F64::from_num(2u64).to_bits()),
+                price_offset_bps: 0, // Market price
                 fee_rate: contract.fee_rate,
                 created_at: 1000, // Created at block 1000
             };
@@ -1827,7 +1982,7 @@ mod otc_contract {
                 netuid: 1,
                 seller: accounts.charlie,
                 amount: 5_000_000_000,
-                price: FixedDecimal::from_bits(U64F64::from_num(2u64).to_bits()),
+                price_offset_bps: 0, // Market price
                 fee_rate: contract.fee_rate,
                 created_at: 1000,
             };
@@ -1837,7 +1992,7 @@ mod otc_contract {
                 netuid: 1,
                 seller: accounts.charlie,
                 amount: 3_000_000_000,
-                price: FixedDecimal::from_bits(U64F64::from_num(1.5).to_bits()),
+                price_offset_bps: -500, // 5% below market
                 fee_rate: contract.fee_rate,
                 created_at: 1000,
             };
@@ -1919,11 +2074,11 @@ mod otc_contract {
             // Set transferred value (TAO amount)
             ink::env::test::set_value_transferred::<ink::env::DefaultEnvironment>(5_000_000_000);
 
-            let price = U64F64::from_num(2u64).to_bits();
+            let price_offset_bps = 500; // 5% above market
             let netuid = 1u16;
 
             // Create TAO offer
-            let result = contract.create_tao_offer(netuid, price);
+            let result = contract.create_tao_offer(netuid, price_offset_bps);
             assert!(result.is_ok());
 
             let offer_id = result.unwrap();
@@ -1938,7 +2093,7 @@ mod otc_contract {
             assert_eq!(offer.netuid, netuid);
             assert_eq!(offer.buyer, accounts.charlie);
             assert_eq!(offer.amount, 5_000_000_000);
-            assert_eq!(offer.price.to_bits(), price);
+            assert_eq!(offer.price_offset_bps, price_offset_bps);
 
             // Verify user offers index was updated
             let user_offers = contract.get_user_offers(accounts.charlie, netuid);
@@ -1964,11 +2119,11 @@ mod otc_contract {
             // Set transferred value below minimum
             ink::env::test::set_value_transferred::<ink::env::DefaultEnvironment>(500_000_000);
 
-            let price = U64F64::from_num(2u64).to_bits();
+            let price_offset_bps = 0; // Market price
             let netuid = 1u16;
 
             // Should fail due to amount being too small
-            let result = contract.create_tao_offer(netuid, price);
+            let result = contract.create_tao_offer(netuid, price_offset_bps);
             assert_eq!(result, Err(Error::AmountTooSmall));
         }
 
@@ -2039,14 +2194,14 @@ mod otc_contract {
 
             ink::env::test::set_caller::<Environment>(accounts.charlie);
 
-            let price_bits = U64F64::from_num(2u64).to_bits();
-            let result = contract.list_alpha(accounts.bob, 7, 1_000_000_000, price_bits);
+            let price_offset_bps = 0; // Market price
+            let result = contract.list_alpha(accounts.bob, 7, 1_000_000_000, price_offset_bps);
 
             assert_eq!(result, Err(Error::SubnetListingsFrozen));
         }
 
         #[ink::test]
-        fn create_tao_offer_fails_with_zero_price() {
+        fn create_tao_offer_fails_with_invalid_price_offset() {
             let accounts = ink::env::test::default_accounts::<Environment>();
             let fee_rate = fee_rate_from_percentage(0.5);
 
@@ -2064,12 +2219,12 @@ mod otc_contract {
             // Set transferred value
             ink::env::test::set_value_transferred::<ink::env::DefaultEnvironment>(5_000_000_000);
 
-            let price = 0u128; // Zero price
+            let price_offset_bps = -10000; // -100% offset (invalid)
             let netuid = 1u16;
 
-            // Should fail due to zero price
-            let result = contract.create_tao_offer(netuid, price);
-            assert_eq!(result, Err(Error::InvalidPrice));
+            // Should fail due to invalid price offset (<= -100%)
+            let result = contract.create_tao_offer(netuid, price_offset_bps);
+            assert_eq!(result, Err(Error::InvalidPriceOffset));
         }
 
         #[ink::test]
@@ -2099,9 +2254,9 @@ mod otc_contract {
                 contract.get_min_offer_amount().into(),
             );
 
-            let price = U64F64::from_num(2u64).to_bits();
+            let price_offset_bps = 0; // Market price
 
-            let result = contract.create_tao_offer(netuid, price);
+            let result = contract.create_tao_offer(netuid, price_offset_bps);
             assert_eq!(result, Err(Error::TooManyOffers));
         }
 
@@ -2124,11 +2279,11 @@ mod otc_contract {
             // Set transferred value to zero
             ink::env::test::set_value_transferred::<ink::env::DefaultEnvironment>(0);
 
-            let price = U64F64::from_num(2u64).to_bits();
+            let price_offset_bps = 0; // Market price
             let netuid = 1u16;
 
             // Should fail due to zero amount
-            let result = contract.create_tao_offer(netuid, price);
+            let result = contract.create_tao_offer(netuid, price_offset_bps);
             assert_eq!(result, Err(Error::AmountTooSmall));
         }
 
@@ -2146,18 +2301,18 @@ mod otc_contract {
                 100,
             );
 
-            // Create a TAO offer
-            let price = U64F64::from_num(2u64).to_bits(); // 2 TAO per Alpha
+            // Test with market price (offset = 0)
+            // Mock market price: 2 TAO per Alpha (2 * 1e9 = 2_000_000_000)
+            let market_price: u64 = MOCK_MARKET_PRICE;
             let tao_amount = 10_000_000_000u64; // 10 TAO
-            let netuid = 1u16;
 
-            // Create the offer
+            // Create the offer with 0% offset (market price)
             let offer = TaoOffer {
                 id: 1,
-                netuid,
+                netuid: 1,
                 buyer: accounts.charlie,
                 amount: tao_amount,
-                price: FixedDecimal::from_bits(price),
+                price_offset_bps: 0, // Market price
                 fee_rate: contract.fee_rate,
                 created_at: 0,
             };
@@ -2166,11 +2321,19 @@ mod otc_contract {
             let fee_amount = 100_000_000u64; // 1% of 10 TAO = 0.1 TAO
             let tao_for_seller = tao_amount - fee_amount; // 9.9 TAO
 
+            // Apply the price offset (0% = market price)
+            let executed_price =
+                OtcContract::apply_price_offset(market_price, offer.price_offset_bps).unwrap();
+            assert_eq!(executed_price, market_price); // No change with 0% offset
+
+            // Convert to FixedDecimal for calculation
+            let price_decimal = OtcContract::price_to_fixed_decimal(executed_price);
+
             // Expected Alpha: 9.9 TAO / 2 TAO per Alpha = 4.95 Alpha
             let expected_alpha = 4_950_000_000u64; // 4.95 Alpha in rao
 
             // Test the calculation using the same logic as the contract
-            let calculated_alpha = offer.price.as_divisor_of(tao_for_seller).unwrap();
+            let calculated_alpha = price_decimal.as_divisor_of(tao_for_seller).unwrap();
             assert_eq!(calculated_alpha, expected_alpha);
         }
 
@@ -2194,7 +2357,7 @@ mod otc_contract {
                 netuid: 1,
                 buyer: accounts.charlie,
                 amount: 5_000_000_000,
-                price: FixedDecimal::from_bits(U64F64::from_num(2u64).to_bits()),
+                price_offset_bps: 0, // Market price
                 fee_rate: contract.fee_rate,
                 created_at: 1000,
             };
@@ -2295,7 +2458,7 @@ mod otc_contract {
                 netuid: 1,
                 buyer: accounts.charlie,
                 amount: 5_000_000_000,
-                price: FixedDecimal::from_bits(U64F64::from_num(2u64).to_bits()),
+                price_offset_bps: 0, // Market price
                 fee_rate: contract.fee_rate,
                 created_at: 1000,
             };
@@ -2305,7 +2468,7 @@ mod otc_contract {
                 netuid: 1,
                 buyer: accounts.charlie,
                 amount: 3_000_000_000,
-                price: FixedDecimal::from_bits(U64F64::from_num(1u64).to_bits()),
+                price_offset_bps: -500, // 5% below market
                 fee_rate: contract.fee_rate,
                 created_at: 1100,
             };
@@ -2360,7 +2523,7 @@ mod otc_contract {
         }
 
         #[ink::test]
-        fn take_alpha_listing_fails_with_wrong_payment() {
+        fn take_alpha_listing_fails_with_insufficient_payment() {
             let accounts = ink::env::test::default_accounts::<Environment>();
             let fee_rate = fee_rate_from_percentage(1.0);
 
@@ -2375,15 +2538,14 @@ mod otc_contract {
                 100,
             );
 
-            // Create a mock listing
+            // Create a mock listing with 0% offset (market price = 2 TAO per Alpha)
             let alpha_amount = 5_000_000_000u64;
-            let price_per_alpha = U64F64::from_num(2u64);
             let listing = AlphaListing {
                 id: 1,
                 netuid: 1,
                 seller: accounts.charlie,
                 amount: alpha_amount,
-                price: FixedDecimal::from_bits(price_per_alpha.to_bits()),
+                price_offset_bps: 0, // Market price
                 fee_rate: contract.fee_rate,
                 created_at: 1000,
             };
@@ -2392,15 +2554,15 @@ mod otc_contract {
                 .alpha_listings
                 .insert((1, accounts.charlie, 1), &listing);
 
-            // Set wrong payment amount
+            // Set wrong payment amount (too little)
             ink::env::test::set_caller::<Environment>(accounts.django);
             ink::env::test::set_value_transferred::<ink::env::DefaultEnvironment>(
                 1_000_000_000u128,
             ); // Too little
 
-            // Try to take the listing
+            // Try to take the listing - should fail with InsufficientPayment
             let result = contract.take_alpha_listing(1, accounts.charlie, 1);
-            assert_eq!(result, Err(Error::InvalidPrice));
+            assert_eq!(result, Err(Error::InsufficientPayment));
         }
 
         #[ink::test]
@@ -2709,8 +2871,8 @@ mod otc_contract {
             ink::env::test::set_caller::<Environment>(accounts.charlie);
             ink::env::test::set_value_transferred::<ink::env::DefaultEnvironment>(5_000_000_000);
 
-            let price = U64F64::from_num(2u64).to_bits();
-            let result = contract.create_tao_offer(1, price);
+            let price_offset_bps = 0; // Market price
+            let result = contract.create_tao_offer(1, price_offset_bps);
             assert!(result.is_ok());
             assert_eq!(result.unwrap(), 1);
 
@@ -2718,7 +2880,7 @@ mod otc_contract {
             assert_eq!(contract.next_tao_offer_id, 2);
 
             // Create another offer
-            let result2 = contract.create_tao_offer(1, price);
+            let result2 = contract.create_tao_offer(1, price_offset_bps);
             assert!(result2.is_ok());
             assert_eq!(result2.unwrap(), 2);
             assert_eq!(contract.next_tao_offer_id, 3);
@@ -2744,7 +2906,7 @@ mod otc_contract {
                 netuid: 1,
                 seller: accounts.charlie,
                 amount: 5_000_000_000,
-                price: FixedDecimal::from_bits(U64F64::from_num(2u64).to_bits()),
+                price_offset_bps: 0, // Market price
                 fee_rate: contract.fee_rate,
                 created_at: 1000,
             };
@@ -2754,7 +2916,7 @@ mod otc_contract {
                 netuid: 2,
                 seller: accounts.charlie,
                 amount: 3_000_000_000,
-                price: FixedDecimal::from_bits(U64F64::from_num(1.5).to_bits()),
+                price_offset_bps: -500, // 5% below market
                 fee_rate: contract.fee_rate,
                 created_at: 1000,
             };
@@ -2764,7 +2926,7 @@ mod otc_contract {
                 netuid: 1,
                 seller: accounts.charlie,
                 amount: 7_000_000_000,
-                price: FixedDecimal::from_bits(U64F64::from_num(3u64).to_bits()),
+                price_offset_bps: 1000, // 10% above market
                 fee_rate: contract.fee_rate,
                 created_at: 1000,
             };
@@ -2821,20 +2983,20 @@ mod otc_contract {
             ink::env::test::set_caller::<Environment>(accounts.charlie);
             ink::env::test::set_value_transferred::<ink::env::DefaultEnvironment>(5_000_000_000);
 
-            let price = U64F64::from_num(2u64).to_bits();
+            let price_offset_bps = 0; // Market price
 
             // Offer on netuid 1
-            let offer1_id = contract.create_tao_offer(1, price).unwrap();
+            let offer1_id = contract.create_tao_offer(1, price_offset_bps).unwrap();
             assert_eq!(offer1_id, 1);
 
             // Offer on netuid 2
             ink::env::test::set_value_transferred::<ink::env::DefaultEnvironment>(3_000_000_000);
-            let offer2_id = contract.create_tao_offer(2, price).unwrap();
+            let offer2_id = contract.create_tao_offer(2, price_offset_bps).unwrap();
             assert_eq!(offer2_id, 2);
 
             // Another offer on netuid 1
             ink::env::test::set_value_transferred::<ink::env::DefaultEnvironment>(7_000_000_000);
-            let offer3_id = contract.create_tao_offer(1, price).unwrap();
+            let offer3_id = contract.create_tao_offer(1, price_offset_bps).unwrap();
             assert_eq!(offer3_id, 3);
 
             // Verify correct retrieval
@@ -2866,7 +3028,7 @@ mod otc_contract {
                 netuid: 1,
                 seller: accounts.charlie,
                 amount: 5_000_000_000,
-                price: FixedDecimal::from_bits(U64F64::from_num(2u64).to_bits()),
+                price_offset_bps: 0, // Market price
                 fee_rate: contract.fee_rate,
                 created_at: 1000,
             };
@@ -2911,7 +3073,7 @@ mod otc_contract {
                 netuid: 1,
                 buyer: accounts.charlie,
                 amount: 5_000_000_000,
-                price: FixedDecimal::from_bits(U64F64::from_num(2u64).to_bits()),
+                price_offset_bps: 0, // Market price
                 fee_rate: contract.fee_rate,
                 created_at: 1000,
             };
@@ -2949,10 +3111,10 @@ mod otc_contract {
             );
 
             ink::env::test::set_caller::<Environment>(accounts.charlie);
-            let price = U64F64::from_num(2u64).to_bits();
+            let price_offset_bps = 0; // Market price
 
             // Try to list with zero amount
-            let result = contract.list_alpha(accounts.django, 1, 0, price);
+            let result = contract.list_alpha(accounts.django, 1, 0, price_offset_bps);
             assert_eq!(result, Err(Error::AmountTooSmall));
         }
 
@@ -2976,8 +3138,8 @@ mod otc_contract {
             let large_amount = 1_000_000_000_000_000u128; // 1 million TAO
             ink::env::test::set_value_transferred::<ink::env::DefaultEnvironment>(large_amount);
 
-            let price = U64F64::from_num(2u64).to_bits();
-            let result = contract.create_tao_offer(1, price);
+            let price_offset_bps = 0; // Market price
+            let result = contract.create_tao_offer(1, price_offset_bps);
             assert!(result.is_ok());
 
             let offer = contract
@@ -3020,7 +3182,7 @@ mod otc_contract {
         }
 
         #[ink::test]
-        fn test_take_listing_exact_payment_required() {
+        fn test_take_listing_payment_validation() {
             let accounts = ink::env::test::default_accounts::<Environment>();
             let fee_rate = fee_rate_from_percentage(1.0);
 
@@ -3035,15 +3197,14 @@ mod otc_contract {
                 100,
             );
 
-            // Create a listing
+            // Create a listing with 0% offset (market price = 2 TAO per Alpha from mock)
             let alpha_amount = 5_000_000_000u64; // 5 Alpha
-            let price_per_alpha = U64F64::from_num(2u64); // 2 TAO per Alpha
             let listing = AlphaListing {
                 id: 1,
                 netuid: 1,
                 seller: accounts.charlie,
                 amount: alpha_amount,
-                price: FixedDecimal::from_bits(price_per_alpha.to_bits()),
+                price_offset_bps: 0, // Market price
                 fee_rate: contract.fee_rate,
                 created_at: 1000,
             };
@@ -3052,32 +3213,24 @@ mod otc_contract {
                 .alpha_listings
                 .insert((1, accounts.charlie, 1), &listing);
 
-            // Calculate exact required payment
-            let total_price = listing.price.mul(alpha_amount).unwrap(); // 10 TAO
-            let fee = contract.fee_rate.mul(total_price).unwrap(); // 0.1 TAO (1% fee)
-            let required_payment = total_price + fee; // 10.1 TAO
+            // With mock market price of 2 TAO per Alpha:
+            // TAO required = 5 Alpha * 2 TAO/Alpha = 10 TAO
+            // Fee = 1% of 10 TAO = 0.1 TAO
+            // Total required = 10.1 TAO = 10_100_000_000 rao
+            let required_payment: u64 = 10_100_000_000;
 
             ink::env::test::set_caller::<Environment>(accounts.django);
 
-            // Test with payment too low by 1 rao
-            ink::env::test::set_value_transferred::<ink::env::DefaultEnvironment>(
-                (required_payment - 1) as u128,
-            );
+            // Test with payment too low by 1 rao - should fail with InsufficientPayment
+            ink::env::test::set_value_transferred::<ink::env::DefaultEnvironment>(u128::from(
+                required_payment - 1,
+            ));
             let result = contract.take_alpha_listing(1, accounts.charlie, 1);
-            assert_eq!(result, Err(Error::InvalidPrice));
+            assert_eq!(result, Err(Error::InsufficientPayment));
 
-            // Test with exact payment
-            ink::env::test::set_value_transferred::<ink::env::DefaultEnvironment>(
-                required_payment as u128,
-            );
-            // Would succeed if runtime calls worked, but we test the validation logic
-
-            // Test with payment too high by 1 rao
-            ink::env::test::set_value_transferred::<ink::env::DefaultEnvironment>(
-                (required_payment + 1) as u128,
-            );
-            let result = contract.take_alpha_listing(1, accounts.charlie, 1);
-            assert_eq!(result, Err(Error::InvalidPrice));
+            // Note: With dynamic pricing, overpayment is allowed (excess is refunded)
+            // The test for exact/over payment would succeed at the validation step
+            // but fail at runtime calls in unit tests
         }
 
         #[ink::test]
@@ -3094,35 +3247,35 @@ mod otc_contract {
                 100,
             );
 
-            // Test various price and amount combinations
-            let test_cases = vec![
-                (2.0, 10_000_000_000u64, 4_950_000_000u64), // 2 TAO/Alpha, 10 TAO offer -> 4.95 Alpha
-                (1.5, 15_000_000_000u64, 9_900_000_000u64), // 1.5 TAO/Alpha, 15 TAO offer -> 9.9 Alpha
-                (0.5, 5_000_000_000u64, 9_900_000_000u64), // 0.5 TAO/Alpha, 5 TAO offer -> 9.9 Alpha
-                (3.33, 33_300_000_000u64, 9_900_000_000u64), // 3.33 TAO/Alpha, 33.3 TAO offer -> ~9.9 Alpha
-            ];
+            // Test with fixed market price of 2 TAO per Alpha (from mock)
+            // and various offsets
+            let market_price: u64 = MOCK_MARKET_PRICE; // 2 TAO per Alpha
 
-            for (price_float, tao_amount, expected_alpha) in test_cases {
-                let price = FixedDecimal::from_bits(U64F64::from_num(price_float).to_bits());
-                let fee_amount = contract.fee_rate.mul(tao_amount).unwrap();
-                let tao_for_seller = tao_amount - fee_amount;
-                let calculated_alpha = price.as_divisor_of(tao_for_seller).unwrap();
+            // Test case: 0% offset, 10 TAO offer
+            let tao_amount = 10_000_000_000u64;
+            let fee_amount = contract.fee_rate.mul(tao_amount).unwrap();
+            let tao_for_seller = tao_amount - fee_amount; // 9.9 TAO
 
-                // Allow for small rounding differences (within 1000 rao)
-                let diff = if calculated_alpha > expected_alpha {
-                    calculated_alpha - expected_alpha
-                } else {
-                    expected_alpha - calculated_alpha
-                };
-                assert!(
-                    diff < 1000,
-                    "Calculation mismatch for price {} with {} TAO: got {}, expected {}",
-                    price_float,
-                    tao_amount,
-                    calculated_alpha,
-                    expected_alpha
-                );
-            }
+            // Apply 0% offset = market price
+            let executed_price = OtcContract::apply_price_offset(market_price, 0).unwrap();
+            let price_decimal = OtcContract::price_to_fixed_decimal(executed_price);
+
+            // 9.9 TAO / 2 TAO per Alpha = 4.95 Alpha
+            let expected_alpha = 4_950_000_000u64;
+            let calculated_alpha = price_decimal.as_divisor_of(tao_for_seller).unwrap();
+
+            // Allow for small rounding differences (within 1000 rao)
+            let diff = if calculated_alpha > expected_alpha {
+                calculated_alpha - expected_alpha
+            } else {
+                expected_alpha - calculated_alpha
+            };
+            assert!(
+                diff < 1000,
+                "Calculation mismatch: got {}, expected {}",
+                calculated_alpha,
+                expected_alpha
+            );
         }
 
         // Integration-style Unit Tests
@@ -3147,7 +3300,7 @@ mod otc_contract {
                 netuid: 1,
                 seller: accounts.charlie,
                 amount: 5_000_000_000,
-                price: FixedDecimal::from_bits(U64F64::from_num(2u64).to_bits()),
+                price_offset_bps: 0, // Market price
                 fee_rate: contract.fee_rate,
                 created_at: 1000,
             };
@@ -3202,7 +3355,7 @@ mod otc_contract {
                 netuid: 1,
                 seller: accounts.charlie,
                 amount: 5_000_000_000,
-                price: FixedDecimal::from_bits(U64F64::from_num(2u64).to_bits()),
+                price_offset_bps: 0, // Market price
                 fee_rate: contract.fee_rate,
                 created_at: 1000,
             };
@@ -3212,7 +3365,7 @@ mod otc_contract {
                 netuid: 1,
                 seller: accounts.django,
                 amount: 3_000_000_000,
-                price: FixedDecimal::from_bits(U64F64::from_num(1.5).to_bits()),
+                price_offset_bps: -500, // 5% below market
                 fee_rate: contract.fee_rate,
                 created_at: 1100,
             };
@@ -3233,15 +3386,11 @@ mod otc_contract {
             // Create offers from different buyers
             ink::env::test::set_caller::<Environment>(accounts.eve);
             ink::env::test::set_value_transferred::<ink::env::DefaultEnvironment>(7_000_000_000);
-            let offer1_id = contract
-                .create_tao_offer(1, U64F64::from_num(2.5).to_bits())
-                .unwrap();
+            let offer1_id = contract.create_tao_offer(1, 500).unwrap(); // 5% above market
 
             ink::env::test::set_caller::<Environment>(accounts.frank);
             ink::env::test::set_value_transferred::<ink::env::DefaultEnvironment>(4_000_000_000);
-            let offer2_id = contract
-                .create_tao_offer(1, U64F64::from_num(1.8).to_bits())
-                .unwrap();
+            let offer2_id = contract.create_tao_offer(1, -200).unwrap(); // 2% below market
 
             // Verify all exist independently
             assert!(contract.get_listing(1, accounts.charlie, 1).is_some());
@@ -3276,7 +3425,7 @@ mod otc_contract {
                 netuid: 1,
                 seller: accounts.charlie,
                 amount: 5_000_000_000,
-                price: FixedDecimal::from_bits(U64F64::from_num(2u64).to_bits()),
+                price_offset_bps: 0, // Market price
                 fee_rate: contract.fee_rate,
                 created_at: 1000,
             };
@@ -3291,9 +3440,7 @@ mod otc_contract {
             // Same user creates an offer on a different netuid
             ink::env::test::set_caller::<Environment>(accounts.charlie);
             ink::env::test::set_value_transferred::<ink::env::DefaultEnvironment>(3_000_000_000);
-            let offer_id = contract
-                .create_tao_offer(2, U64F64::from_num(1.5).to_bits())
-                .unwrap();
+            let offer_id = contract.create_tao_offer(2, -500).unwrap(); // 5% below market
 
             // Verify both exist independently
             assert!(contract.get_listing(1, accounts.charlie, 1).is_some());
@@ -3320,7 +3467,7 @@ mod otc_contract {
             let accounts = ink::env::test::default_accounts::<Environment>();
             let zero_fee_rate = 0u128; // 0% fee
 
-            let mut contract = OtcContract::new(
+            let contract = OtcContract::new(
                 accounts.alice,
                 accounts.bob,
                 zero_fee_rate,
@@ -3329,28 +3476,10 @@ mod otc_contract {
                 100,
             );
 
-            // Create a listing with zero fee
-            let listing = AlphaListing {
-                id: 1,
-                netuid: 1,
-                seller: accounts.charlie,
-                amount: 5_000_000_000,
-                price: FixedDecimal::from_bits(U64F64::from_num(2u64).to_bits()),
-                fee_rate: contract.fee_rate,
-                created_at: 1000,
-            };
-
-            contract
-                .alpha_listings
-                .insert((1, accounts.charlie, 1), &listing);
-
-            // Calculate payment with zero fee
-            let total_price = listing.price.mul(listing.amount).unwrap();
-            let fee = contract.fee_rate.mul(total_price).unwrap();
+            // Test that zero fee rate results in no fee
+            let tao_amount = 10_000_000_000u64; // 10 TAO
+            let fee = contract.fee_rate.mul(tao_amount).unwrap();
             assert_eq!(fee, 0); // Fee should be zero
-
-            let required_payment = total_price + fee;
-            assert_eq!(required_payment, total_price); // Payment equals price without fee
         }
 
         #[ink::test]
@@ -3375,10 +3504,10 @@ mod otc_contract {
             ink::env::test::set_caller::<Environment>(accounts.charlie);
             ink::env::test::set_value_transferred::<ink::env::DefaultEnvironment>(2_000_000_000);
 
-            let offer1 = contract.create_tao_offer(min_netuid, U64F64::from_num(1u64).to_bits());
+            let offer1 = contract.create_tao_offer(min_netuid, 0); // Market price
             assert!(offer1.is_ok());
 
-            let offer2 = contract.create_tao_offer(max_netuid, U64F64::from_num(1u64).to_bits());
+            let offer2 = contract.create_tao_offer(max_netuid, 0); // Market price
             assert!(offer2.is_ok());
 
             // Verify retrieval works with boundary values
@@ -3505,17 +3634,12 @@ mod otc_contract {
 
             // Try to list alpha - should fail
             ink::env::test::set_caller::<Environment>(accounts.charlie);
-            let result = contract.list_alpha(
-                accounts.charlie,
-                1,
-                2_000_000_000,
-                U64F64::from_num(1u64).to_bits(),
-            );
+            let result = contract.list_alpha(accounts.charlie, 1, 2_000_000_000, 0); // Market price
             assert_eq!(result, Err(Error::TradingPaused));
 
             // Try to create TAO offer - should fail
             ink::env::test::set_value_transferred::<ink::env::DefaultEnvironment>(2_000_000_000);
-            let result = contract.create_tao_offer(1, U64F64::from_num(1u64).to_bits());
+            let result = contract.create_tao_offer(1, 0); // Market price
             assert_eq!(result, Err(Error::TradingPaused));
         }
 
@@ -3536,9 +3660,7 @@ mod otc_contract {
             // Create a TAO offer first
             ink::env::test::set_caller::<Environment>(accounts.charlie);
             ink::env::test::set_value_transferred::<ink::env::DefaultEnvironment>(2_000_000_000);
-            let offer_id = contract
-                .create_tao_offer(1, U64F64::from_num(1u64).to_bits())
-                .unwrap();
+            let offer_id = contract.create_tao_offer(1, 0).unwrap(); // Market price
 
             // Pause trading
             ink::env::test::set_caller::<Environment>(accounts.alice);
@@ -3578,9 +3700,7 @@ mod otc_contract {
             // Create a TAO offer first
             ink::env::test::set_caller::<Environment>(accounts.charlie);
             ink::env::test::set_value_transferred::<ink::env::DefaultEnvironment>(2_000_000_000);
-            let offer_id = contract
-                .create_tao_offer(1, U64F64::from_num(1u64).to_bits())
-                .unwrap();
+            let offer_id = contract.create_tao_offer(1, 0).unwrap(); // Market price
 
             // Fully pause the contract
             ink::env::test::set_caller::<Environment>(accounts.alice);
@@ -3588,12 +3708,7 @@ mod otc_contract {
 
             // Try to list alpha - should fail
             ink::env::test::set_caller::<Environment>(accounts.charlie);
-            let result = contract.list_alpha(
-                accounts.charlie,
-                1,
-                2_000_000_000,
-                U64F64::from_num(1u64).to_bits(),
-            );
+            let result = contract.list_alpha(accounts.charlie, 1, 2_000_000_000, 0); // Market price
             assert_eq!(result, Err(Error::ContractFullyPaused));
 
             // Try to cancel offer - should also fail
@@ -3602,7 +3717,7 @@ mod otc_contract {
 
             // Try to create TAO offer - should fail
             ink::env::test::set_value_transferred::<ink::env::DefaultEnvironment>(2_000_000_000);
-            let result = contract.create_tao_offer(1, U64F64::from_num(1u64).to_bits());
+            let result = contract.create_tao_offer(1, 0); // Market price
             assert_eq!(result, Err(Error::ContractFullyPaused));
         }
 
