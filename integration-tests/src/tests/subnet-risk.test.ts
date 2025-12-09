@@ -11,7 +11,6 @@ import {
 
 import {
     taoToRao,
-    priceToFixedPoint,
     waitForBlocks,
     fundAccount,
     registerSubnet,
@@ -20,6 +19,7 @@ import {
     createHotkey,
     elevateRegistrationLimits,
     type Wallet,
+    MARKET_PRICE,
 } from "../utils";
 
 import {
@@ -120,7 +120,7 @@ describe("Subnet Risk Controls", () => {
         return (listingsResult.value.response as (number | bigint)[]).map((id) => Number(id));
     };
 
-    const listAlphaForCharlie = async (amount: bigint, price: bigint) => {
+    const listAlphaForCharlie = async (amount: bigint, priceOffsetBps: number = MARKET_PRICE) => {
         const { accounts } = context;
 
         const listTx = contract.send("list_alpha", {
@@ -129,7 +129,7 @@ describe("Subnet Risk Controls", () => {
                 hotkey: charlieHotkey.address,
                 netuid,
                 amount,
-                price,
+                price_offset_bps: priceOffsetBps,
             },
         });
 
@@ -181,12 +181,11 @@ describe("Subnet Risk Controls", () => {
         const { accounts, api } = context;
 
         const listingAmount = taoToRao(40);
-        const listingPrice = priceToFixedPoint(1.8);
 
         const stakeBefore = await getStakeBalance(api, charlieHotkey.address, netuid, accounts.charlie.address);
         console.log(`Charlie's stake before listing: ${formatStakeAmount(stakeBefore)}`);
 
-        const { listingId } = await listAlphaForCharlie(listingAmount, listingPrice);
+        const { listingId } = await listAlphaForCharlie(listingAmount, MARKET_PRICE);
 
         const reservedAfterListing = await fetchReservedAlpha();
         console.log(`Reserved Alpha after listing: ${formatStakeAmount(reservedAfterListing)}`);
@@ -241,7 +240,7 @@ describe("Subnet Risk Controls", () => {
     it("rejects force cancellation attempts from non-owners", async () => {
         const { accounts } = context;
 
-        const { listingId } = await listAlphaForCharlie(taoToRao(15), priceToFixedPoint(2.0));
+        const { listingId } = await listAlphaForCharlie(taoToRao(15), MARKET_PRICE);
 
         const unauthorizedTx = contract.send("force_cancel_alpha_listing", {
             origin: accounts.charlie.address,
@@ -282,7 +281,7 @@ describe("Subnet Risk Controls", () => {
 
         const blockBeforeListing = await api.query.System.Number.getValue();
 
-        const { listingId, createdAt } = await listAlphaForCharlie(taoToRao(10), priceToFixedPoint(1.5));
+        const { listingId, createdAt } = await listAlphaForCharlie(taoToRao(10), MARKET_PRICE);
 
         const cancelTx = contract.send("force_cancel_alpha_listing", {
             origin: accounts.alice.address,
@@ -349,7 +348,7 @@ describe("Subnet Risk Controls", () => {
                 hotkey: charlieHotkey.address,
                 netuid,
                 amount: taoToRao(5),
-                price: priceToFixedPoint(2.2),
+                price_offset_bps: MARKET_PRICE,
             },
         });
 
@@ -388,7 +387,7 @@ describe("Subnet Risk Controls", () => {
         expect(unfreezeResult.ok).toBe(true);
         await waitForBlocks(context.api, 1);
 
-        const { listingId } = await listAlphaForCharlie(taoToRao(8), priceToFixedPoint(1.9));
+        const { listingId } = await listAlphaForCharlie(taoToRao(8), MARKET_PRICE);
 
         // Clean up listing so later tests start fresh
         const cleanupTx = contract.send("force_cancel_alpha_listing", {
@@ -407,8 +406,8 @@ describe("Subnet Risk Controls", () => {
     it("supports end-to-end monitor workflow for risky subnets", async () => {
         const { accounts } = context;
 
-        await listAlphaForCharlie(taoToRao(12), priceToFixedPoint(1.6));
-        await listAlphaForCharlie(taoToRao(18), priceToFixedPoint(1.7));
+        await listAlphaForCharlie(taoToRao(12), MARKET_PRICE);
+        await listAlphaForCharlie(taoToRao(18), MARKET_PRICE);
 
         const listingsBefore = await getUserListings();
         expect(listingsBefore.length).toBeGreaterThanOrEqual(2);
@@ -462,7 +461,7 @@ describe("Subnet Risk Controls", () => {
         expect(unfreezeResult.ok).toBe(true);
         await waitForBlocks(context.api, 2);
 
-        const { listingId } = await listAlphaForCharlie(taoToRao(9), priceToFixedPoint(1.4));
+        const { listingId } = await listAlphaForCharlie(taoToRao(9), MARKET_PRICE);
 
         // Final cleanup
         const finalCancelTx = contract.send("force_cancel_alpha_listing", {

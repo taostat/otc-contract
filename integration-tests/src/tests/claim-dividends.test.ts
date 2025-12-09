@@ -8,11 +8,11 @@ import {
     registerValidator,
     addContractAsProxy,
     createHotkey,
-    priceToFixedPoint,
-    fixedPointToPrice,
     formatAddress,
     elevateRegistrationLimits,
     type Wallet,
+    MARKET_PRICE,
+    bpsToPercentage,
 } from "../utils";
 import {
     getStakeBalance,
@@ -106,7 +106,7 @@ describe("Dividends Claiming", () => {
         const { accounts } = context;
 
         const listingAmount = taoToRao(20); // 20 Alpha in rao
-        const listingPrice = priceToFixedPoint(2.0); // 2 TAO per Alpha
+        const priceOffsetBps = MARKET_PRICE; // Market price
         const dividendAmount = taoToRao(5); // Simulated rewards (5 Alpha)
 
         console.log("=== Listing Alpha to populate reserved balance ===");
@@ -116,7 +116,7 @@ describe("Dividends Claiming", () => {
                 hotkey: bobHotkey.address,
                 netuid,
                 amount: listingAmount,
-                price: listingPrice,
+                price_offset_bps: priceOffsetBps,
             },
         });
         const listResult = await listTx.signAndSubmit(accounts.bob.signer);
@@ -344,7 +344,7 @@ describe("Dividends Claiming", () => {
         }
 
         console.log("=== Dividends flow verified ===");
-        console.log(`Listing amount: ${formatStakeAmount(listingAmount)} at price ${fixedPointToPrice(listingPrice)} TAO/Alpha`);
+        console.log(`Listing amount: ${formatStakeAmount(listingAmount)} at ${bpsToPercentage(priceOffsetBps)}% offset from market`);
         console.log(`Dividends simulated: ${formatStakeAmount(dividendAmount)}`);
     });
 
@@ -463,7 +463,6 @@ describe("Dividends Claiming", () => {
 
         // Create a listing to establish reserved alpha
         const listingAmount = taoToRao(15);
-        const listingPrice = priceToFixedPoint(1.5);
 
         const listTx = contract.send("list_alpha", {
             origin: accounts.bob.address,
@@ -471,7 +470,7 @@ describe("Dividends Claiming", () => {
                 hotkey: bobHotkey.address,
                 netuid,
                 amount: listingAmount,
-                price: listingPrice,
+                price_offset_bps: MARKET_PRICE,
             },
         });
         const listResult = await listTx.signAndSubmit(accounts.bob.signer);
@@ -583,7 +582,7 @@ describe("Dividends Claiming", () => {
                 hotkey: bobHotkey.address,
                 netuid,
                 amount: listing1Amount,
-                price: priceToFixedPoint(1.0),
+                price_offset_bps: MARKET_PRICE,
             },
         });
         const list1Result = await list1Tx.signAndSubmit(accounts.bob.signer);
@@ -596,7 +595,7 @@ describe("Dividends Claiming", () => {
                 hotkey: charlieHotkey.address,
                 netuid,
                 amount: listing2Amount,
-                price: priceToFixedPoint(1.5),
+                price_offset_bps: MARKET_PRICE,
             },
         });
         const list2Result = await list2Tx.signAndSubmit(accounts.charlie.signer);
@@ -609,7 +608,7 @@ describe("Dividends Claiming", () => {
                 hotkey: bobHotkey.address,
                 netuid,
                 amount: listing3Amount,
-                price: priceToFixedPoint(2.0),
+                price_offset_bps: MARKET_PRICE,
             },
         });
         const list3Result = await list3Tx.signAndSubmit(accounts.bob.signer);

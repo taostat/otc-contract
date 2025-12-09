@@ -325,6 +325,88 @@ export function priceToFixedPoint(pricePerAlpha: number): bigint {
     return (numerator * one) / denominator;
 }
 
+// ============================================================================
+// Dynamic Pricing Helpers (Basis Points)
+// ============================================================================
+
+/**
+ * Common price offset constants for tests
+ * Basis points: 1 bp = 0.01%, 100 bp = 1%, 10000 bp = 100%
+ */
+export const MARKET_PRICE = 0;           // 0% offset (exactly market price)
+export const ABOVE_MARKET_5 = 500;       // +5% above market
+export const ABOVE_MARKET_10 = 1000;     // +10% above market
+export const BELOW_MARKET_5 = -500;      // -5% below market
+export const BELOW_MARKET_10 = -1000;    // -10% below market
+export const INVALID_OFFSET = -10000;    // -100% (invalid, would make price 0)
+
+/**
+ * Convert a percentage to basis points
+ * e.g., 5 -> 500, -5 -> -500, 0.5 -> 50
+ */
+export function percentageToBps(percentage: number): number {
+    return Math.round(percentage * 100);
+}
+
+/**
+ * Convert basis points to percentage
+ * e.g., 500 -> 5, -500 -> -5
+ */
+export function bpsToPercentage(bps: number): number {
+    return bps / 100;
+}
+
+/**
+ * Fetch current market price for a subnet from the chain
+ * Returns price as TAO_per_Alpha * 1e9 (scaled for precision)
+ */
+export async function getCurrentAlphaPrice(
+    api: TypedApi<typeof devnet>,
+    netuid: number
+): Promise<bigint> {
+    const price = await api.apis.SwapRuntimeApi.current_alpha_price(netuid);
+    return price;
+}
+
+/**
+ * Apply a basis points offset to a market price
+ * Formula: executed_price = market_price * (10000 + offset_bps) / 10000
+ */
+export function applyPriceOffset(marketPrice: bigint, offsetBps: number): bigint {
+    const base = 10000n;
+    const multiplier = base + BigInt(offsetBps);
+    if (multiplier <= 0n) {
+        throw new Error(`Invalid offset: ${offsetBps} would result in zero or negative price`);
+    }
+    return (marketPrice * multiplier) / base;
+}
+
+/**
+ * Convert a scaled price (price * 1e9) to U64F64 fixed-point representation
+ * This is the format used internally by the contract for calculations
+ */
+export function scaledPriceToFixedPoint(scaledPrice: bigint): bigint {
+    // scaledPrice is TAO_per_Alpha * 1e9
+    // We need to convert to U64F64 (multiply by 2^64, divide by 1e9)
+    const one = 1n << 64n;
+    const divisor = 1_000_000_000n;
+    return (scaledPrice * one) / divisor;
+}
+
+/**
+ * Get the executed price for a listing/offer given the market price and offset
+ * Returns the price in U64F64 format ready for calculations
+ */
+export async function getExecutedPriceFixed(
+    api: TypedApi<typeof devnet>,
+    netuid: number,
+    priceOffsetBps: number
+): Promise<bigint> {
+    const marketPrice = await getCurrentAlphaPrice(api, netuid);
+    const executedPrice = applyPriceOffset(marketPrice, priceOffsetBps);
+    return scaledPriceToFixedPoint(executedPrice);
+}
+
 /**
  * Convert U64F64 fixed-point to a readable price
  */
