@@ -213,7 +213,7 @@ mod otc_contract {
         fn get_market_price(&self, netuid: NetUid) -> Result<u64, Error> {
             self.env()
                 .extension()
-                .get_current_alpha_price(netuid)
+                .get_alpha_price(netuid)
                 .map_err(|_| Error::MarketPriceFetchFailed)
         }
 

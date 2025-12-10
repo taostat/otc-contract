@@ -126,5 +126,5 @@ pub trait SubtensorExtension {
     /// Get the current market price for an Alpha token on a subnet
     /// Returns price * 1e9 (TAO per Alpha, scaled for precision)
     #[ink(function = 15)]
-    fn get_current_alpha_price(netuid: u16) -> Result<u64, SubtensorError>;
+    fn get_alpha_price(netuid: u16) -> Result<u64, SubtensorError>;
 }
