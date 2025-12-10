@@ -4,8 +4,8 @@ A decentralized over-the-counter (OTC) trading desk smart contract for Bittensor
 
 ## Features
 
-- **Alpha Listings**: List Alpha tokens for sale at custom TAO prices
-- **TAO Offers**: Create buy offers for Alpha tokens with TAO
+- **Alpha Listings**: List Alpha tokens for sale with dynamic market-relative pricing
+- **TAO Offers**: Create buy offers for Alpha tokens with market-relative pricing
 - **Atomic Swaps**: Execute trades atomically with automatic fee collection
 - **Cancellation**: Cancel listings/offers with full refunds
 - **Admin Controls**: Manage fees, minimum amounts, and contract configuration
@@ -84,23 +84,23 @@ Constructor parameters:
 
 #### List Alpha Tokens
 ```rust
-list_alpha(hotkey: AccountId, netuid: u16, amount: u64, price: u128) -> Result<u64>
+list_alpha(hotkey: AccountId, netuid: u16, amount: u64, price_offset_bps: i32) -> Result<u64>
 ```
-Lists Alpha tokens for sale. Requires seller to add contract as proxy first.
+Lists Alpha tokens for sale at a price relative to market. The `price_offset_bps` is the offset from market price in basis points (1 bp = 0.01%). Examples: `0` = market price, `500` = +5% above market, `-500` = -5% below market. Requires seller to add contract as proxy first.
 
 #### Create TAO Offer
 ```rust
 #[payable]
-create_tao_offer(netuid: u16, price: u128) -> Result<u64>
+create_tao_offer(netuid: u16, price_offset_bps: i32) -> Result<u64>
 ```
-Creates a buy offer with TAO. Amount determined by transaction value.
+Creates a buy offer with TAO at a price relative to market. The `price_offset_bps` works the same as in `list_alpha`. Amount determined by transaction value.
 
 #### Take Alpha Listing
 ```rust
 #[payable]
 take_alpha_listing(netuid: u16, seller: AccountId, listing_id: u64) -> Result<()>
 ```
-Buy listed Alpha tokens. Must send exact TAO amount (price × amount + fees).
+Buy listed Alpha tokens. TAO amount is calculated at execution time based on current market price and the listing's price offset.
 
 #### Take TAO Offer
 ```rust
@@ -141,7 +141,8 @@ update_min_listing_age(new_age: u32) -> Result<()>
 
 ### Key Components
 
-- **Fixed-Point Arithmetic**: Uses `FixedDecimal` (U64F64) for deterministic price calculations
+- **Dynamic Pricing**: Market-relative pricing with basis points offset, calculated at execution time
+- **Fixed-Point Arithmetic**: Uses `FixedDecimal` (U64F64) for deterministic fee calculations
 - **Proxy Integration**: All stake transfers use Bittensor's Proxy pallet for authorization
 - **Composite Storage**: Multi-dimensional lookups using `(netuid, user, id)` tuples
 - **Event System**: Comprehensive events for off-chain monitoring
@@ -156,12 +157,26 @@ user_listings: Mapping<(seller, netuid), Vec<listing_id>>
 user_offers: Mapping<(buyer, netuid), Vec<offer_id>>
 ```
 
-### Price Calculation
+### Dynamic Market-Relative Pricing
 
-Prices use fixed-point arithmetic with 64 bits for integer and 64 bits for fraction:
+Prices are specified as offsets from the current market price in basis points (bps):
+- 1 basis point = 0.01%, so 100 bps = 1%
+- `price_offset_bps = 0`: Trade at current market price
+- `price_offset_bps = 500`: Trade at 5% above market price
+- `price_offset_bps = -500`: Trade at 5% below market price
+- Valid range: -10000 to i32::MAX (cannot go below -100%)
+
+The actual TAO amount is calculated at execution time:
+```
+executed_price = market_price × (10000 + price_offset_bps) / 10000
+```
+
+This allows listings and offers to automatically adjust with market movements while maintaining the seller's/buyer's desired premium or discount.
+
+### Units
+
 - 1 TAO = 10^9 rao (smallest unit)
-- Price represents TAO per Alpha token
-- Fees calculated as percentage of TAO amount
+- Fees calculated as percentage of TAO amount using fixed-point arithmetic (U64F64)
 
 ## Security Considerations
 
