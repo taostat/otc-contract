@@ -1,6 +1,6 @@
 {
   "source": {
-    "hash": "0x0bf656d8bd6cc7c52b15e9a80c1288684754858e7604ecd87666bd68e524c9aa",
+    "hash": "0xcf80f5b9413af863aeeedc1d6fc956e2e670efcce11d970fa037ece96c9d3cb9",
     "language": "ink! 5.1.1",
     "compiler": "rustc 1.90.0",
     "build_info": {
@@ -15,7 +15,7 @@
   },
   "contract": {
     "name": "otc_contract",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "authors": [
       "taostats <dev@taostats.io>"
     ]
