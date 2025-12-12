@@ -504,3 +504,63 @@ export function getContractError(result: any): string {
     }
     return "Contract call failed";
 }
+
+// ============================================================================
+// Lockup Listings Helpers
+// ============================================================================
+
+/**
+ * Get the current block number
+ */
+export async function getCurrentBlock(api: TypedApi<typeof devnet>): Promise<number> {
+    const blockNumber = await api.query.System.Number.getValue();
+    return Number(blockNumber);
+}
+
+/**
+ * Wait until a specific block is reached
+ */
+export async function waitUntilBlock(
+    api: TypedApi<typeof devnet>,
+    targetBlock: number
+): Promise<void> {
+    let currentBlock = await getCurrentBlock(api);
+
+    while (currentBlock < targetBlock) {
+        console.log(`Waiting for block ${targetBlock}, current: ${currentBlock}`);
+        await new Promise(resolve => setTimeout(resolve, TEST_CONFIG.blockTime));
+        currentBlock = await getCurrentBlock(api);
+    }
+
+    console.log(`Reached target block ${targetBlock}`);
+}
+
+/**
+ * Bittensor minimum stake constant (2_000_000 rao = 0.002 TAO)
+ */
+export const BITTENSOR_MIN_STAKE = 2_000_000n;
+
+/**
+ * Default lockup duration constants for tests (in blocks)
+ */
+export const SHORT_LOCKUP_DURATION = 10;
+export const MEDIUM_LOCKUP_DURATION = 50;
+export const LONG_LOCKUP_DURATION = 100;
+
+/**
+ * Calculate TAO required for taking a lockup listing
+ * Similar to calculateTotalTaoForListing but uses the dynamic pricing model
+ */
+export function calculateLockupListingTao(
+    alphaAmount: bigint,
+    executedPrice: bigint,
+    feeRate: bigint
+): { taoAmount: bigint; feeAmount: bigint; totalRequired: bigint } {
+    // price is scaled by 1e9, need to apply properly
+    const priceDecimal = scaledPriceToFixedPoint(executedPrice);
+    const taoAmount = multiplyFixedByAmount(priceDecimal, alphaAmount);
+    const feeAmount = multiplyFixedByAmount(feeRate, taoAmount);
+    const totalRequired = taoAmount + feeAmount;
+
+    return { taoAmount, feeAmount, totalRequired };
+}
