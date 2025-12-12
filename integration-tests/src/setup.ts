@@ -129,7 +129,7 @@ export class TestSetup {
      * Deploy the OTC contract
      */
     async deployContract(api: TypedApi<typeof devnet>, accounts: TestContext['accounts']): Promise<string> {
-        const contractPath = path.join(process.cwd(), "..", "target", "ink", "otc_contract.wasm");
+        const contractPath = path.join(process.cwd(), "..", "target", "ink", "otc_contract", "otc_contract.wasm");
         const wasmFile = await fs.readFile(contractPath);
         const wasmBytes = Binary.fromBytes(new Uint8Array(wasmFile));
 

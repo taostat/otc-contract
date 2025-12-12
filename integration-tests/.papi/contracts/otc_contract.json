@@ -1,6 +1,6 @@
 {
   "source": {
-    "hash": "0xcf80f5b9413af863aeeedc1d6fc956e2e670efcce11d970fa037ece96c9d3cb9",
+    "hash": "0x060a985892656b2f98323e48b975c8a622bb86e5cd42811c9b43d0b7ce49d783",
     "language": "ink! 5.1.1",
     "compiler": "rustc 1.90.0",
     "build_info": {
@@ -2675,7 +2675,7 @@
           }
         },
         "path": [
-          "otc_contract",
+          "otc_shared",
           "types",
           "FixedDecimal"
         ]
@@ -2887,7 +2887,7 @@
               {
                 "name": "amount",
                 "type": 0,
-                "typeName": "TaoAmount"
+                "typeName": "otc_shared::TaoAmount"
               },
               {
                 "name": "price_offset_bps",
@@ -3287,7 +3287,7 @@
           }
         },
         "path": [
-          "otc_contract",
+          "otc_shared",
           "types",
           "PauseState"
         ]
@@ -4264,7 +4264,7 @@
           "variant": {}
         },
         "path": [
-          "otc_contract",
+          "otc_shared",
           "chain_extension",
           "SubtensorExtension"
         ]

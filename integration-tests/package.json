@@ -8,8 +8,8 @@
         "test:ui": "vitest --ui",
         "test:run": "vitest run",
         "test:watch": "vitest watch",
-        "generate-types": "papi add devnet -w ws://localhost:9944",
-        "generate-contract": "papi ink add ../target/ink/otc_contract.contract",
+        "generate-api-types": "papi add devnet -w ws://localhost:9944",
+        "generate-otc-contract-types": "papi ink add ../target/ink/otc_contract/otc_contract.contract",
         "postinstall": "papi && patch-package"
     },
     "dependencies": {

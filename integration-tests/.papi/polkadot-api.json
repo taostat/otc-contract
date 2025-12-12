@@ -5,8 +5,8 @@
     "devnet": {
       "wsUrl": "ws://localhost:9944",
       "metadata": ".papi/metadata/devnet.scale",
-      "genesis": "0xf5ac55656785869b0e48b47a18580a1ed1a096f93b24a55503aba22c644b659e",
-      "codeHash": "0xc554cf884633a1395798e396fbd81b7494f66c8682c6a95247ede8d5001c00ce"
+      "genesis": "0x8d727671f6b81deeb17f0cca3f641acfcae314f3a96161fc5db0d768e61d92f2",
+      "codeHash": "0x178b64ee957eaba0ae59c8971d7e371953c9e1d57d695fa1e13849a7f748facf"
     }
   },
   "ink": {
