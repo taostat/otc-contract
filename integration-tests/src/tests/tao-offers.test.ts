@@ -17,7 +17,6 @@ import {
     MARKET_PRICE,
     INVALID_OFFSET,
     bpsToPercentage,
-    getCurrentAlphaPrice,
     getExecutedPriceFixed,
 } from "../utils";
 import {
