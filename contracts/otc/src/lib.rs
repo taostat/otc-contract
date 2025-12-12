@@ -3,38 +3,27 @@
 #[cfg(test)]
 mod tests;
 
-pub mod chain_extension;
 pub mod errors;
 pub mod events;
-pub mod runtime;
 pub mod types;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "std", ink::scale_derive(TypeInfo))]
-pub struct BittensorEnvironment;
+pub use otc_shared::BittensorEnvironment;
 
-impl ink::env::Environment for BittensorEnvironment {
-    const MAX_EVENT_TOPICS: usize = 4;
-    type AccountId = ink::primitives::AccountId;
-    type Balance = u64;
-    type Hash = ink::primitives::Hash;
-    type Timestamp = u64;
-    type BlockNumber = u32;
-    type ChainExtension = crate::chain_extension::SubtensorExtension;
-}
-
-#[ink::contract(env = crate::BittensorEnvironment)]
+#[ink::contract(env = otc_shared::BittensorEnvironment)]
 mod otc_contract {
     use crate::errors::Error;
     use crate::events::*;
-    use crate::runtime::{AlphaCurrency, ProxyCall, RuntimeCall, SubtensorCall};
     use crate::types::{
-        AlphaAmount, AlphaListing, AlphaListingId, AlphaListingsMapping, BlockAge, FixedDecimal,
-        FrozenSubnetsMapping, NetUid, PauseState, PriceOffsetBps, ReservedAlphaMapping, TaoAmount,
-        TaoOffer, TaoOfferId, TaoOffersMapping, UserListingsMapping, UserOffersMapping,
+        AlphaListing, AlphaListingId, AlphaListingsMapping, FrozenSubnetsMapping,
+        ReservedAlphaMapping, TaoOffer, TaoOfferId, TaoOffersMapping, UserListingsMapping,
+        UserOffersMapping,
     };
     use fixed::types::U64F64;
     use ink::prelude::{boxed::Box, vec::Vec};
+    use otc_shared::{
+        AlphaAmount, AlphaCurrency, BlockAge, FixedDecimal, NetUid, PauseState, PriceOffsetBps,
+        ProxyCall, RuntimeCall, SubtensorCall, TaoAmount,
+    };
     use sp_runtime::MultiAddress;
 
     /// Tolerance for stake transfer verification (in rao)
@@ -480,8 +469,8 @@ mod otc_contract {
             let transfer_call = RuntimeCall::SubtensorModule(SubtensorCall::TransferStake {
                 destination_coldkey: self.env().account_id(),
                 hotkey,
-                origin_netuid: crate::runtime::NetUid::from(netuid),
-                destination_netuid: crate::runtime::NetUid::from(netuid),
+                origin_netuid: otc_shared::runtime::NetUid::from(netuid),
+                destination_netuid: otc_shared::runtime::NetUid::from(netuid),
                 alpha_amount: AlphaCurrency::from(amount),
             });
 
@@ -1026,8 +1015,8 @@ mod otc_contract {
             let transfer_call = RuntimeCall::SubtensorModule(SubtensorCall::TransferStake {
                 destination_coldkey: buyer,
                 hotkey, // Seller's original hotkey
-                origin_netuid: crate::runtime::NetUid::from(netuid),
-                destination_netuid: crate::runtime::NetUid::from(netuid),
+                origin_netuid: otc_shared::runtime::NetUid::from(netuid),
+                destination_netuid: otc_shared::runtime::NetUid::from(netuid),
                 alpha_amount: AlphaCurrency::from(alpha_amount),
             });
 

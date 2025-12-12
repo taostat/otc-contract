@@ -1,9 +1,9 @@
-use crate::types::{
-    AlphaAmount, AlphaListingId, Balance, BlockAge, FixedDecimal, NetUid, PauseState,
-    PriceOffsetBps, TaoAmount, TaoOfferId,
-};
+use crate::types::{AlphaListingId, TaoOfferId};
 use ink::prelude::vec::Vec;
 use ink::primitives::AccountId;
+use otc_shared::{
+    AlphaAmount, Balance, BlockAge, FixedDecimal, NetUid, PauseState, PriceOffsetBps, TaoAmount,
+};
 
 #[ink::event]
 pub struct AlphaListed {

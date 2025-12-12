@@ -2,11 +2,11 @@ use crate::errors::*;
 use crate::events::*;
 use crate::otc_contract::*;
 use crate::types::*;
-use crate::{chain_extension::StakeInfo, BittensorEnvironment};
 use core::convert::TryFrom;
 use fixed::types::U64F64;
 use ink::env::Environment;
 use ink::scale::{Decode, Encode};
+use otc_shared::{BittensorEnvironment, FixedDecimal, PauseState, SharedError, StakeInfo};
 
 const MAX_LISTINGS_PER_USER_PER_NETUID: usize = 25;
 const MAX_OFFERS_PER_USER_PER_NETUID: usize = 25;
@@ -1358,7 +1358,7 @@ fn test_fixed_decimal_overflow_in_mul() {
     // Test multiplication that would overflow
     let large_decimal = FixedDecimal::from_bits(U64F64::from_num(u64::MAX / 2).to_bits());
     let result = large_decimal.mul(3);
-    assert_eq!(result, Err(Error::Overflow));
+    assert_eq!(result, Err(SharedError::Overflow));
 
     // Test with maximum safe value
     let safe_decimal = FixedDecimal::from_bits(U64F64::from_num(1000u64).to_bits());
@@ -1379,7 +1379,7 @@ fn test_fixed_decimal_overflow_in_div_by() {
     // Test that would actually overflow
     let extremely_tiny = FixedDecimal::from_bits(U64F64::from_num(0.0000000000001).to_bits());
     let overflow_result = extremely_tiny.div_by(u64::MAX);
-    assert_eq!(overflow_result, Err(Error::Overflow));
+    assert_eq!(overflow_result, Err(SharedError::Overflow));
 
     // Test normal division
     let normal_decimal = FixedDecimal::from_bits(U64F64::from_num(10u64).to_bits());
