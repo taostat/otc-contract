@@ -10,6 +10,8 @@
     }
   },
   "ink": {
-    "otc_contract": ".papi/contracts/otc_contract.json"
+    "otc_contract": ".papi/contracts/otc_contract.json",
+    "alpha_lockup": ".papi/contracts/alpha_lockup.json",
+    "lockup_listings": ".papi/contracts/lockup_listings.json"
   }
 }
