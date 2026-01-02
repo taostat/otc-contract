@@ -272,6 +272,22 @@ export class TestSetup {
     }
 
     /**
+     * Check if contract code exists on-chain
+     */
+    async codeExistsOnChain(
+        api: TypedApi<typeof devnet>,
+        codeHash: string
+    ): Promise<boolean> {
+        try {
+            const codeHashBinary = Binary.fromHex(codeHash);
+            const codeInfo = await api.query.Contracts.CodeInfoOf.getValue(codeHashBinary);
+            return codeInfo !== undefined;
+        } catch {
+            return false;
+        }
+    }
+
+    /**
      * Upload alpha_lockup code and return its code hash
      */
     async uploadAlphaLockupCode(
@@ -280,8 +296,12 @@ export class TestSetup {
     ): Promise<string> {
         const existingCodeHash = loadAlphaLockupCodeHash();
         if (existingCodeHash) {
-            console.log(`Using existing alpha_lockup code hash: ${existingCodeHash}`);
-            return existingCodeHash;
+            const exists = await this.codeExistsOnChain(api, existingCodeHash);
+            if (exists) {
+                console.log(`Using existing alpha_lockup code hash: ${existingCodeHash}`);
+                return existingCodeHash;
+            }
+            console.log(`Cached code hash invalid (code not on chain), re-uploading...`);
         }
 
         const contractPath = path.join(process.cwd(), "..", "target", "ink", "alpha_lockup", "alpha_lockup.wasm");
