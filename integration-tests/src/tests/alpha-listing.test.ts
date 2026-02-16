@@ -2,8 +2,6 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { TxEventsPayload } from "polkadot-api";
 import { setupTestEnvironment, cleanupTestEnvironment, type TestContext, ContractSdk, bigintReplacer } from "../setup";
 import {
-    priceToFixedPoint,
-    fixedPointToPrice,
     taoToRao,
     waitForBlocks,
     fundAccount,
@@ -12,6 +10,8 @@ import {
     addContractAsProxy,
     createHotkey,
     elevateRegistrationLimits,
+    MARKET_PRICE,
+    bpsToPercentage,
     type Wallet,
 } from "../utils";
 import {
@@ -233,11 +233,11 @@ describe("Alpha Listing Operations", () => {
             const stakeBefore = await getStakeBalance(context.api, bobHotkey.address, netuid, accounts.bob.address);
             console.log(`Bob's stake before listing: ${formatStakeAmount(stakeBefore)}`);
 
-            // Bob lists 50 Alpha at 2 TAO per Alpha
+            // Bob lists 50 Alpha at market price (0% offset)
             const listAmount = taoToRao(50);
-            const listPrice = priceToFixedPoint(2.0);
+            const priceOffsetBps = MARKET_PRICE; // 0% offset = market price
 
-            console.log(`Attempting to list ${formatStakeAmount(listAmount)} at price ${fixedPointToPrice(listPrice)} TAO per Alpha`);
+            console.log(`Attempting to list ${formatStakeAmount(listAmount)} at ${bpsToPercentage(priceOffsetBps)}% offset from market price`);
 
             const listTx = contract.send("list_alpha", {
                 origin: accounts.bob.address,
@@ -245,7 +245,7 @@ describe("Alpha Listing Operations", () => {
                     hotkey: bobHotkey.address,
                     netuid,
                     amount: listAmount,
-                    price: listPrice
+                    price_offset_bps: priceOffsetBps
                 }
             });
 
@@ -317,7 +317,7 @@ describe("Alpha Listing Operations", () => {
 
                 if (listing.success && listing.value.response) {
                     expect(listing.value.response.amount).toBe(listAmount);
-                    expect(listing.value.response.price).toBe(listPrice);
+                    expect(listing.value.response.price_offset_bps).toBe(priceOffsetBps);
                     expect(listing.value.response.seller).toBe(accounts.bob.address);
                     expect(listing.value.response.netuid).toBe(netuid);
                 }
@@ -346,7 +346,7 @@ describe("Alpha Listing Operations", () => {
                     hotkey: daveHotkey.address,
                     netuid,
                     amount: taoToRao(50),
-                    price: priceToFixedPoint(2.0) // 2 TAO per Alpha
+                    price_offset_bps: MARKET_PRICE // Market price
                 }
             });
 
@@ -365,7 +365,7 @@ describe("Alpha Listing Operations", () => {
             const { accounts } = context;
             // Eve has 30 or less Alpha, tries to list 50 Alpha
             const listAmount = taoToRao(50);
-            const listPrice = priceToFixedPoint(2.0);
+            const priceOffsetBps = MARKET_PRICE;
             // First add Eve as proxy (required for the call to be made)
             await addContractAsProxy(context.api, context.contractAddress!, accounts.eve.signer);
             await waitForBlocks(context.api, 2);
@@ -379,7 +379,7 @@ describe("Alpha Listing Operations", () => {
                     hotkey: eveHotkey.address,
                     netuid,
                     amount: listAmount,
-                    price: listPrice
+                    price_offset_bps: priceOffsetBps
                 }
             });
 
@@ -428,7 +428,7 @@ describe("Alpha Listing Operations", () => {
                     hotkey: charlieSpecialHotkey.address, // Different from contract's hotkey
                     netuid,
                     amount: listAmount,
-                    price: priceToFixedPoint(2.0)
+                    price_offset_bps: MARKET_PRICE
                 }
             });
 
@@ -503,7 +503,7 @@ describe("Alpha Listing Operations", () => {
                     hotkey: daveHotkey2.address,
                     netuid,
                     amount: belowMin,
-                    price: priceToFixedPoint(2.0)
+                    price_offset_bps: MARKET_PRICE
                 }
             });
 
@@ -523,7 +523,7 @@ describe("Alpha Listing Operations", () => {
                     hotkey: daveHotkey2.address,
                     netuid,
                     amount: minAmount,
-                    price: priceToFixedPoint(2.0)
+                    price_offset_bps: MARKET_PRICE
                 }
             });
 

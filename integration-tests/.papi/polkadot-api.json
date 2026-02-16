@@ -5,11 +5,13 @@
     "devnet": {
       "wsUrl": "ws://localhost:9944",
       "metadata": ".papi/metadata/devnet.scale",
-      "genesis": "0x0b7a4e32f233cd38e2ae50342b5441158005d58d65ffdfb1db1ae259d533610d",
-      "codeHash": "0xf6ef93bff7d1bb81104aa52132f4dcf588579f927883b41824d8569fd3f3a2a5"
+      "genesis": "0x8d727671f6b81deeb17f0cca3f641acfcae314f3a96161fc5db0d768e61d92f2",
+      "codeHash": "0x178b64ee957eaba0ae59c8971d7e371953c9e1d57d695fa1e13849a7f748facf"
     }
   },
   "ink": {
-    "otc_contract": ".papi/contracts/otc_contract.json"
+    "otc_contract": ".papi/contracts/otc_contract.json",
+    "alpha_lockup": ".papi/contracts/alpha_lockup.json",
+    "lockup_listings": ".papi/contracts/lockup_listings.json"
   }
 }

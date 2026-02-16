@@ -2,7 +2,6 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { setupTestEnvironment, cleanupTestEnvironment, type TestContext, ContractSdk, bigintReplacer } from "../setup";
 import {
     percentageToFixedPoint,
-    priceToFixedPoint,
     taoToRao,
     raoToTao,
     waitForBlocks,
@@ -14,7 +13,10 @@ import {
     getBalance,
     calculateTotalTaoForListing,
     elevateRegistrationLimits,
-    type Wallet
+    type Wallet,
+    MARKET_PRICE,
+    getExecutedPriceFixed,
+    bpsToPercentage,
 } from "../utils";
 import {
     getStakeBalance,
@@ -135,9 +137,9 @@ describe("Trading Execution", () => {
         it("should successfully take an Alpha listing with exact TAO payment", async () => {
             const { accounts } = context;
 
-            // === Setup: Bob lists 50 Alpha at 2 TAO per Alpha ===
+            // === Setup: Bob lists 50 Alpha at market price ===
             const listAmount = taoToRao(50);
-            const listPrice = priceToFixedPoint(2.0); // 2 TAO per Alpha
+            const priceOffsetBps = MARKET_PRICE; // 0% offset from market
 
             const listTx = contract.send("list_alpha", {
                 origin: accounts.bob.address,
@@ -145,7 +147,7 @@ describe("Trading Execution", () => {
                     hotkey: bobHotkey.address,
                     netuid,
                     amount: listAmount,
-                    price: listPrice
+                    price_offset_bps: priceOffsetBps
                 }
             });
 
@@ -165,14 +167,15 @@ describe("Trading Execution", () => {
             const listingId = listingsResult.success ?
                 listingsResult.value.response[0] : 0n;
 
-            // === Calculate required TAO payment ===
+            // === Calculate required TAO payment using market price with offset ===
+            const executedPriceFixed = await getExecutedPriceFixed(context.api, netuid, priceOffsetBps);
             const { taoAmount, feeAmount, totalRequired } = calculateTotalTaoForListing(
                 listAmount,
-                listPrice,
+                executedPriceFixed,
                 contractFeeRate
             );
 
-            console.log(`\nListing: 50 Alpha at 2 TAO/Alpha`);
+            console.log(`\nListing: 50 Alpha at ${bpsToPercentage(priceOffsetBps)}% offset from market`);
             console.log(`TAO amount: ${raoToTao(taoAmount)} TAO`);
             console.log(`Fee amount: ${raoToTao(feeAmount)} TAO`);
             console.log(`Total required: ${raoToTao(totalRequired)} TAO`);
@@ -267,12 +270,12 @@ describe("Trading Execution", () => {
             }
         });
 
-        it("should reject taking listing with incorrect TAO amount", async () => {
+        it("should successfully take an Alpha listing with non-market price offset", async () => {
             const { accounts } = context;
 
-            // Charlie lists 30 Alpha
-            const listAmount = taoToRao(30);
-            const listPrice = priceToFixedPoint(1.5);
+            // === Setup: Charlie lists 40 Alpha at +5% above market ===
+            const listAmount = taoToRao(40);
+            const priceOffsetBps = 500; // +5% above market
 
             const listTx = contract.send("list_alpha", {
                 origin: accounts.charlie.address,
@@ -280,7 +283,155 @@ describe("Trading Execution", () => {
                     hotkey: charlieHotkey.address,
                     netuid,
                     amount: listAmount,
-                    price: listPrice
+                    price_offset_bps: priceOffsetBps
+                }
+            });
+
+            await listTx.signAndSubmit(accounts.charlie.signer);
+            await waitForBlocks(context.api, 2);
+
+            // Get the listing ID
+            const listingsResult = await contract.query("get_user_listings", {
+                origin: accounts.alice.address,
+                data: {
+                    seller: accounts.charlie.address,
+                    netuid
+                }
+            });
+
+            expect(listingsResult.success).toBe(true);
+            const listingId = listingsResult.success ?
+                listingsResult.value.response[listingsResult.value.response.length - 1] : 0n;
+
+            // === Calculate required TAO payment using the offset price ===
+            const executedPriceFixed = await getExecutedPriceFixed(context.api, netuid, priceOffsetBps);
+            const { taoAmount, feeAmount, totalRequired } = calculateTotalTaoForListing(
+                listAmount,
+                executedPriceFixed,
+                contractFeeRate
+            );
+
+            // Log the price difference vs market price for verification
+            const marketPriceFixed = await getExecutedPriceFixed(context.api, netuid, MARKET_PRICE);
+
+            console.log(`\nListing: 40 Alpha at +${bpsToPercentage(priceOffsetBps)}% above market`);
+            console.log(`Market price (fixed): ${marketPriceFixed}`);
+            console.log(`Executed price (+5%): ${executedPriceFixed}`);
+            console.log(`TAO amount: ${raoToTao(taoAmount)} TAO`);
+            console.log(`Fee amount: ${raoToTao(feeAmount)} TAO`);
+            console.log(`Total required: ${raoToTao(totalRequired)} TAO`);
+
+            // Verify executed price is ~5% higher than market price
+            const actualRatio = (executedPriceFixed * 100n) / marketPriceFixed;
+            expect(actualRatio).toBeGreaterThanOrEqual(104n); // Allow some tolerance
+            expect(actualRatio).toBeLessThanOrEqual(106n);
+
+            // === Eve takes the listing ===
+            // Get balances before trade
+            const eveTaoBefore = await getBalance(context.api, accounts.eve.address);
+            const charlieTaoBefore = await getBalance(context.api, accounts.charlie.address);
+            const ownerTaoBefore = await getBalance(context.api, accounts.alice.address);
+
+            console.log(`\nBefore trade:`);
+            console.log(`Eve TAO: ${raoToTao(eveTaoBefore)}`);
+            console.log(`Charlie TAO: ${raoToTao(charlieTaoBefore)}`);
+
+            // Take the listing with exact payment
+            const takeTx = contract.send("take_alpha_listing", {
+                origin: accounts.eve.address,
+                value: totalRequired,
+                data: {
+                    netuid,
+                    seller: accounts.charlie.address,
+                    listing_id: listingId
+                }
+            });
+
+            const result = await takeTx.signAndSubmit(accounts.eve.signer);
+            expect(result.ok).toBe(true);
+
+            // === Verify the AlphaListingTaken event ===
+            const events = contract.filterEvents(result.events);
+            const alphaListingTakenEvent = events.find(e => e.type === 'AlphaListingTaken');
+            expect(alphaListingTakenEvent).toBeDefined();
+
+            if (alphaListingTakenEvent) {
+                // Verify the event contains expected values
+                expect(BigInt(alphaListingTakenEvent.value.alpha_amount)).toBe(listAmount);
+                expect(BigInt(alphaListingTakenEvent.value.tao_amount)).toBe(taoAmount);
+                expect(alphaListingTakenEvent.value.seller).toBe(accounts.charlie.address);
+                expect(alphaListingTakenEvent.value.buyer).toBe(accounts.eve.address);
+                expect(BigInt(alphaListingTakenEvent.value.fee)).toBe(feeAmount);
+
+                // Verify price offset is recorded in event (if present)
+                if ('price_offset_bps' in alphaListingTakenEvent.value) {
+                    expect(alphaListingTakenEvent.value.price_offset_bps).toBe(priceOffsetBps);
+                }
+
+                console.log(`\nAlphaListingTaken event verified:`);
+                console.log(`Alpha transferred: ${formatStakeAmount(BigInt(alphaListingTakenEvent.value.alpha_amount))}`);
+                console.log(`TAO amount: ${raoToTao(BigInt(alphaListingTakenEvent.value.tao_amount))}`);
+                console.log(`Fee: ${raoToTao(BigInt(alphaListingTakenEvent.value.fee))}`);
+            }
+
+            await waitForBlocks(context.api, 3);
+
+            // === Verify TAO balances ===
+            const eveTaoAfter = await getBalance(context.api, accounts.eve.address);
+            const charlieTaoAfter = await getBalance(context.api, accounts.charlie.address);
+            const ownerTaoAfter = await getBalance(context.api, accounts.alice.address);
+
+            // Eve's TAO should decrease by approximately the total payment
+            const eveTaoSpent = eveTaoBefore - eveTaoAfter;
+            const tolerance = taoToRao(1);
+            expect(eveTaoSpent).toBeGreaterThan(totalRequired - tolerance);
+            expect(eveTaoSpent).toBeLessThan(totalRequired + tolerance);
+
+            // Charlie should receive TAO (based on +5% price, minus fee)
+            const charlieTaoReceived = charlieTaoAfter - charlieTaoBefore;
+            expect(charlieTaoReceived).toBeGreaterThanOrEqual(taoAmount - taoToRao(0.1));
+
+            // Owner should receive fee
+            const ownerFeeReceived = ownerTaoAfter - ownerTaoBefore;
+            expect(ownerFeeReceived).toBeGreaterThanOrEqual(feeAmount - taoToRao(0.01));
+
+            console.log(`\nAfter trade:`);
+            console.log(`Eve TAO spent: ${raoToTao(eveTaoSpent)}`);
+            console.log(`Charlie TAO received: ${raoToTao(charlieTaoReceived)}`);
+            console.log(`Owner fee received: ${raoToTao(ownerFeeReceived)}`);
+
+            // Verify listing was removed
+            const listingResult = await contract.query("get_listing", {
+                origin: accounts.alice.address,
+                data: {
+                    netuid,
+                    seller: accounts.charlie.address,
+                    listing_id: listingId
+                }
+            });
+
+            expect(listingResult.success).toBe(true);
+            if (listingResult.success) {
+                expect(listingResult.value.response).toBeUndefined();
+            }
+
+            console.log(`\n✓ Full flow with +5% price offset verified successfully`);
+        });
+
+        it("should reject taking listing with incorrect TAO amount", async () => {
+            const { accounts } = context;
+
+            // Charlie lists 30 Alpha at market price
+            const listAmount = taoToRao(30);
+            const priceOffsetBps = MARKET_PRICE;
+
+            const listTx = contract.send("list_alpha", {
+                origin: accounts.charlie.address,
+                data: {
+                    hotkey: charlieHotkey.address,
+                    netuid,
+                    amount: listAmount,
+                    price_offset_bps: priceOffsetBps
                 }
             });
 
@@ -299,10 +450,11 @@ describe("Trading Execution", () => {
             const listingId = listingsResult.success ?
                 listingsResult.value.response[0] : 0n;
 
-            // Calculate correct amount
+            // Calculate correct amount using executed price
+            const executedPriceFixed = await getExecutedPriceFixed(context.api, netuid, priceOffsetBps);
             const { totalRequired } = calculateTotalTaoForListing(
                 listAmount,
-                listPrice,
+                executedPriceFixed,
                 contractFeeRate
             );
 
@@ -372,7 +524,7 @@ describe("Trading Execution", () => {
             console.log(`Minimum offer amount: ${raoToTao(minOfferAmount)} TAO`);
 
             // === Test listing at exactly minimum amount ===
-            const listPrice = priceToFixedPoint(1.5);
+            const priceOffsetBps = MARKET_PRICE;
 
             const listTx = contract.send("list_alpha", {
                 origin: accounts.eve.address,
@@ -380,7 +532,7 @@ describe("Trading Execution", () => {
                     hotkey: eveHotkey.address,
                     netuid,
                     amount: minListingAmount,
-                    price: listPrice
+                    price_offset_bps: priceOffsetBps
                 }
             });
 
@@ -393,7 +545,7 @@ describe("Trading Execution", () => {
                 value: minOfferAmount,
                 data: {
                     netuid,
-                    price: priceToFixedPoint(2.0)
+                    price_offset_bps: MARKET_PRICE
                 }
             });
 
@@ -407,11 +559,11 @@ describe("Trading Execution", () => {
         it("should handle rapid successive trades correctly", async () => {
             const { accounts } = context;
 
-            // Create multiple listings in succession
+            // Create multiple listings in succession with different price offsets
             const listings = [
-                { seller: accounts.bob, hotkey: bobHotkey, amount: taoToRao(10), price: priceToFixedPoint(1.0) },
-                { seller: accounts.charlie, hotkey: charlieHotkey, amount: taoToRao(15), price: priceToFixedPoint(1.2) },
-                { seller: accounts.eve, hotkey: eveHotkey, amount: taoToRao(20), price: priceToFixedPoint(1.5) }
+                { seller: accounts.bob, hotkey: bobHotkey, amount: taoToRao(10), priceOffsetBps: MARKET_PRICE },   // Market price
+                { seller: accounts.charlie, hotkey: charlieHotkey, amount: taoToRao(15), priceOffsetBps: 200 },    // +2%
+                { seller: accounts.eve, hotkey: eveHotkey, amount: taoToRao(20), priceOffsetBps: 500 }             // +5%
             ];
 
             const listingIds: bigint[] = [];
@@ -423,7 +575,7 @@ describe("Trading Execution", () => {
                         hotkey: listing.hotkey.address,
                         netuid,
                         amount: listing.amount,
-                        price: listing.price
+                        price_offset_bps: listing.priceOffsetBps
                     }
                 });
 
@@ -449,9 +601,10 @@ describe("Trading Execution", () => {
             console.log(`Created ${listingIds.length} listings: ${listingIds.join(", ")}`);
 
             // Take first listing to verify it doesn't affect others
+            const executedPriceFixed = await getExecutedPriceFixed(context.api, netuid, listings[0].priceOffsetBps);
             const { totalRequired } = calculateTotalTaoForListing(
                 listings[0].amount,
-                listings[0].price,
+                executedPriceFixed,
                 contractFeeRate
             );
 
@@ -538,28 +691,30 @@ describe("Trading Execution", () => {
 
             await waitForBlocks(context.api, 2);
 
-            // Bob lists on subnet 1
+            // Bob lists on subnet 1 at market price
+            const priceOffsetBps1 = MARKET_PRICE;
             const list1Tx = contract.send("list_alpha", {
                 origin: accounts.bob.address,
                 data: {
                     hotkey: bobHotkey.address,
                     netuid: netuid, // First subnet
                     amount: taoToRao(20),
-                    price: priceToFixedPoint(1.5)
+                    price_offset_bps: priceOffsetBps1
                 }
             });
 
             const result1 = await list1Tx.signAndSubmit(accounts.bob.signer);
             expect(result1.ok).toBe(true);
 
-            // Bob also lists on subnet 2
+            // Bob also lists on subnet 2 at +5% above market
+            const priceOffsetBps2 = 500; // +5%
             const list2Tx = contract.send("list_alpha", {
                 origin: accounts.bob.address,
                 data: {
                     hotkey: bobHotkey2.address,
                     netuid: netuid2, // Second subnet
                     amount: taoToRao(30),
-                    price: priceToFixedPoint(2.0)
+                    price_offset_bps: priceOffsetBps2
                 }
             });
 
@@ -601,9 +756,10 @@ describe("Trading Execution", () => {
                 console.log(`Bob has listings on subnet ${netuid2}: ${listings2.value.response}`);
 
                 // Take listing from subnet 1 and verify it doesn't affect subnet 2
+                const executedPriceFixed = await getExecutedPriceFixed(context.api, netuid, priceOffsetBps1);
                 const { totalRequired } = calculateTotalTaoForListing(
                     taoToRao(20),
-                    priceToFixedPoint(1.5),
+                    executedPriceFixed,
                     contractFeeRate
                 );
 

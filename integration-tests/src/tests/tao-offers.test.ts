@@ -2,8 +2,6 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
 import { setupTestEnvironment, cleanupTestEnvironment, type TestContext, ContractSdk, bigintReplacer } from "../setup";
 import {
     percentageToFixedPoint,
-    priceToFixedPoint,
-    fixedPointToPrice,
     taoToRao,
     raoToTao,
     waitForBlocks,
@@ -15,7 +13,11 @@ import {
     getBalance,
     calculateAlphaForOffer,
     type Wallet,
-    elevateRegistrationLimits
+    elevateRegistrationLimits,
+    MARKET_PRICE,
+    INVALID_OFFSET,
+    bpsToPercentage,
+    getExecutedPriceFixed,
 } from "../utils";
 import {
     getStakeBalance,
@@ -189,16 +191,16 @@ describe("TAO Offer Operations", () => {
             const balanceBefore = await getBalance(context.api, accounts.charlie.address);
             console.log(`Charlie's balance before offer: ${raoToTao(balanceBefore)} TAO`);
 
-            // Charlie creates an offer to buy 100 Alpha at 1.5 TAO per Alpha
+            // Charlie creates an offer to buy Alpha at market price
             const offerAmount = taoToRao(150); // Total TAO to spend
-            const offerPrice = priceToFixedPoint(1.5); // Price per Alpha
+            const priceOffsetBps = MARKET_PRICE; // 0% offset from market
 
             const offerTx = contract.send("create_tao_offer", {
                 origin: accounts.charlie.address,
                 value: offerAmount, // TAO sent with transaction
                 data: {
                     netuid,
-                    price: offerPrice
+                    price_offset_bps: priceOffsetBps
                 }
             });
 
@@ -242,11 +244,11 @@ describe("TAO Offer Operations", () => {
                 expect(offer.success).toBe(true);
                 if (offer.success && offer.value.response) {
                     expect(offer.value.response.amount).toBe(offerAmount);
-                    expect(offer.value.response.price).toBe(offerPrice);
+                    expect(offer.value.response.price_offset_bps).toBe(priceOffsetBps);
                     expect(offer.value.response.buyer).toBe(accounts.charlie.address);
                     expect(offer.value.response.netuid).toBe(netuid);
 
-                    console.log(`Created offer ${offerId}: ${raoToTao(offerAmount)} TAO at ${fixedPointToPrice(offerPrice)} TAO/Alpha`);
+                    console.log(`Created offer ${offerId}: ${raoToTao(offerAmount)} TAO at ${bpsToPercentage(priceOffsetBps)}% offset from market`);
                 }
             }
         });
@@ -254,11 +256,11 @@ describe("TAO Offer Operations", () => {
         it("should create multiple offers from the same buyer", async () => {
             const { accounts } = context;
 
-            // Dave creates multiple offers
+            // Dave creates multiple offers with different price offsets
             const offers = [
-                { amount: taoToRao(50), price: priceToFixedPoint(1.0) },
-                { amount: taoToRao(75), price: priceToFixedPoint(1.25) },
-                { amount: taoToRao(100), price: priceToFixedPoint(1.75) }
+                { amount: taoToRao(50), priceOffsetBps: MARKET_PRICE },     // Market price
+                { amount: taoToRao(75), priceOffsetBps: 500 },              // +5% above market
+                { amount: taoToRao(100), priceOffsetBps: -500 }             // -5% below market
             ];
 
             const offerIds: bigint[] = [];
@@ -269,7 +271,7 @@ describe("TAO Offer Operations", () => {
                     value: offer.amount,
                     data: {
                         netuid,
-                        price: offer.price
+                        price_offset_bps: offer.priceOffsetBps
                     }
                 });
 
@@ -334,7 +336,7 @@ describe("TAO Offer Operations", () => {
                 value: minAmount - 1n, // Below minimum
                 data: {
                     netuid,
-                    price: priceToFixedPoint(1.5)
+                    price_offset_bps: MARKET_PRICE
                 }
             });
 
@@ -347,22 +349,22 @@ describe("TAO Offer Operations", () => {
             expect(contractsError.value.type).toBe("ContractReverted");
         });
 
-        it("should reject offer with zero price", async () => {
+        it("should reject offer with invalid price offset", async () => {
             const { accounts } = context;
 
-            // Try to create offer with zero price - should fail at contract level
+            // Try to create offer with -100% offset (invalid) - should fail at contract level
             const offerTx = contract.send("create_tao_offer", {
                 origin: accounts.eve.address,
                 value: taoToRao(10),
                 data: {
                     netuid,
-                    price: 0n // Zero price
+                    price_offset_bps: INVALID_OFFSET // -10000 = -100% (invalid)
                 }
             });
 
             const result = await offerTx.signAndSubmit(accounts.eve.signer);
 
-            // Should fail with contract error
+            // Should fail with contract error (InvalidPriceOffset)
             expect(result.ok).toBe(false);
             const contractsError = result.dispatchError?.value as ContractsError;
             expect(contractsError.type).toBe("Contracts");
@@ -384,7 +386,7 @@ describe("TAO Offer Operations", () => {
                 value: offerAmount,
                 data: {
                     netuid,
-                    price: priceToFixedPoint(2.0)
+                    price_offset_bps: MARKET_PRICE
                 }
             });
 
@@ -529,11 +531,11 @@ describe("TAO Offer Operations", () => {
         it("should correctly query offers across multiple users", async () => {
             const { accounts } = context;
 
-            // Create offers from different users
+            // Create offers from different users with different price offsets
             const users = [
-                { account: accounts.charlie, amount: taoToRao(10), price: priceToFixedPoint(1.1) },
-                { account: accounts.dave, amount: taoToRao(20), price: priceToFixedPoint(1.2) },
-                { account: accounts.eve, amount: taoToRao(15), price: priceToFixedPoint(1.3) }
+                { account: accounts.charlie, amount: taoToRao(10), priceOffsetBps: MARKET_PRICE },
+                { account: accounts.dave, amount: taoToRao(20), priceOffsetBps: 200 },    // +2%
+                { account: accounts.eve, amount: taoToRao(15), priceOffsetBps: -300 }     // -3%
             ];
 
             for (const user of users) {
@@ -542,7 +544,7 @@ describe("TAO Offer Operations", () => {
                     value: user.amount,
                     data: {
                         netuid,
-                        price: user.price
+                        price_offset_bps: user.priceOffsetBps
                     }
                 });
                 await tx.signAndSubmit(user.account.signer);
@@ -590,14 +592,14 @@ describe("TAO Offer Operations", () => {
 
             // Create a specific offer to test
             const offerAmount = taoToRao(42);
-            const offerPrice = priceToFixedPoint(3.14);
+            const priceOffsetBps = 1000; // +10% above market
 
             const tx = contract.send("create_tao_offer", {
                 origin: accounts.charlie.address,
                 value: offerAmount,
                 data: {
                     netuid,
-                    price: offerPrice
+                    price_offset_bps: priceOffsetBps
                 }
             });
 
@@ -635,7 +637,7 @@ describe("TAO Offer Operations", () => {
                     expect(offer.buyer).toBe(accounts.charlie.address);
                     expect(offer.netuid).toBe(netuid);
                     expect(offer.amount).toBe(offerAmount);
-                    expect(offer.price).toBe(offerPrice);
+                    expect(offer.price_offset_bps).toBe(priceOffsetBps);
 
                     // Verify fee rate matches contract configuration
                     const feeRateResult = await contract.query("get_fee_rate", {
@@ -647,7 +649,7 @@ describe("TAO Offer Operations", () => {
                         expect(offer.fee_rate).toBe(feeRateResult.value.response);
                     }
 
-                    console.log(`Offer ${offerId}: ${raoToTao(offer.amount)} TAO at ${fixedPointToPrice(offer.price)} TAO/Alpha`);
+                    console.log(`Offer ${offerId}: ${raoToTao(offer.amount)} TAO at ${bpsToPercentage(offer.price_offset_bps)}% offset from market`);
                 }
             }
         });
@@ -657,16 +659,16 @@ describe("TAO Offer Operations", () => {
         it("should successfully take a TAO offer by providing Alpha", async () => {
             const { accounts } = context;
 
-            // === Setup: Charlie creates offer to buy Alpha at 1.8 TAO per Alpha ===
+            // === Setup: Charlie creates offer to buy Alpha at market price ===
             const offerTaoAmount = taoToRao(90); // Total TAO to spend
-            const offerPrice = priceToFixedPoint(1.8); // Price per Alpha
+            const priceOffsetBps = MARKET_PRICE; // 0% offset from market
 
             const offerTx = contract.send("create_tao_offer", {
                 origin: accounts.charlie.address,
                 value: offerTaoAmount,
                 data: {
                     netuid,
-                    price: offerPrice
+                    price_offset_bps: priceOffsetBps
                 }
             });
 
@@ -686,14 +688,17 @@ describe("TAO Offer Operations", () => {
             const offerId = offersResult.success ?
                 offersResult.value.response[offersResult.value.response.length - 1] : 0n;
 
+            // === Fetch market price and calculate actual price with offset ===
+            const executedPriceFixed = await getExecutedPriceFixed(context.api, netuid, priceOffsetBps);
+
             // === Calculate Alpha amount needed ===
             const { alphaAmount, feeAmount, taoForSeller } = calculateAlphaForOffer(
                 offerTaoAmount,
-                offerPrice,
+                executedPriceFixed,
                 contractFeeRate
             );
 
-            console.log(`\nOffer: ${raoToTao(offerTaoAmount)} TAO at ${fixedPointToPrice(offerPrice)} TAO/Alpha`);
+            console.log(`\nOffer: ${raoToTao(offerTaoAmount)} TAO at ${bpsToPercentage(priceOffsetBps)}% offset from market`);
             console.log(`Alpha needed: ${formatStakeAmount(alphaAmount)}`);
             console.log(`Fee amount: ${raoToTao(feeAmount)} TAO`);
             console.log(`TAO for seller: ${raoToTao(taoForSeller)} TAO`);
@@ -810,7 +815,7 @@ describe("TAO Offer Operations", () => {
                 value: taoToRao(50),
                 data: {
                     netuid,
-                    price: priceToFixedPoint(2.0)
+                    price_offset_bps: MARKET_PRICE
                 }
             });
 
@@ -861,12 +866,13 @@ describe("TAO Offer Operations", () => {
             const { accounts } = context;
 
             // Create a large offer that Eve can't fulfill
+            const largePriceOffsetBps = MARKET_PRICE;
             const offerTx = contract.send("create_tao_offer", {
                 origin: accounts.charlie.address,
                 value: taoToRao(100), // Large offer
                 data: {
                     netuid,
-                    price: priceToFixedPoint(2.0)
+                    price_offset_bps: largePriceOffsetBps
                 }
             });
 
@@ -885,10 +891,11 @@ describe("TAO Offer Operations", () => {
             const offerId = offersResult.success ?
                 offersResult.value.response[offersResult.value.response.length - 1] : 0n;
 
-            // Calculate required Alpha
+            // Calculate required Alpha using executed price
+            const executedPriceFixed = await getExecutedPriceFixed(context.api, netuid, largePriceOffsetBps);
             const { alphaAmount } = calculateAlphaForOffer(
                 taoToRao(100),
-                priceToFixedPoint(2.0),
+                executedPriceFixed,
                 contractFeeRate
             );
 
@@ -970,14 +977,14 @@ describe("TAO Offer Operations", () => {
 
             // Create a TAO offer with a specific amount that might trigger rounding
             const offerTaoAmount = taoToRao(75.5); // Intentional decimal for potential rounding
-            const offerPrice = priceToFixedPoint(1.25);
+            const priceOffsetBps = 250; // +2.5% above market
 
             const offerTx = contract.send("create_tao_offer", {
                 origin: accounts.dave.address,
                 value: offerTaoAmount,
                 data: {
                     netuid,
-                    price: offerPrice
+                    price_offset_bps: priceOffsetBps
                 }
             });
 
@@ -996,10 +1003,11 @@ describe("TAO Offer Operations", () => {
             const offerId = offersResult.success ?
                 offersResult.value.response[offersResult.value.response.length - 1] : 0n;
 
-            // Calculate expected Alpha amount
+            // Calculate expected Alpha amount using executed price
+            const executedPriceFixed = await getExecutedPriceFixed(context.api, netuid, priceOffsetBps);
             const { alphaAmount } = calculateAlphaForOffer(
                 offerTaoAmount,
-                offerPrice,
+                executedPriceFixed,
                 contractFeeRate
             );
 

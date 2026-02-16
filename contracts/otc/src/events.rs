@@ -1,9 +1,9 @@
-use crate::types::{
-    AlphaAmount, AlphaListingId, Balance, BlockAge, FixedDecimal, NetUid, PauseState, TaoAmount,
-    TaoOfferId,
-};
+use crate::types::{AlphaListingId, TaoOfferId};
 use ink::prelude::vec::Vec;
 use ink::primitives::AccountId;
+use otc_shared::{
+    AlphaAmount, Balance, BlockAge, FixedDecimal, NetUid, PauseState, PriceOffsetBps, TaoAmount,
+};
 
 #[ink::event]
 pub struct AlphaListed {
@@ -14,7 +14,7 @@ pub struct AlphaListed {
     pub netuid: NetUid,
     pub alpha_listing_id: AlphaListingId,
     pub amount: AlphaAmount,
-    pub price: FixedDecimal,
+    pub price_offset_bps: PriceOffsetBps,
 }
 
 #[ink::event]
@@ -25,7 +25,7 @@ pub struct TaoOfferCreated {
     pub netuid: NetUid,
     pub tao_offer_id: TaoOfferId,
     pub amount: TaoAmount,
-    pub price: FixedDecimal,
+    pub price_offset_bps: PriceOffsetBps,
 }
 
 #[ink::event]
@@ -70,7 +70,8 @@ pub struct AlphaListingTaken {
     pub netuid: NetUid,
     pub alpha_amount: AlphaAmount,
     pub tao_amount: TaoAmount,
-    pub price: FixedDecimal,
+    pub price_offset_bps: PriceOffsetBps,
+    pub executed_price: u64, // Market price at execution (price * 1e9)
     pub fee: Balance,
     pub alpha_listing_id: Option<AlphaListingId>,
 }
@@ -85,7 +86,8 @@ pub struct TaoOfferTaken {
     pub netuid: NetUid,
     pub alpha_amount: AlphaAmount,
     pub tao_amount: TaoAmount,
-    pub price: FixedDecimal,
+    pub price_offset_bps: PriceOffsetBps,
+    pub executed_price: u64, // Market price at execution (price * 1e9)
     pub fee: Balance,
     pub tao_offer_id: Option<TaoOfferId>,
 }

@@ -1,5 +1,6 @@
 # Ignore build artifacts from the local tests sub-crate.
 /target/
+/migration/target/
 
 # Ignore backup files creates by cargo fmt.
 **/*.rs.bk
@@ -7,3 +8,8 @@
 # Remove Cargo.lock when creating an executable, leave it for libraries
 # More information here http://doc.crates.io/guide.html#cargotoml-vs-cargolock
 Cargo.lock
+
+# Integration test cache files
+integration-tests/.contract-address
+integration-tests/.lockup-listings-address
+integration-tests/.alpha-lockup-code-hash

@@ -11,9 +11,13 @@ import * as path from "path";
 import { Observable } from "rxjs";
 
 export type ContractSdk = ReturnType<typeof createInkSdk<TypedApi<typeof devnet>, typeof contracts.otc_contract>>;
+export type LockupListingsSdk = ReturnType<typeof createInkSdk<TypedApi<typeof devnet>, typeof contracts.lockup_listings>>;
+export type AlphaLockupSdk = ReturnType<typeof createInkSdk<TypedApi<typeof devnet>, typeof contracts.alpha_lockup>>;
 
-// Contract address persistence file
+// Contract address persistence files
 const CONTRACT_ADDRESS_FILE = path.join(process.cwd(), ".contract-address");
+const LOCKUP_LISTINGS_ADDRESS_FILE = path.join(process.cwd(), ".lockup-listings-address");
+const ALPHA_LOCKUP_CODE_HASH_FILE = path.join(process.cwd(), ".alpha-lockup-code-hash");
 
 // Load contract address from file if it exists
 function loadContractAddress(): string | null {
@@ -39,6 +43,54 @@ function saveContractAddress(address: string): void {
     }
 }
 
+// Load lockup listings address from file
+function loadLockupListingsAddress(): string | null {
+    try {
+        if (fsSync.existsSync(LOCKUP_LISTINGS_ADDRESS_FILE)) {
+            const address = fsSync.readFileSync(LOCKUP_LISTINGS_ADDRESS_FILE, 'utf-8').trim();
+            console.log(`Loaded lockup listings address from file: ${address}`);
+            return address;
+        }
+    } catch (error) {
+        console.error("Failed to load lockup listings address:", error);
+    }
+    return null;
+}
+
+// Save lockup listings address to file
+function saveLockupListingsAddress(address: string): void {
+    try {
+        fsSync.writeFileSync(LOCKUP_LISTINGS_ADDRESS_FILE, address, 'utf-8');
+        console.log(`Saved lockup listings address to file: ${address}`);
+    } catch (error) {
+        console.error("Failed to save lockup listings address:", error);
+    }
+}
+
+// Load alpha lockup code hash from file
+function loadAlphaLockupCodeHash(): string | null {
+    try {
+        if (fsSync.existsSync(ALPHA_LOCKUP_CODE_HASH_FILE)) {
+            const codeHash = fsSync.readFileSync(ALPHA_LOCKUP_CODE_HASH_FILE, 'utf-8').trim();
+            console.log(`Loaded alpha lockup code hash from file: ${codeHash}`);
+            return codeHash;
+        }
+    } catch (error) {
+        console.error("Failed to load alpha lockup code hash:", error);
+    }
+    return null;
+}
+
+// Save alpha lockup code hash to file
+function saveAlphaLockupCodeHash(codeHash: string): void {
+    try {
+        fsSync.writeFileSync(ALPHA_LOCKUP_CODE_HASH_FILE, codeHash, 'utf-8');
+        console.log(`Saved alpha lockup code hash to file: ${codeHash}`);
+    } catch (error) {
+        console.error("Failed to save alpha lockup code hash:", error);
+    }
+}
+
 export interface TestContext {
     api: TypedApi<typeof devnet>;
     contractSdk: ContractSdk;
@@ -50,6 +102,21 @@ export interface TestContext {
         eve: TestAccount;
     };
     contractAddress?: string;
+}
+
+export interface LockupListingsContext {
+    api: TypedApi<typeof devnet>;
+    contractSdk: LockupListingsSdk;
+    alphaLockupSdk: AlphaLockupSdk;
+    accounts: {
+        alice: TestAccount;
+        bob: TestAccount;
+        charlie: TestAccount;
+        dave: TestAccount;
+        eve: TestAccount;
+    };
+    contractAddress?: string;
+    escrowCodeHash?: string;
 }
 
 export interface TestAccount {
@@ -129,7 +196,7 @@ export class TestSetup {
      * Deploy the OTC contract
      */
     async deployContract(api: TypedApi<typeof devnet>, accounts: TestContext['accounts']): Promise<string> {
-        const contractPath = path.join(process.cwd(), "..", "target", "ink", "otc_contract.wasm");
+        const contractPath = path.join(process.cwd(), "..", "target", "ink", "otc_contract", "otc_contract.wasm");
         const wasmFile = await fs.readFile(contractPath);
         const wasmBytes = Binary.fromBytes(new Uint8Array(wasmFile));
 
@@ -204,6 +271,194 @@ export class TestSetup {
         )
     }
 
+    /**
+     * Check if contract code exists on-chain
+     */
+    async codeExistsOnChain(
+        api: TypedApi<typeof devnet>,
+        codeHash: string
+    ): Promise<boolean> {
+        try {
+            const codeHashBinary = Binary.fromHex(codeHash);
+            const codeInfo = await api.query.Contracts.CodeInfoOf.getValue(codeHashBinary);
+            return codeInfo !== undefined;
+        } catch {
+            return false;
+        }
+    }
+
+    /**
+     * Upload alpha_lockup code and return its code hash
+     */
+    async uploadAlphaLockupCode(
+        api: TypedApi<typeof devnet>,
+        accounts: TestContext['accounts']
+    ): Promise<string> {
+        const existingCodeHash = loadAlphaLockupCodeHash();
+        if (existingCodeHash) {
+            const exists = await this.codeExistsOnChain(api, existingCodeHash);
+            if (exists) {
+                console.log(`Using existing alpha_lockup code hash: ${existingCodeHash}`);
+                return existingCodeHash;
+            }
+            console.log(`Cached code hash invalid (code not on chain), re-uploading...`);
+        }
+
+        const contractPath = path.join(process.cwd(), "..", "target", "ink", "alpha_lockup", "alpha_lockup.wasm");
+        const wasmFile = await fs.readFile(contractPath);
+        const wasmBytes = Binary.fromBytes(new Uint8Array(wasmFile));
+
+        console.log("Uploading alpha_lockup code...");
+
+        const uploadTx = api.tx.Contracts.upload_code({
+            code: wasmBytes,
+            storage_deposit_limit: undefined,
+            determinism: { type: "Enforced", value: undefined },
+        });
+
+        const fin = await this.trackTx(
+            uploadTx.signSubmitAndWatch(accounts.alice.signer)
+        );
+
+        // Extract code hash from events
+        let codeHash: string | null = null;
+        for (const event of fin.events) {
+            if (event.type === "Contracts" && event.value.type === "CodeStored") {
+                codeHash = event.value.value.code_hash.asHex();
+                break;
+            }
+        }
+
+        if (!codeHash) {
+            // Try to get the code hash from the metadata
+            const alphaLockupSdk = createInkSdk(api, contracts.alpha_lockup);
+            const deployer = alphaLockupSdk.getDeployer(wasmBytes);
+
+            // The code hash is deterministic based on the WASM code
+            const dryRunResult = await deployer.dryRun("new", {
+                origin: accounts.alice.address,
+                data: {
+                    buyer: accounts.alice.address,
+                    netuid: 1,
+                    alpha_amount: 1_000_000_000n,
+                    unlock_block: 1000,
+                    hotkey: accounts.bob.address,
+                },
+            });
+
+            if (dryRunResult.success) {
+                // The code_hash should be available from the contract metadata
+                const metadata = contracts.alpha_lockup.metadata;
+                codeHash = (metadata as any).source?.hash;
+            }
+        }
+
+        if (!codeHash) {
+            throw new Error("Failed to get alpha_lockup code hash");
+        }
+
+        console.log(`Alpha lockup code hash: ${codeHash}`);
+        saveAlphaLockupCodeHash(codeHash);
+        return codeHash;
+    }
+
+    /**
+     * Deploy the lockup_listings contract
+     */
+    async deployLockupListingsContract(
+        api: TypedApi<typeof devnet>,
+        accounts: TestContext['accounts'],
+        escrowCodeHash: string
+    ): Promise<string> {
+        const contractPath = path.join(process.cwd(), "..", "target", "ink", "lockup_listings", "lockup_listings.wasm");
+        const wasmFile = await fs.readFile(contractPath);
+        const wasmBytes = Binary.fromBytes(new Uint8Array(wasmFile));
+
+        const contractSdk = createInkSdk(api, contracts.lockup_listings);
+        const deployer = contractSdk.getDeployer(wasmBytes);
+
+        // Convert hex code hash to proper format
+        const codeHashBytes = Binary.fromHex(escrowCodeHash);
+
+        const constructorArgs = {
+            owner: accounts.alice.address,
+            hotkey: accounts.alice.address, // Use alice's hotkey for testing
+            escrow_code_hash: codeHashBytes,
+            fee_rate: 92233720368547758n, // 0.5% as U64F64 bits
+            min_listing_amount: 1_000_000_000n, // 1 Alpha
+            min_purchase_amount: 100_000_000n, // 0.1 Alpha
+            min_lockup_duration: 10, // 10 blocks for testing (short lockup)
+            max_lockup_duration: 1_000_000, // ~46 days
+        };
+
+        try {
+            const dryRunResult = await deployer.dryRun("new", {
+                origin: accounts.alice.address,
+                data: constructorArgs,
+            });
+
+            if (!dryRunResult.success) {
+                const errorType = dryRunResult.value?.value?.value?.type;
+                console.log("Dry run failed with error:", errorType);
+                console.log("Full dry run result:", JSON.stringify(dryRunResult, null, 2));
+
+                if (errorType === 'DuplicateContract') {
+                    console.log("Lockup listings contract already deployed");
+                    const contractAddress = loadLockupListingsAddress();
+                    if (contractAddress) {
+                        console.log(`Using existing lockup listings contract at ${contractAddress}`);
+                        return contractAddress;
+                    } else {
+                        return Promise.reject(new Error("Lockup listings contract already deployed but address not found"));
+                    }
+                }
+
+                console.log("Dry run did not succeed", dryRunResult.value);
+                return Promise.reject(new Error(`Dry run failed: ${errorType || 'Unknown'}`));
+            }
+
+            console.log("Deploying lockup_listings contract...");
+            const fin = await this.trackTx(
+                dryRunResult.value.deploy().signSubmitAndWatch(accounts.alice.signer),
+            );
+            console.log(`Lockup listings deployed to address ${dryRunResult.value.address}`);
+            console.log(contractSdk.readDeploymentEvents(fin.events));
+
+            const contractAddress = dryRunResult.value.address;
+            saveLockupListingsAddress(contractAddress);
+            return contractAddress;
+        } catch (error) {
+            console.error("Lockup listings deployment error:", error);
+            throw error;
+        }
+    }
+
+    /**
+     * Create test context for lockup_listings tests
+     */
+    async createLockupListingsContext(): Promise<LockupListingsContext> {
+        const api = await this.getApi();
+        const accounts = this.createTestAccounts();
+
+        // First upload the alpha_lockup code to get its code hash
+        const escrowCodeHash = await this.uploadAlphaLockupCode(api, accounts);
+
+        // Deploy lockup_listings contract
+        const contractAddress = await this.deployLockupListingsContract(api, accounts, escrowCodeHash);
+
+        const contractSdk = createInkSdk(api, contracts.lockup_listings);
+        const alphaLockupSdk = createInkSdk(api, contracts.alpha_lockup);
+
+        return {
+            api,
+            contractSdk,
+            alphaLockupSdk,
+            accounts,
+            contractAddress,
+            escrowCodeHash,
+        };
+    }
+
     async cleanup(): Promise<void> {
         if (this.client) {
             this.client.destroy();
@@ -244,4 +499,9 @@ export async function setupTestEnvironment(): Promise<TestContext> {
 export async function cleanupTestEnvironment(): Promise<void> {
     const setup = TestSetup.getInstance();
     await setup.cleanup();
+}
+
+export async function setupLockupListingsEnvironment(): Promise<LockupListingsContext> {
+    const setup = TestSetup.getInstance();
+    return await setup.createLockupListingsContext();
 }

@@ -325,6 +325,88 @@ export function priceToFixedPoint(pricePerAlpha: number): bigint {
     return (numerator * one) / denominator;
 }
 
+// ============================================================================
+// Dynamic Pricing Helpers (Basis Points)
+// ============================================================================
+
+/**
+ * Common price offset constants for tests
+ * Basis points: 1 bp = 0.01%, 100 bp = 1%, 10000 bp = 100%
+ */
+export const MARKET_PRICE = 0;           // 0% offset (exactly market price)
+export const ABOVE_MARKET_5 = 500;       // +5% above market
+export const ABOVE_MARKET_10 = 1000;     // +10% above market
+export const BELOW_MARKET_5 = -500;      // -5% below market
+export const BELOW_MARKET_10 = -1000;    // -10% below market
+export const INVALID_OFFSET = -10000;    // -100% (invalid, would make price 0)
+
+/**
+ * Convert a percentage to basis points
+ * e.g., 5 -> 500, -5 -> -500, 0.5 -> 50
+ */
+export function percentageToBps(percentage: number): number {
+    return Math.round(percentage * 100);
+}
+
+/**
+ * Convert basis points to percentage
+ * e.g., 500 -> 5, -500 -> -5
+ */
+export function bpsToPercentage(bps: number): number {
+    return bps / 100;
+}
+
+/**
+ * Fetch current market price for a subnet from the chain
+ * Returns price as TAO_per_Alpha * 1e9 (scaled for precision)
+ */
+export async function getCurrentAlphaPrice(
+    api: TypedApi<typeof devnet>,
+    netuid: number
+): Promise<bigint> {
+    const price = await api.apis.SwapRuntimeApi.current_alpha_price(netuid);
+    return price;
+}
+
+/**
+ * Apply a basis points offset to a market price
+ * Formula: executed_price = market_price * (10000 + offset_bps) / 10000
+ */
+export function applyPriceOffset(marketPrice: bigint, offsetBps: number): bigint {
+    const base = 10000n;
+    const multiplier = base + BigInt(offsetBps);
+    if (multiplier <= 0n) {
+        throw new Error(`Invalid offset: ${offsetBps} would result in zero or negative price`);
+    }
+    return (marketPrice * multiplier) / base;
+}
+
+/**
+ * Convert a scaled price (price * 1e9) to U64F64 fixed-point representation
+ * This is the format used internally by the contract for calculations
+ */
+export function scaledPriceToFixedPoint(scaledPrice: bigint): bigint {
+    // scaledPrice is TAO_per_Alpha * 1e9
+    // We need to convert to U64F64 (multiply by 2^64, divide by 1e9)
+    const one = 1n << 64n;
+    const divisor = 1_000_000_000n;
+    return (scaledPrice * one) / divisor;
+}
+
+/**
+ * Get the executed price for a listing/offer given the market price and offset
+ * Returns the price in U64F64 format ready for calculations
+ */
+export async function getExecutedPriceFixed(
+    api: TypedApi<typeof devnet>,
+    netuid: number,
+    priceOffsetBps: number
+): Promise<bigint> {
+    const marketPrice = await getCurrentAlphaPrice(api, netuid);
+    const executedPrice = applyPriceOffset(marketPrice, priceOffsetBps);
+    return scaledPriceToFixedPoint(executedPrice);
+}
+
 /**
  * Convert U64F64 fixed-point to a readable price
  */
@@ -421,4 +503,64 @@ export function getContractError(result: any): string {
         return JSON.stringify(result.dispatchError);
     }
     return "Contract call failed";
+}
+
+// ============================================================================
+// Lockup Listings Helpers
+// ============================================================================
+
+/**
+ * Get the current block number
+ */
+export async function getCurrentBlock(api: TypedApi<typeof devnet>): Promise<number> {
+    const blockNumber = await api.query.System.Number.getValue();
+    return Number(blockNumber);
+}
+
+/**
+ * Wait until a specific block is reached
+ */
+export async function waitUntilBlock(
+    api: TypedApi<typeof devnet>,
+    targetBlock: number
+): Promise<void> {
+    let currentBlock = await getCurrentBlock(api);
+
+    while (currentBlock < targetBlock) {
+        console.log(`Waiting for block ${targetBlock}, current: ${currentBlock}`);
+        await new Promise(resolve => setTimeout(resolve, TEST_CONFIG.blockTime));
+        currentBlock = await getCurrentBlock(api);
+    }
+
+    console.log(`Reached target block ${targetBlock}`);
+}
+
+/**
+ * Bittensor minimum stake constant (2_000_000 rao = 0.002 TAO)
+ */
+export const BITTENSOR_MIN_STAKE = 2_000_000n;
+
+/**
+ * Default lockup duration constants for tests (in blocks)
+ */
+export const SHORT_LOCKUP_DURATION = 10;
+export const MEDIUM_LOCKUP_DURATION = 50;
+export const LONG_LOCKUP_DURATION = 100;
+
+/**
+ * Calculate TAO required for taking a lockup listing
+ * Similar to calculateTotalTaoForListing but uses the dynamic pricing model
+ */
+export function calculateLockupListingTao(
+    alphaAmount: bigint,
+    executedPrice: bigint,
+    feeRate: bigint
+): { taoAmount: bigint; feeAmount: bigint; totalRequired: bigint } {
+    // price is scaled by 1e9, need to apply properly
+    const priceDecimal = scaledPriceToFixedPoint(executedPrice);
+    const taoAmount = multiplyFixedByAmount(priceDecimal, alphaAmount);
+    const feeAmount = multiplyFixedByAmount(feeRate, taoAmount);
+    const totalRequired = taoAmount + feeAmount;
+
+    return { taoAmount, feeAmount, totalRequired };
 }

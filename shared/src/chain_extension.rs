@@ -1,14 +1,16 @@
-use crate::runtime::{AlphaCurrency, NetUid, TaoCurrency};
+use crate::runtime::{AlphaCurrency, TaoCurrency};
 use crate::types::AlphaAmount;
 use ink::primitives::AccountId;
 use ink::scale::Compact;
+
+use crate::runtime::NetUid as RuntimeNetUid;
 
 #[derive(PartialEq, Eq, Clone, Debug)]
 #[ink::scale_derive(Encode, Decode, TypeInfo)]
 pub struct StakeInfo {
     hotkey: AccountId,
     coldkey: AccountId,
-    netuid: Compact<NetUid>,
+    netuid: Compact<RuntimeNetUid>,
     stake: Compact<AlphaCurrency>,
     locked: Compact<u64>,
     emission: Compact<AlphaCurrency>,
@@ -19,7 +21,6 @@ pub struct StakeInfo {
 
 impl StakeInfo {
     pub fn stake_amount(&self) -> AlphaAmount {
-        // Extract from Compact<AlphaCurrency>
         let alpha_currency = self.stake.0.clone();
         alpha_currency.as_u64()
     }
@@ -28,7 +29,7 @@ impl StakeInfo {
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[ink::scale_derive(Encode, Decode, TypeInfo)]
 pub enum SubtensorError {
-    /// Unknow status code
+    /// Unknown status code
     UnknownStatusCode,
     /// Unknown error
     RuntimeError = 1,
@@ -122,4 +123,9 @@ pub trait SubtensorExtension {
         destination_netuid: u16,
         alpha_amount: AlphaCurrency,
     ) -> Result<(), SubtensorError>;
+
+    /// Get the current market price for an Alpha token on a subnet
+    /// Returns price * 1e9 (TAO per Alpha, scaled for precision)
+    #[ink(function = 15)]
+    fn get_alpha_price(netuid: u16) -> Result<u64, SubtensorError>;
 }

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { setupTestEnvironment, cleanupTestEnvironment, type TestContext, ContractSdk } from "../setup";
-import { taoToRao, priceToFixedPoint } from "../utils";
+import { taoToRao, MARKET_PRICE, percentageToFixedPoint } from "../utils";
 import { stringToU8a } from "@polkadot/util";
 import { Binary } from "polkadot-api";
 
@@ -228,7 +228,7 @@ describe("Pause Functionality", () => {
                 value: offerAmount, // Send TAO with the transaction
                 data: {
                     netuid: 1,
-                    price: priceToFixedPoint(2.0)
+                    price_offset_bps: MARKET_PRICE
                 }
             });
 
@@ -262,7 +262,7 @@ describe("Pause Functionality", () => {
                 value: offerAmount,
                 data: {
                     netuid: 1,
-                    price: priceToFixedPoint(2.5)
+                    price_offset_bps: MARKET_PRICE
                 }
             });
 
@@ -374,7 +374,7 @@ describe("Pause Functionality", () => {
                 origin: accounts.bob.address,
                 data: {
                     netuid: 1,
-                    price: priceToFixedPoint(2.0)
+                    price_offset_bps: MARKET_PRICE
                 }
             });
             expect(offerResult.success).toBe(false);
@@ -394,7 +394,7 @@ describe("Pause Functionality", () => {
             const { accounts } = context;
 
             // Test updating fee rate
-            const newFeeRate = priceToFixedPoint(0.75); // Using priceToFixedPoint for consistency
+            const newFeeRate = percentageToFixedPoint(0.75); // 0.75% fee rate
             const feeResult = await contract.query("update_fee_rate", {
                 origin: accounts.alice.address,
                 data: { new_rate: newFeeRate }
