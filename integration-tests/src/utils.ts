@@ -192,7 +192,7 @@ async function startSubnet(
     }
 
     // Get the required duration to wait
-    const duration = await api.constants.SubtensorModule.DurationOfStartCall();
+    const duration = await api.query.SubtensorModule.StartCallDelay.getValue();
     const durationNumber = Number(duration);
 
     // Wait for the required duration
