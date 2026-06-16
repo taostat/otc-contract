@@ -1,7 +1,7 @@
 {
     "name": "otc-contract-integration-tests",
     "version": "1.0.0",
-    "description": "Integration tests for OTC contract",
+    "description": "Integration tests for Taostats OTC smart contracts",
     "type": "module",
     "scripts": {
         "test": "vitest",
@@ -9,7 +9,7 @@
         "test:run": "vitest run",
         "test:watch": "vitest watch",
         "generate-api-types": "papi add devnet -w ws://localhost:9944",
-        "generate-otc-contract-types": "papi ink add ../target/ink/otc_contract/otc_contract.contract",
+        "generate-contract-types": "papi ink add ../target/ink/otc_contract/otc_contract.contract --key otc_contract && papi ink add ../target/ink/alpha_lockup/alpha_lockup.contract --key alpha_lockup && papi ink add ../target/ink/lockup_listings/lockup_listings.contract --key lockup_listings",
         "postinstall": "papi && patch-package"
     },
     "dependencies": {
@@ -22,10 +22,10 @@
         "@polkadot-labs/hdkd": "^0.0.8",
         "@polkadot-labs/hdkd-helpers": "^0.0.8",
         "@types/node": "^22.5.5",
-        "@vitest/ui": "^2.1.1",
-        "patch-package": "^8.0.0",
-        "tsx": "^4.19.1",
+        "@vitest/ui": "^4.1.9",
+        "patch-package": "^8.0.1",
+        "tsx": "^4.22.4",
         "typescript": "^5.6.2",
-        "vitest": "^2.1.1"
+        "vitest": "^4.1.9"
     }
 }

@@ -9,7 +9,7 @@ ink = { version = "5.1.1", default-features = false }
 otc-shared = { path = "../../shared", default-features = false }
 alpha-lockup = { path = "../alpha_lockup", default-features = false, features = ["ink-as-dependency"] }
 sp-runtime = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-stable2503-6", default-features = false }
-fixed = { version = "1.27", default-features = false }
+fixed = { version = "=1.27.0", default-features = false }
 
 [dev-dependencies]
 ink_e2e = { version = "5.1.1" }
