@@ -45,4 +45,34 @@ pub enum Error {
     CodeUpgradeFailed,
     /// Amount would leave listing below Bittensor minimum stake requirement
     AmountBelowMinimumStake,
+    /// Escrow not found for a purchase
+    EscrowNotFound,
+    /// Proposed hotkey is invalid
+    InvalidHotkey,
+    /// Escrow hotkey sync failed
+    EscrowSyncFailed,
+    /// Failed to query subnet registration state from chain extension
+    SubnetRegistrationQueryFailed,
+    /// The requested subnet does not currently exist
+    SubnetNotFound,
+    /// Runtime returned an invalid zero subnet generation
+    InvalidSubnetGeneration,
+    /// Listing was created for an older subnet generation
+    SubnetGenerationMismatch,
+    /// Alpha is currently unavailable because of conviction locks
+    StakeUnavailable,
+    /// A stale listing recovery pool already exists for this subnet generation
+    RecoveryPoolAlreadyExists,
+    /// A stale listing recovery pool was not found
+    RecoveryPoolNotFound,
+    /// The stale listing recovery pool has already been closed
+    RecoveryPoolClosed,
+    /// Runtime state does not prove the listing subnet generation is stale
+    RecoveryPoolNotStale,
+    /// No reserved stale Alpha exists for this subnet generation
+    NoRecoverableAlpha,
+    /// Contract TAO balance outside recovery pools is too low
+    InsufficientUnreservedTao,
+    /// Recovery payout would be zero before the final dust assignment
+    RecoveryPayoutTooSmall,
 }

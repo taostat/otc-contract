@@ -107,6 +107,34 @@ describe("Lockup Listings Contract - Admin Functions", () => {
             await revertTx.signAndSubmit(accounts.alice.signer);
         }, 120000);
 
+        it("should allow owner to change subnet-specific active hotkey", async () => {
+            const { accounts } = context;
+
+            const updateTx = contract.send("update_hotkey_for_subnet", {
+                origin: accounts.alice.address,
+                data: { netuid: 1, new_hotkey: accounts.bob.address }
+            });
+
+            await updateTx.signAndSubmit(accounts.alice.signer);
+
+            const activeHotkeyResult = await contract.query("get_active_hotkey_for_subnet", {
+                origin: accounts.alice.address,
+                data: { netuid: 1 }
+            });
+
+            expect(activeHotkeyResult.success).toBe(true);
+            if (activeHotkeyResult.success) {
+                expect(activeHotkeyResult.value.response).toBe(accounts.bob.address);
+            }
+
+            const revertTx = contract.send("update_hotkey_for_subnet", {
+                origin: accounts.alice.address,
+                data: { netuid: 1, new_hotkey: accounts.alice.address }
+            });
+
+            await revertTx.signAndSubmit(accounts.alice.signer);
+        }, 120000);
+
         it("should prevent non-owner from changing hotkey", async () => {
             const { accounts } = context;
 

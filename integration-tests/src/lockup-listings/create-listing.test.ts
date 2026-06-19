@@ -20,13 +20,20 @@ import {
     BELOW_MARKET_5,
     INVALID_OFFSET,
     MEDIUM_LOCKUP_DURATION,
+    BITTENSOR_MIN_STAKE,
     type Wallet,
 } from "../utils";
 import {
-    getStakeBalance,
-    formatStakeAmount,
-} from "../utils/stake-helpers";
+    createLockupListing,
+    expectEvent,
+    queryOk,
+    submitOk,
+    submitReverted,
+} from "../test-helpers";
 
+const VALID_LISTING_AMOUNT = BITTENSOR_MIN_STAKE;
+const LARGER_LISTING_AMOUNT = BITTENSOR_MIN_STAKE + 1_000_000n;
+const BOB_REQUIRED_ALPHA = BITTENSOR_MIN_STAKE * 4n;
 describe("Lockup Listings Contract - Create Listing", () => {
     let context: LockupListingsContext;
     let contract: ReturnType<LockupListingsSdk["getContract"]>;
@@ -40,6 +47,12 @@ describe("Lockup Listings Contract - Create Listing", () => {
     beforeAll(async () => {
         context = await setupLockupListingsEnvironment();
         contract = context.contractSdk.getContract(context.contractAddress!);
+
+        const updateMinTx = contract.send("update_min_listing_amount", {
+            origin: context.accounts.alice.address,
+            data: { new_amount: BITTENSOR_MIN_STAKE }
+        });
+        await submitOk(updateMinTx, context.accounts.alice.signer, "update_min_listing_amount");
 
         // Create a subnet for testing
         const aliceHotkey = createHotkey("//Alice");
@@ -91,9 +104,9 @@ describe("Lockup Listings Contract - Create Listing", () => {
         await fundAccount(context.api, eveHotkey.address, taoToRao(1), context.accounts.alice.signer);
 
         // Register validators with initial stake
-        await registerValidator(context.api, netuid, bobHotkey.address, context.accounts.bob.signer, taoToRao(100));
-        await registerValidator(context.api, netuid, charlieHotkey.address, context.accounts.charlie.signer, taoToRao(100));
-        await registerValidator(context.api, netuid, daveHotkey.address, context.accounts.dave.signer, taoToRao(100));
+        await registerValidator(context.api, netuid, bobHotkey.address, context.accounts.bob.signer, taoToRao(5000), BOB_REQUIRED_ALPHA);
+        await registerValidator(context.api, netuid, charlieHotkey.address, context.accounts.charlie.signer, taoToRao(5000), LARGER_LISTING_AMOUNT);
+        await registerValidator(context.api, netuid, daveHotkey.address, context.accounts.dave.signer, taoToRao(5000), LARGER_LISTING_AMOUNT);
         await registerValidator(context.api, netuid, eveHotkey.address, context.accounts.eve.signer, taoToRao(30)); // Eve has less stake
 
         await waitForBlocks(context.api, 2);
@@ -116,135 +129,82 @@ describe("Lockup Listings Contract - Create Listing", () => {
     describe("Happy Paths", () => {
         it("should create a lockup listing with valid parameters", async () => {
             const { accounts } = context;
-            const listAmount = taoToRao(10);
+            const listAmount = VALID_LISTING_AMOUNT;
             const lockupDuration = MEDIUM_LOCKUP_DURATION;
 
-            const stakeBefore = await getStakeBalance(context.api, bobHotkey.address, netuid, accounts.bob.address);
-            console.log(`Bob's stake before: ${formatStakeAmount(stakeBefore)}`);
-
-            const listTx = contract.send("create_lockup_listing", {
-                origin: accounts.bob.address,
-                data: {
-                    hotkey: bobHotkey.address,
-                    netuid,
-                    amount: listAmount,
-                    price_offset_bps: MARKET_PRICE,
-                    lockup_duration: lockupDuration
-                }
+            const { listingId, event } = await createLockupListing(contract, accounts.bob.signer, accounts.bob.address, {
+                hotkey: bobHotkey.address,
+                netuid,
+                amount: listAmount,
+                price_offset_bps: MARKET_PRICE,
+                lockup_duration: lockupDuration
             });
 
-            const result = await listTx.signAndSubmit(accounts.bob.signer);
-            expect(result.ok).toBe(true);
-
-            await waitForBlocks(context.api, 2);
+            expect(event.value.seller).toBe(accounts.bob.address);
+            expect(event.value.hotkey).toBe(bobHotkey.address);
+            expect(event.value.custody_hotkey).toBe(bobHotkey.address);
+            expect(event.value.netuid).toBe(netuid);
+            expect(BigInt(event.value.amount)).toBe(listAmount);
 
             // Verify listing was created
-            const listingsResult = await contract.query("get_user_listings", {
+            const listings = queryOk<bigint[]>(await contract.query("get_user_listings", {
                 origin: accounts.alice.address,
                 data: {
                     seller: accounts.bob.address,
                     netuid
                 }
-            });
+            }), "get_user_listings");
+            expect(listings).toContain(listingId);
 
-            expect(listingsResult.success).toBe(true);
-            if (listingsResult.success) {
-                expect(listingsResult.value.response.length).toBeGreaterThan(0);
-            }
+            const listing = queryOk<any>(await contract.query("get_listing", {
+                origin: accounts.alice.address,
+                data: { netuid, seller: accounts.bob.address, listing_id: listingId }
+            }), "get_listing");
+            expect(listing).toBeDefined();
+            expect(listing.total_amount).toBe(listAmount);
+            expect(listing.remaining_amount).toBe(listAmount);
         }, 120000);
 
         it("should create listing with positive price offset", async () => {
             const { accounts } = context;
-            const listAmount = taoToRao(5);
+            const listAmount = VALID_LISTING_AMOUNT;
             const lockupDuration = MEDIUM_LOCKUP_DURATION;
 
-            const listTx = contract.send("create_lockup_listing", {
-                origin: accounts.charlie.address,
-                data: {
-                    hotkey: charlieHotkey.address,
-                    netuid,
-                    amount: listAmount,
-                    price_offset_bps: ABOVE_MARKET_5, // +5%
-                    lockup_duration: lockupDuration
-                }
+            const { listingId } = await createLockupListing(contract, accounts.charlie.signer, accounts.charlie.address, {
+                hotkey: charlieHotkey.address,
+                netuid,
+                amount: listAmount,
+                price_offset_bps: ABOVE_MARKET_5, // +5%
+                lockup_duration: lockupDuration
             });
-
-            const result = await listTx.signAndSubmit(accounts.charlie.signer);
-            expect(result.ok).toBe(true);
 
             // Verify the listing has correct price offset
-            const listingsResult = await contract.query("get_user_listings", {
+            const listing = queryOk<any>(await contract.query("get_listing", {
                 origin: accounts.alice.address,
-                data: {
-                    seller: accounts.charlie.address,
-                    netuid
-                }
-            });
-
-            expect(listingsResult.success).toBe(true);
-            if (listingsResult.success && listingsResult.value.response.length > 0) {
-                const listingId = listingsResult.value.response[listingsResult.value.response.length - 1];
-                const listing = await contract.query("get_listing", {
-                    origin: accounts.alice.address,
-                    data: {
-                        netuid,
-                        seller: accounts.charlie.address,
-                        listing_id: listingId
-                    }
-                });
-
-                expect(listing.success).toBe(true);
-                if (listing.success && listing.value.response) {
-                    expect(listing.value.response.price_offset_bps).toBe(ABOVE_MARKET_5);
-                }
-            }
+                data: { netuid, seller: accounts.charlie.address, listing_id: listingId }
+            }), "get_listing");
+            expect(listing.price_offset_bps).toBe(ABOVE_MARKET_5);
         }, 120000);
 
         it("should create listing with negative price offset", async () => {
             const { accounts } = context;
-            const listAmount = taoToRao(5);
+            const listAmount = VALID_LISTING_AMOUNT;
             const lockupDuration = MEDIUM_LOCKUP_DURATION;
 
-            const listTx = contract.send("create_lockup_listing", {
-                origin: accounts.dave.address,
-                data: {
-                    hotkey: daveHotkey.address,
-                    netuid,
-                    amount: listAmount,
-                    price_offset_bps: BELOW_MARKET_5, // -5%
-                    lockup_duration: lockupDuration
-                }
+            const { listingId } = await createLockupListing(contract, accounts.dave.signer, accounts.dave.address, {
+                hotkey: daveHotkey.address,
+                netuid,
+                amount: listAmount,
+                price_offset_bps: BELOW_MARKET_5, // -5%
+                lockup_duration: lockupDuration
             });
-
-            const result = await listTx.signAndSubmit(accounts.dave.signer);
-            expect(result.ok).toBe(true);
 
             // Verify the listing
-            const listingsResult = await contract.query("get_user_listings", {
+            const listing = queryOk<any>(await contract.query("get_listing", {
                 origin: accounts.alice.address,
-                data: {
-                    seller: accounts.dave.address,
-                    netuid
-                }
-            });
-
-            expect(listingsResult.success).toBe(true);
-            if (listingsResult.success && listingsResult.value.response.length > 0) {
-                const listingId = listingsResult.value.response[listingsResult.value.response.length - 1];
-                const listing = await contract.query("get_listing", {
-                    origin: accounts.alice.address,
-                    data: {
-                        netuid,
-                        seller: accounts.dave.address,
-                        listing_id: listingId
-                    }
-                });
-
-                expect(listing.success).toBe(true);
-                if (listing.success && listing.value.response) {
-                    expect(listing.value.response.price_offset_bps).toBe(BELOW_MARKET_5);
-                }
-            }
+                data: { netuid, seller: accounts.dave.address, listing_id: listingId }
+            }), "get_listing");
+            expect(listing.price_offset_bps).toBe(BELOW_MARKET_5);
         }, 120000);
 
         it("should increment reserved alpha after listing", async () => {
@@ -255,20 +215,14 @@ describe("Lockup Listings Contract - Create Listing", () => {
                 data: { netuid }
             });
 
-            const listAmount = taoToRao(5);
-            const listTx = contract.send("create_lockup_listing", {
-                origin: accounts.bob.address,
-                data: {
-                    hotkey: bobHotkey.address,
-                    netuid,
-                    amount: listAmount,
-                    price_offset_bps: MARKET_PRICE,
-                    lockup_duration: MEDIUM_LOCKUP_DURATION
-                }
+            const listAmount = VALID_LISTING_AMOUNT;
+            await createLockupListing(contract, accounts.bob.signer, accounts.bob.address, {
+                hotkey: bobHotkey.address,
+                netuid,
+                amount: listAmount,
+                price_offset_bps: MARKET_PRICE,
+                lockup_duration: MEDIUM_LOCKUP_DURATION
             });
-
-            await listTx.signAndSubmit(accounts.bob.signer);
-            await waitForBlocks(context.api, 1);
 
             const reservedAfter = await contract.query("get_reserved_alpha", {
                 origin: accounts.alice.address,
@@ -280,10 +234,79 @@ describe("Lockup Listings Contract - Create Listing", () => {
 
             if (reservedBefore.success && reservedAfter.success) {
                 const increase = reservedAfter.value.response - reservedBefore.value.response;
-                // Allow some tolerance for potential staking rewards adjustments
-                expect(increase).toBeGreaterThanOrEqual(listAmount - taoToRao(1));
+                expect(increase).toBe(listAmount);
             }
         }, 120000);
+
+        it("should keep listing active when company hotkey consolidation fails", async () => {
+            const { accounts } = context;
+            const listAmount = VALID_LISTING_AMOUNT;
+
+            const updateTx = contract.send("update_hotkey_for_subnet", {
+                origin: accounts.alice.address,
+                data: {
+                    netuid,
+                    new_hotkey: accounts.eve.address // coldkey, intentionally not registered as a subnet hotkey
+                }
+            });
+            await submitOk(updateTx, accounts.alice.signer, "update_hotkey_for_subnet");
+
+            const reservedByHotkeyBefore = queryOk<bigint>(await contract.query("get_reserved_alpha_for_hotkey", {
+                origin: accounts.alice.address,
+                data: {
+                    netuid,
+                    hotkey: bobHotkey.address
+                }
+            }), "get_reserved_alpha_for_hotkey");
+
+            const { result, listingId } = await createLockupListing(contract, accounts.bob.signer, accounts.bob.address, {
+                hotkey: bobHotkey.address,
+                netuid,
+                amount: listAmount,
+                price_offset_bps: MARKET_PRICE,
+                lockup_duration: MEDIUM_LOCKUP_DURATION
+            });
+
+            expectEvent(contract, result, "ListingHotkeyConsolidationFailed");
+
+            const listing = queryOk<any>(await contract.query("get_listing", {
+                origin: accounts.alice.address,
+                data: {
+                    netuid,
+                    seller: accounts.bob.address,
+                    listing_id: listingId
+                }
+            }), "get_listing");
+            expect(listing.custody_hotkey).toBe(bobHotkey.address);
+            expect(listing.remaining_amount).toBe(listAmount);
+
+            const reservedByHotkey = queryOk<bigint>(await contract.query("get_reserved_alpha_for_hotkey", {
+                origin: accounts.alice.address,
+                data: {
+                    netuid,
+                    hotkey: bobHotkey.address
+                }
+            }), "get_reserved_alpha_for_hotkey");
+            expect(reservedByHotkey - reservedByHotkeyBefore).toBe(listAmount);
+
+            const cancelTx = contract.send("cancel_lockup_listing", {
+                origin: accounts.bob.address,
+                data: {
+                    netuid,
+                    listing_id: listingId
+                }
+            });
+            await submitOk(cancelTx, accounts.bob.signer, "cancel_lockup_listing");
+
+            const revertTx = contract.send("update_hotkey_for_subnet", {
+                origin: accounts.alice.address,
+                data: {
+                    netuid,
+                    new_hotkey: accounts.alice.address
+                }
+            });
+            await submitOk(revertTx, accounts.alice.signer, "update_hotkey_for_subnet");
+        }, 180000);
     });
 
     describe("Error Cases", () => {
@@ -313,8 +336,7 @@ describe("Lockup Listings Contract - Create Listing", () => {
                 }
             });
 
-            const result = await listTx.signAndSubmit(accounts.bob.signer);
-            expect(result.ok).toBe(false);
+            await submitReverted(listTx, accounts.bob.signer, "create_lockup_listing below minimum");
         }, 60000);
 
         it("should fail with InvalidPriceOffset when offset is -100% or below", async () => {
@@ -325,14 +347,13 @@ describe("Lockup Listings Contract - Create Listing", () => {
                 data: {
                     hotkey: bobHotkey.address,
                     netuid,
-                    amount: taoToRao(5),
+                    amount: VALID_LISTING_AMOUNT,
                     price_offset_bps: INVALID_OFFSET, // -100%
                     lockup_duration: MEDIUM_LOCKUP_DURATION
                 }
             });
 
-            const result = await listTx.signAndSubmit(accounts.bob.signer);
-            expect(result.ok).toBe(false);
+            await submitReverted(listTx, accounts.bob.signer, "create_lockup_listing invalid offset");
         }, 60000);
 
         it("should fail with LockupDurationTooShort when below minimum", async () => {
@@ -355,14 +376,13 @@ describe("Lockup Listings Contract - Create Listing", () => {
                 data: {
                     hotkey: bobHotkey.address,
                     netuid,
-                    amount: taoToRao(5),
+                    amount: VALID_LISTING_AMOUNT,
                     price_offset_bps: MARKET_PRICE,
                     lockup_duration: tooShort
                 }
             });
 
-            const result = await listTx.signAndSubmit(accounts.bob.signer);
-            expect(result.ok).toBe(false);
+            await submitReverted(listTx, accounts.bob.signer, "create_lockup_listing short duration");
         }, 60000);
 
         it("should fail with LockupDurationTooLong when above maximum", async () => {
@@ -385,14 +405,13 @@ describe("Lockup Listings Contract - Create Listing", () => {
                 data: {
                     hotkey: bobHotkey.address,
                     netuid,
-                    amount: taoToRao(5),
+                    amount: VALID_LISTING_AMOUNT,
                     price_offset_bps: MARKET_PRICE,
                     lockup_duration: tooLong
                 }
             });
 
-            const result = await listTx.signAndSubmit(accounts.bob.signer);
-            expect(result.ok).toBe(false);
+            await submitReverted(listTx, accounts.bob.signer, "create_lockup_listing long duration");
         }, 60000);
 
         it("should fail with InsufficientStake when seller lacks Alpha", async () => {
@@ -404,14 +423,13 @@ describe("Lockup Listings Contract - Create Listing", () => {
                 data: {
                     hotkey: eveHotkey.address,
                     netuid,
-                    amount: taoToRao(50),
+                    amount: taoToRao(1),
                     price_offset_bps: MARKET_PRICE,
                     lockup_duration: MEDIUM_LOCKUP_DURATION
                 }
             });
 
-            const result = await listTx.signAndSubmit(accounts.eve.signer);
-            expect(result.ok).toBe(false);
+            await submitReverted(listTx, accounts.eve.signer, "create_lockup_listing insufficient stake");
         }, 60000);
 
         it("should fail when trading is paused", async () => {
@@ -422,7 +440,7 @@ describe("Lockup Listings Contract - Create Listing", () => {
                 origin: accounts.alice.address,
                 data: { reason: Binary.fromText("Testing pause") }
             });
-            await pauseTx.signAndSubmit(accounts.alice.signer);
+            await submitOk(pauseTx, accounts.alice.signer, "pause_trading");
 
             // Try to create listing
             const listTx = contract.send("create_lockup_listing", {
@@ -430,21 +448,20 @@ describe("Lockup Listings Contract - Create Listing", () => {
                 data: {
                     hotkey: bobHotkey.address,
                     netuid,
-                    amount: taoToRao(5),
+                    amount: VALID_LISTING_AMOUNT,
                     price_offset_bps: MARKET_PRICE,
                     lockup_duration: MEDIUM_LOCKUP_DURATION
                 }
             });
 
-            const result = await listTx.signAndSubmit(accounts.bob.signer);
-            expect(result.ok).toBe(false);
+            await submitReverted(listTx, accounts.bob.signer, "create_lockup_listing while trading paused");
 
             // Resume
             const resumeTx = contract.send("resume", {
                 origin: accounts.alice.address,
                 data: {}
             });
-            await resumeTx.signAndSubmit(accounts.alice.signer);
+            await submitOk(resumeTx, accounts.alice.signer, "resume");
         }, 120000);
 
         it("should fail when contract is fully paused", async () => {
@@ -455,7 +472,7 @@ describe("Lockup Listings Contract - Create Listing", () => {
                 origin: accounts.alice.address,
                 data: { reason: Binary.fromText("Testing full pause") }
             });
-            await pauseTx.signAndSubmit(accounts.alice.signer);
+            await submitOk(pauseTx, accounts.alice.signer, "pause_fully");
 
             // Try to create listing
             const listTx = contract.send("create_lockup_listing", {
@@ -463,21 +480,20 @@ describe("Lockup Listings Contract - Create Listing", () => {
                 data: {
                     hotkey: bobHotkey.address,
                     netuid,
-                    amount: taoToRao(5),
+                    amount: VALID_LISTING_AMOUNT,
                     price_offset_bps: MARKET_PRICE,
                     lockup_duration: MEDIUM_LOCKUP_DURATION
                 }
             });
 
-            const result = await listTx.signAndSubmit(accounts.bob.signer);
-            expect(result.ok).toBe(false);
+            await submitReverted(listTx, accounts.bob.signer, "create_lockup_listing while fully paused");
 
             // Resume
             const resumeTx = contract.send("resume", {
                 origin: accounts.alice.address,
                 data: {}
             });
-            await resumeTx.signAndSubmit(accounts.alice.signer);
+            await submitOk(resumeTx, accounts.alice.signer, "resume");
         }, 120000);
     });
 });

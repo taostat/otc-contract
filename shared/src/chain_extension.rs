@@ -26,6 +26,23 @@ impl StakeInfo {
     }
 }
 
+#[derive(PartialEq, Eq, Clone, Debug)]
+#[ink::scale_derive(Encode, Decode, TypeInfo)]
+pub struct SubnetRegistrationState {
+    pub netuid: RuntimeNetUid,
+    pub exists: bool,
+    pub registered_subnet_counter: u64,
+}
+
+#[derive(PartialEq, Eq, Clone, Debug)]
+#[ink::scale_derive(Encode, Decode, TypeInfo)]
+pub struct StakeAvailability {
+    pub netuid: RuntimeNetUid,
+    pub total: AlphaAmount,
+    pub locked: AlphaAmount,
+    pub available: AlphaAmount,
+}
+
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[ink::scale_derive(Encode, Decode, TypeInfo)]
 pub enum SubtensorError {
@@ -128,4 +145,17 @@ pub trait SubtensorExtension {
     /// Returns price * 1e9 (TAO per Alpha, scaled for precision)
     #[ink(function = 15)]
     fn get_alpha_price(netuid: u16) -> Result<u64, SubtensorError>;
+
+    /// Get whether a netuid currently exists and its registration generation.
+    #[ink(function = 34)]
+    fn get_subnet_registration_state(
+        netuid: u16,
+    ) -> Result<SubnetRegistrationState, SubtensorError>;
+
+    /// Get coldkey-wide Alpha availability for a subnet, accounting for conviction locks.
+    #[ink(function = 36)]
+    fn get_stake_availability(
+        coldkey: AccountId,
+        netuid: u16,
+    ) -> Result<StakeAvailability, SubtensorError>;
 }

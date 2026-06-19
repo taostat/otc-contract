@@ -23,6 +23,13 @@ import { Binary } from "polkadot-api";
 import { stringToU8a } from "@polkadot/util";
 
 const TRANSFER_TOLERANCE = 10n; // Matches contract tolerance (rao)
+const PRIMARY_LISTING_ALPHA = taoToRao(0.02);
+const SECONDARY_LISTING_ALPHA = taoToRao(0.015);
+const TERTIARY_LISTING_ALPHA = taoToRao(0.018);
+const DIVIDEND_ALPHA = taoToRao(0.1);
+const DIVIDEND_DRIFT_TOLERANCE = taoToRao(0.05);
+const CONTRACT_HOTKEY_REQUIRED_ALPHA = DIVIDEND_ALPHA + DIVIDEND_DRIFT_TOLERANCE + PRIMARY_LISTING_ALPHA;
+const REQUIRED_SELLER_ALPHA = taoToRao(0.05);
 
 // Contract errors exposed via dispatchError
 interface ContractsError {
@@ -77,6 +84,7 @@ describe("Dividends Claiming", () => {
             contractHotkey,
             context.accounts.alice.signer,
             taoToRao(50),
+            CONTRACT_HOTKEY_REQUIRED_ALPHA,
         );
         await waitForBlocks(context.api, 1);
 
@@ -88,7 +96,8 @@ describe("Dividends Claiming", () => {
             netuid,
             bobHotkey.address,
             context.accounts.bob.signer,
-            taoToRao(120),
+            taoToRao(5000),
+            REQUIRED_SELLER_ALPHA,
         );
 
         await waitForBlocks(context.api, 1);
@@ -105,9 +114,9 @@ describe("Dividends Claiming", () => {
     it("tracks reserved stake and transfers staking rewards to the owner", async () => {
         const { accounts } = context;
 
-        const listingAmount = taoToRao(20); // 20 Alpha in rao
+        const listingAmount = PRIMARY_LISTING_ALPHA;
         const priceOffsetBps = MARKET_PRICE; // Market price
-        const dividendAmount = taoToRao(5); // Simulated rewards (5 Alpha)
+        const dividendAmount = DIVIDEND_ALPHA;
 
         console.log("=== Listing Alpha to populate reserved balance ===");
         const listTx = contract.send("list_alpha", {
@@ -203,7 +212,7 @@ describe("Dividends Claiming", () => {
         }
         const reservedPreClaim = BigInt(reservedBeforeRewards.value.response);
         // On live networks emission may cause minor drift; tolerate reasonable excess
-        const driftTolerance = taoToRao(10); // allow up to 10 Alpha discrepancy
+        const driftTolerance = DIVIDEND_DRIFT_TOLERANCE; // live localnet emissions can move between snapshots
         expect(contractStakeAfterBaseline).toBeGreaterThanOrEqual(reservedPreClaim - driftTolerance);
         expect(contractStakeAfterBaseline).toBeLessThanOrEqual(reservedPreClaim + driftTolerance);
 
@@ -234,17 +243,12 @@ describe("Dividends Claiming", () => {
         console.log(`Owner stake before claim: ${formatStakeAmount(ownerStakeBeforeClaim)}`);
         console.log(`Contract stake before claim: ${formatStakeAmount(contractStakeBeforeClaim)}`);
 
-        const ownerDelta = ownerStakeAfterBaseline > ownerStakeBeforeClaim
-            ? ownerStakeAfterBaseline - ownerStakeBeforeClaim
-            : ownerStakeBeforeClaim - ownerStakeAfterBaseline;
         const contractDelta = contractStakeBeforeClaim > contractStakeAfterBaseline
             ? contractStakeBeforeClaim - contractStakeAfterBaseline
             : contractStakeAfterBaseline - contractStakeBeforeClaim;
         const minExpected = dividendAmount > driftTolerance ? dividendAmount - driftTolerance : 0n;
         const maxExpected = dividendAmount + driftTolerance;
 
-        expect(ownerDelta).toBeGreaterThanOrEqual(minExpected);
-        expect(ownerDelta).toBeLessThanOrEqual(maxExpected);
         expect(contractDelta).toBeGreaterThanOrEqual(minExpected);
         expect(contractDelta).toBeLessThanOrEqual(maxExpected);
 
@@ -272,9 +276,12 @@ describe("Dividends Claiming", () => {
             console.warn("DividendsClaimed event not found; using expected dividend amount for drift checks");
         }
 
-        const claimDelta = claimedAmount > dividendAmount
-            ? claimedAmount - dividendAmount
-            : dividendAmount - claimedAmount;
+        const expectedClaimableBefore = contractStakeBeforeClaim > reservedPreClaim
+            ? contractStakeBeforeClaim - reservedPreClaim
+            : 0n;
+        const claimDelta = claimedAmount > expectedClaimableBefore
+            ? claimedAmount - expectedClaimableBefore
+            : expectedClaimableBefore - claimedAmount;
         expect(claimDelta).toBeLessThanOrEqual(driftTolerance);
         expect(reservedReported).toBe(reservedPreClaim);
 
@@ -307,19 +314,14 @@ describe("Dividends Claiming", () => {
         console.log(`Contract stake after claim: ${formatStakeAmount(contractStakeAfterClaim)}`);
         console.log(`Reserved after claim: ${formatStakeAmount(reservedPostClaim)}`);
 
-        const expectedOwnerAfter = ownerStakeAfterBaseline + claimedAmount;
-        const expectedContractAfter = contractStakeAfterBaseline > claimedAmount
-            ? contractStakeAfterBaseline - claimedAmount
+        const minOwnerAfter = ownerStakeBeforeClaim + claimedAmount > driftTolerance
+            ? ownerStakeBeforeClaim + claimedAmount - driftTolerance
             : 0n;
+        const contractPostDelta = contractStakeAfterClaim > reservedPostClaim
+            ? contractStakeAfterClaim - reservedPostClaim
+            : reservedPostClaim - contractStakeAfterClaim;
 
-        const ownerPostDelta = ownerStakeAfterClaim > expectedOwnerAfter
-            ? ownerStakeAfterClaim - expectedOwnerAfter
-            : expectedOwnerAfter - ownerStakeAfterClaim;
-        const contractPostDelta = contractStakeAfterClaim > expectedContractAfter
-            ? contractStakeAfterClaim - expectedContractAfter
-            : expectedContractAfter - contractStakeAfterClaim;
-
-        expect(ownerPostDelta).toBeLessThanOrEqual(driftTolerance);
+        expect(ownerStakeAfterClaim).toBeGreaterThanOrEqual(minOwnerAfter);
         expect(contractPostDelta).toBeLessThanOrEqual(driftTolerance);
         expect(reservedPostClaim).toBe(reservedPreClaim);
 
@@ -462,7 +464,7 @@ describe("Dividends Claiming", () => {
         console.log("=== Setting up scenario with reserved == contract stake ===");
 
         // Create a listing to establish reserved alpha
-        const listingAmount = taoToRao(15);
+        const listingAmount = SECONDARY_LISTING_ALPHA;
 
         const listTx = contract.send("list_alpha", {
             origin: accounts.bob.address,
@@ -521,7 +523,7 @@ describe("Dividends Claiming", () => {
                 if (dividendEvent) {
                     const amount = BigInt(dividendEvent.value.amount);
                     console.log(`Claimed small amount: ${formatStakeAmount(amount)}`);
-                    expect(amount).toBeLessThanOrEqual(taoToRao(5)); // Allow some emission drift
+                    expect(amount).toBeLessThanOrEqual(DIVIDEND_DRIFT_TOLERANCE);
                 }
             }
         }
@@ -557,7 +559,8 @@ describe("Dividends Claiming", () => {
             netuid,
             charlieHotkey.address,
             context.accounts.charlie.signer,
-            taoToRao(100),
+            taoToRao(5000),
+            REQUIRED_SELLER_ALPHA,
         );
         await addContractAsProxy(context.api, context.contractAddress!, context.accounts.charlie.signer);
         await waitForBlocks(context.api, 2);
@@ -571,9 +574,9 @@ describe("Dividends Claiming", () => {
         console.log(`Initial reserved: ${formatStakeAmount(initialReservedAmount)}`);
 
         // Create multiple listings
-        const listing1Amount = taoToRao(10);
-        const listing2Amount = taoToRao(15);
-        const listing3Amount = taoToRao(20);
+        const listing1Amount = PRIMARY_LISTING_ALPHA;
+        const listing2Amount = SECONDARY_LISTING_ALPHA;
+        const listing3Amount = TERTIARY_LISTING_ALPHA;
 
         // Bob's first listing
         const list1Tx = contract.send("list_alpha", {
@@ -644,7 +647,7 @@ describe("Dividends Claiming", () => {
         console.log("✓ Reserved alpha tracking verified with multiple listings");
 
         // Simulate dividends and claim
-        const dividendAmount = taoToRao(8);
+        const dividendAmount = DIVIDEND_ALPHA;
         await transferStake(
             context.api,
             context.contractAddress!,

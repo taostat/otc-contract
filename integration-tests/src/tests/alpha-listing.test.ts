@@ -19,6 +19,11 @@ import {
     hasProxyPermission,
     formatStakeAmount,
 } from "../utils/stake-helpers";
+import {
+    createAlphaListing,
+    queryOk,
+    submitReverted,
+} from "../test-helpers";
 
 type EventWithTopics = TxEventsPayload["events"][number];
 
@@ -26,6 +31,12 @@ type ContractsError = {
     type: 'Contracts',
     value: { type: 'ContractReverted', value: undefined }
 }
+
+const PRIMARY_LISTING_AMOUNT = taoToRao(0.02);
+const SECONDARY_LISTING_AMOUNT = taoToRao(0.015);
+const INSUFFICIENT_LISTING_AMOUNT = taoToRao(0.5);
+const PRIMARY_REQUIRED_ALPHA = taoToRao(0.05);
+const SECONDARY_REQUIRED_ALPHA = taoToRao(0.03);
 
 describe("Alpha Listing Operations", () => {
     let context: TestContext;
@@ -105,7 +116,8 @@ describe("Alpha Listing Operations", () => {
             netuid,
             bobHotkey.address,
             context.accounts.bob.signer,
-            taoToRao(100) // 100 Alpha initial stake
+            taoToRao(5000),
+            PRIMARY_REQUIRED_ALPHA
         );
         console.log(`✓ Bob's validator registered successfully`);
 
@@ -115,7 +127,8 @@ describe("Alpha Listing Operations", () => {
             netuid,
             charlieWallet.address,
             context.accounts.charlie.signer,
-            taoToRao(150) // 150 Alpha initial stake
+            taoToRao(5000),
+            PRIMARY_REQUIRED_ALPHA
         );
         console.log(`✓ Charlie's validator registered successfully`);
 
@@ -125,7 +138,8 @@ describe("Alpha Listing Operations", () => {
             netuid,
             daveHotkey.address,
             context.accounts.dave.signer,
-            taoToRao(100) // 100 Alpha initial stake for Dave
+            taoToRao(5000),
+            PRIMARY_REQUIRED_ALPHA
         );
         console.log(`✓ Dave's validator registered successfully`);
 
@@ -164,24 +178,24 @@ describe("Alpha Listing Operations", () => {
             taoToRao(30)
         );
 
-        // Charlie: 100 Alpha on special hotkey (for consolidation test)
-        // Note: Charlie already has 150 Alpha on charlieWallet from initial setup
+        // Charlie: plenty of Alpha on special hotkey (for consolidation test)
         await registerValidator(
             context.api,
             netuid,
             charlieSpecialHotkey.address,
             context.accounts.charlie.signer,
-            taoToRao(100)
+            taoToRao(5000),
+            SECONDARY_REQUIRED_ALPHA
         );
 
-        // Dave: 100 Alpha on second hotkey (for minimum amount test)
-        // Note: Dave already has 100 Alpha on daveHotkey from initial setup
+        // Dave: plenty of Alpha on second hotkey (for minimum amount test)
         await registerValidator(
             context.api,
             netuid,
             daveHotkey2.address,
             context.accounts.dave.signer,
-            taoToRao(100)
+            taoToRao(5000),
+            SECONDARY_REQUIRED_ALPHA
         );
 
         // Wait for all registrations to be processed
@@ -233,95 +247,66 @@ describe("Alpha Listing Operations", () => {
             const stakeBefore = await getStakeBalance(context.api, bobHotkey.address, netuid, accounts.bob.address);
             console.log(`Bob's stake before listing: ${formatStakeAmount(stakeBefore)}`);
 
-            // Bob lists 50 Alpha at market price (0% offset)
-            const listAmount = taoToRao(50);
+            // Bob lists a small but valid amount at market price (0% offset).
+            const listAmount = PRIMARY_LISTING_AMOUNT;
             const priceOffsetBps = MARKET_PRICE; // 0% offset = market price
+            const reservedBeforeResult = await contract.query("get_reserved_alpha", {
+                origin: accounts.alice.address,
+                data: { netuid },
+            });
+            expect(reservedBeforeResult.success).toBe(true);
+            const reservedBefore = reservedBeforeResult.success
+                ? BigInt(reservedBeforeResult.value.response)
+                : 0n;
 
             console.log(`Attempting to list ${formatStakeAmount(listAmount)} at ${bpsToPercentage(priceOffsetBps)}% offset from market price`);
 
-            const listTx = contract.send("list_alpha", {
-                origin: accounts.bob.address,
-                data: {
-                    hotkey: bobHotkey.address,
-                    netuid,
-                    amount: listAmount,
-                    price_offset_bps: priceOffsetBps
-                }
+            const { result, listingId, event } = await createAlphaListing(contract, accounts.bob.signer, accounts.bob.address, {
+                hotkey: bobHotkey.address,
+                netuid,
+                amount: listAmount,
+                price_offset_bps: priceOffsetBps
             });
-
-            const result = await listTx.signAndSubmit(accounts.bob.signer);
-
-            console.log("Listing transaction result:", {
-                ok: result.ok,
-                dispatchError: result.dispatchError,
-            });
-
             console.log("Events emitted during transaction:", {
                 events: JSON.stringify(contract.filterEvents(result.events), bigintReplacer, 2),
             });
-
-            if (!result.ok) {
-                console.log("Full error details:", JSON.stringify(result.dispatchError, null, 2));
-                if (result.dispatchError?.value) {
-                    console.log("Contract error type:", result.dispatchError.value);
-                }
-            }
-
-            expect(result.ok).toBe(true);
-
-            // Wait for transaction to be processed
-            await waitForBlocks(context.api, 2);
+            expect(event.value.seller).toBe(accounts.bob.address);
+            expect(event.value.netuid).toBe(netuid);
+            expect(BigInt(event.value.amount)).toBe(listAmount);
 
             // Get Bob's stake after listing
             const stakeAfter = await getStakeBalance(context.api, bobHotkey.address, netuid, accounts.bob.address);
             console.log(`Bob's stake after listing: ${formatStakeAmount(stakeAfter)}`);
+            console.log(`Seller stake delta after listing: ${formatStakeAmount(stakeAfter - stakeBefore)} (runtime emissions may offset transfer)`);
 
-            // Verify stake was transferred (should be reduced by listing amount)
-            // Account for potential staking rewards by checking the stake decreased by at least the listing amount
-            const stakeReduction = stakeBefore - stakeAfter;
-            const tolerance = taoToRao(5); // Allow up to 5 Alpha variance for staking rewards
-
-            console.log(`Stake reduction: ${formatStakeAmount(stakeReduction)} (expected: ${formatStakeAmount(listAmount)})`);
-
-            // The stake should have decreased by approximately the listing amount
-            expect(stakeReduction).toBeGreaterThanOrEqual(listAmount - tolerance);
-            expect(stakeReduction).toBeLessThanOrEqual(listAmount + tolerance);
+            const reservedAfterResult = await contract.query("get_reserved_alpha", {
+                origin: accounts.alice.address,
+                data: { netuid },
+            });
+            expect(reservedAfterResult.success).toBe(true);
+            const reservedAfter = reservedAfterResult.success
+                ? BigInt(reservedAfterResult.value.response)
+                : 0n;
+            expect(reservedAfter - reservedBefore).toBe(listAmount);
 
             // Query the listing to verify it was created
-            const listingResult = await contract.query("get_user_listings", {
+            const userListingIds = queryOk<bigint[]>(await contract.query("get_user_listings", {
                 origin: accounts.alice.address,
                 data: {
                     seller: accounts.bob.address,
                     netuid
                 }
-            });
+            }), "get_user_listings");
+            expect(userListingIds).toContain(listingId);
 
-            expect(listingResult.success).toBe(true);
-
-            if (listingResult.success) {
-                expect(listingResult.value.response).toBeDefined();
-                expect(listingResult.value.response.length).toBeGreaterThan(0);
-
-                // Get the listing details
-                const listingId = listingResult.value.response[0];
-                const listing = await contract.query("get_listing", {
-                    origin: accounts.alice.address,
-                    data: {
-                        netuid,
-                        seller: accounts.bob.address,
-                        listing_id: listingId
-                    }
-                });
-
-                expect(listing.success).toBe(true);
-
-                if (listing.success && listing.value.response) {
-                    expect(listing.value.response.amount).toBe(listAmount);
-                    expect(listing.value.response.price_offset_bps).toBe(priceOffsetBps);
-                    expect(listing.value.response.seller).toBe(accounts.bob.address);
-                    expect(listing.value.response.netuid).toBe(netuid);
-                }
-            }
+            const listing = queryOk<any>(await contract.query("get_listing", {
+                origin: accounts.alice.address,
+                data: { netuid, seller: accounts.bob.address, listing_id: listingId }
+            }), "get_listing");
+            expect(listing.amount).toBe(listAmount);
+            expect(listing.price_offset_bps).toBe(priceOffsetBps);
+            expect(listing.seller).toBe(accounts.bob.address);
+            expect(listing.netuid).toBe(netuid);
         });
 
         it("should fail to list Alpha without proxy setup", async () => {
@@ -345,17 +330,12 @@ describe("Alpha Listing Operations", () => {
                 data: {
                     hotkey: daveHotkey.address,
                     netuid,
-                    amount: taoToRao(50),
+                    amount: PRIMARY_LISTING_AMOUNT,
                     price_offset_bps: MARKET_PRICE // Market price
                 }
             });
 
-            const result = await listTx.signAndSubmit(accounts.dave.signer);
-
-            console.log("Transaction result for Dave (no proxy):", result);
-
-            // Should fail because Dave has no proxy set up
-            expect(result.ok).toBe(false);
+            const result = await submitReverted(listTx, accounts.dave.signer, "list_alpha without proxy");
             expect(result.dispatchError?.type).toContain("Module");
         });
     });
@@ -363,8 +343,8 @@ describe("Alpha Listing Operations", () => {
     describe("Verification Logic", () => {
         it("should fail when seller has insufficient stake", async () => {
             const { accounts } = context;
-            // Eve has 30 or less Alpha, tries to list 50 Alpha
-            const listAmount = taoToRao(50);
+            // Eve has intentionally low stake and tries to list more than she owns.
+            const listAmount = INSUFFICIENT_LISTING_AMOUNT;
             const priceOffsetBps = MARKET_PRICE;
             // First add Eve as proxy (required for the call to be made)
             await addContractAsProxy(context.api, context.contractAddress!, accounts.eve.signer);
@@ -385,12 +365,11 @@ describe("Alpha Listing Operations", () => {
 
             console.log(`Eve's stake before insufficient stake attempt: ${formatStakeAmount(eveStakeBefore)}`);
 
-            const result = await listTx.signAndSubmit(accounts.eve.signer);
+            const result = await submitReverted(listTx, accounts.eve.signer, "list_alpha insufficient stake");
 
             const eveStakeAfter = await getStakeBalance(context.api, eveHotkey.address, netuid, accounts.eve.address);
 
             // Should fail with ContractReverted error
-            expect(result.ok).toBe(false);
             const contractsError = result.dispatchError?.value as ContractsError;
             expect(contractsError.type).toBe("Contracts");
             expect(contractsError.value.type).toBe("ContractReverted");
@@ -419,23 +398,17 @@ describe("Alpha Listing Operations", () => {
             console.log(`Contract's main hotkey: ${contractHotkey}`);
             console.log(`Charlie's special hotkey: ${charlieSpecialHotkey.address}`);
 
-            const listAmount = taoToRao(40);
+            const listAmount = SECONDARY_LISTING_AMOUNT;
 
             // List with special hotkey (different from contract's hotkey)
-            const listTx = contract.send("list_alpha", {
-                origin: accounts.charlie.address,
-                data: {
-                    hotkey: charlieSpecialHotkey.address, // Different from contract's hotkey
-                    netuid,
-                    amount: listAmount,
-                    price_offset_bps: MARKET_PRICE
-                }
+            const { result } = await createAlphaListing(contract, accounts.charlie.signer, accounts.charlie.address, {
+                hotkey: charlieSpecialHotkey.address, // Different from contract's hotkey
+                netuid,
+                amount: listAmount,
+                price_offset_bps: MARKET_PRICE
             });
 
-            const result = await listTx.signAndSubmit(accounts.charlie.signer);
-
             console.log("Consolidation result:", result.ok);
-            expect(result.ok).toBe(true);
 
             // Find and verify the StakeMoved event
             const stakeMovedEvent = result.events.find((event: EventWithTopics) =>
@@ -507,9 +480,8 @@ describe("Alpha Listing Operations", () => {
                 }
             });
 
-            const failResult = await failTx.signAndSubmit(accounts.dave.signer);
+            const failResult = await submitReverted(failTx, accounts.dave.signer, "list_alpha below minimum");
 
-            expect(failResult.ok).toBe(false);
             const contractsError = failResult.dispatchError?.value as ContractsError;
             expect(contractsError.type).toBe("Contracts");
             expect(contractsError.value.type).toBe("ContractReverted");
@@ -517,56 +489,32 @@ describe("Alpha Listing Operations", () => {
             // Test 2: Exactly minimum succeeds
             console.log(`Attempting to list exactly minimum: ${formatStakeAmount(minAmount)}`);
 
-            const exactTx = contract.send("list_alpha", {
-                origin: accounts.dave.address,
-                data: {
-                    hotkey: daveHotkey2.address,
-                    netuid,
-                    amount: minAmount,
-                    price_offset_bps: MARKET_PRICE
-                }
+            const exact = await createAlphaListing(contract, accounts.dave.signer, accounts.dave.address, {
+                hotkey: daveHotkey2.address,
+                netuid,
+                amount: minAmount,
+                price_offset_bps: MARKET_PRICE
             });
 
-            const exactResult = await exactTx.signAndSubmit(accounts.dave.signer);
-
-            expect(exactResult.ok).toBe(true);
-
             // Verify Dave has at least one listing (may have more from previous test runs)
-            const listings = await contract.query("get_user_listings", {
+            const listings = queryOk<bigint[]>(await contract.query("get_user_listings", {
                 origin: accounts.alice.address,
                 data: {
                     seller: accounts.dave.address,
                     netuid
                 }
-            });
+            }), "get_user_listings");
+            expect(listings).toContain(exact.listingId);
 
-            expect(listings.success).toBe(true);
-            if (listings.success) {
-                expect(listings.value.response.length).toBeGreaterThanOrEqual(1);
-
-                // Find the listing we just created (should be the last one)
-                const lastListingId = listings.value.response[listings.value.response.length - 1];
-                const listing = await contract.query("get_listing", {
-                    origin: accounts.alice.address,
-                    data: {
-                        netuid,
-                        seller: accounts.dave.address,
-                        listing_id: lastListingId
-                    }
-                });
-
-                // Verify it's the minimum amount listing we just created
-                expect(listing.success).toBe(true);
-                if (listing.success && listing.value.response) {
-                    const minAmountResult = await contract.query("get_min_listing_amount", {
-                        origin: accounts.alice.address,
-                        data: {}
-                    });
-                    if (minAmountResult.success) {
-                        expect(listing.value.response.amount).toBe(minAmountResult.value.response);
-                    }
+            const listing = queryOk<any>(await contract.query("get_listing", {
+                origin: accounts.alice.address,
+                data: {
+                    netuid,
+                    seller: accounts.dave.address,
+                    listing_id: exact.listingId
                 }
-            }
+            }), "get_listing");
+            expect(listing.amount).toBe(minAmount);
         });
     });
 });

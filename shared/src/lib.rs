@@ -6,7 +6,9 @@ pub mod runtime;
 pub mod types;
 
 // Re-export chain extension types
-pub use chain_extension::{StakeInfo, SubtensorError, SubtensorExtension};
+pub use chain_extension::{
+    StakeAvailability, StakeInfo, SubnetRegistrationState, SubtensorError, SubtensorExtension,
+};
 
 // Re-export shared error types
 pub use errors::SharedError;

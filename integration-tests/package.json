@@ -6,7 +6,10 @@
     "scripts": {
         "test": "vitest",
         "test:ui": "vitest --ui",
-        "test:run": "vitest run",
+        "test:run": "vitest run --no-file-parallelism --maxWorkers=1 --minWorkers=1",
+        "test:localnet": "node scripts/run-localnet-tests.mjs",
+        "test:localnet:combined": "node scripts/run-localnet-tests.mjs --restart all",
+        "test:localnet:flaky": "node scripts/run-localnet-tests.mjs --restart file --repeat 3 src/tests/alpha-listing.test.ts src/tests/trading.test.ts src/tests/claim-dividends.test.ts src/tests/subnet-risk.test.ts src/lockup-listings/create-listing.test.ts src/lockup-listings/take-listing.test.ts src/lockup-listings/cancel-listing.test.ts src/lockup-listings/claim.test.ts",
         "test:watch": "vitest watch",
         "generate-api-types": "papi add devnet -w ws://localhost:9944",
         "generate-otc-contract-types": "papi ink add ../target/ink/otc_contract/otc_contract.contract",

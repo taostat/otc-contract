@@ -136,6 +136,37 @@ mod otc_contract {
             }
         }
 
+        fn ensure_available_alpha(
+            &self,
+            coldkey: AccountId,
+            netuid: NetUid,
+            amount: AlphaAmount,
+        ) -> Result<(), Error> {
+            if amount == 0 {
+                return Ok(());
+            }
+
+            let availability = self
+                .env()
+                .extension()
+                .get_stake_availability(coldkey, netuid)
+                .map_err(|_| Error::StakeQueryFailed)?;
+
+            if availability.available < amount {
+                return Err(Error::StakeUnavailable);
+            }
+
+            Ok(())
+        }
+
+        fn stake_delta_verified(delta: AlphaAmount, amount: AlphaAmount) -> bool {
+            delta >= amount.saturating_sub(TRANSFER_TOLERANCE) && delta <= amount
+        }
+
+        fn trap_stake_transfer_not_verified() -> ! {
+            panic!("post-transfer stake verification failed")
+        }
+
         fn reserved_alpha_for(&self, netuid: NetUid) -> AlphaAmount {
             self.reserved_alpha.get(netuid).unwrap_or(0)
         }
@@ -462,6 +493,13 @@ mod otc_contract {
                 return Err(Error::InsufficientStake);
             }
 
+            self.ensure_available_alpha(seller, netuid, amount)?;
+            self.ensure_available_alpha(
+                self.env().account_id(),
+                netuid,
+                self.reserved_alpha_for(netuid),
+            )?;
+
             let contract_stake_before = self
                 .get_stake_amount(self.env().account_id(), hotkey, netuid)
                 .unwrap_or(0);
@@ -500,13 +538,15 @@ mod otc_contract {
                 && contract_increase <= amount;
 
             if !seller_decrease_ok || !contract_increase_ok {
-                return Err(Error::StakeTransferNotVerified);
+                Self::trap_stake_transfer_not_verified();
             }
-
-            self.increase_reserved_alpha(netuid, amount)?;
 
             // Consolidate stake if needed (move to contract's hotkey)
             if hotkey != self.hotkey {
+                let target_stake_before = self
+                    .get_stake_amount(self.env().account_id(), self.hotkey, netuid)
+                    .unwrap_or(0);
+
                 self.env()
                     .extension()
                     .move_stake(
@@ -517,7 +557,22 @@ mod otc_contract {
                         AlphaCurrency::from(amount),
                     )
                     .map_err(|_| Error::RuntimeCallFailed)?;
+
+                let old_stake_after =
+                    self.get_stake_amount(self.env().account_id(), hotkey, netuid)?;
+                let target_stake_after =
+                    self.get_stake_amount(self.env().account_id(), self.hotkey, netuid)?;
+                let old_decrease = contract_stake_after.saturating_sub(old_stake_after);
+                let target_increase = target_stake_after.saturating_sub(target_stake_before);
+
+                if !Self::stake_delta_verified(old_decrease, amount)
+                    || !Self::stake_delta_verified(target_increase, amount)
+                {
+                    Self::trap_stake_transfer_not_verified();
+                }
             }
+
+            self.increase_reserved_alpha(netuid, amount)?;
 
             self.next_alpha_listing_id = next_id;
 
@@ -816,6 +871,10 @@ mod otc_contract {
 
             let contract_stake_before =
                 self.get_stake_amount(self.env().account_id(), self.hotkey, netuid)?;
+            self.ensure_available_alpha(self.env().account_id(), netuid, listing.amount)?;
+            let buyer_stake_before = self
+                .get_stake_amount(buyer, self.hotkey, netuid)
+                .unwrap_or(0);
 
             // Fetch current market price (returns TAO_per_Alpha * 1e9)
             let market_price = self.get_market_price(listing.netuid)?;
@@ -848,17 +907,6 @@ mod otc_contract {
                 .checked_sub(total_tao_required)
                 .ok_or(Error::Overflow)?;
 
-            self.alpha_listings.remove((netuid, seller, listing_id));
-
-            let mut user_listings = self.user_listings.get((seller, netuid)).unwrap_or_default();
-            user_listings.retain(|&id| id != listing_id);
-
-            if user_listings.is_empty() {
-                self.user_listings.remove((seller, netuid));
-            } else {
-                self.user_listings.insert((seller, netuid), &user_listings);
-            }
-
             // Transfer Alpha from contract to buyer
             self.env()
                 .extension()
@@ -873,14 +921,28 @@ mod otc_contract {
 
             let contract_stake_after =
                 self.get_stake_amount(self.env().account_id(), self.hotkey, netuid)?;
+            let buyer_stake_after = self.get_stake_amount(buyer, self.hotkey, netuid)?;
             let contract_decrease = contract_stake_before.saturating_sub(contract_stake_after);
-            let contract_decrease_ok = contract_decrease
-                >= listing.amount.saturating_sub(TRANSFER_TOLERANCE)
-                && contract_decrease <= listing.amount;
+            let buyer_increase = buyer_stake_after.saturating_sub(buyer_stake_before);
 
-            if contract_decrease_ok {
-                self.decrease_reserved_alpha(netuid, listing.amount)?;
+            if !Self::stake_delta_verified(contract_decrease, listing.amount)
+                || !Self::stake_delta_verified(buyer_increase, listing.amount)
+            {
+                Self::trap_stake_transfer_not_verified();
             }
+
+            self.alpha_listings.remove((netuid, seller, listing_id));
+
+            let mut user_listings = self.user_listings.get((seller, netuid)).unwrap_or_default();
+            user_listings.retain(|&id| id != listing_id);
+
+            if user_listings.is_empty() {
+                self.user_listings.remove((seller, netuid));
+            } else {
+                self.user_listings.insert((seller, netuid), &user_listings);
+            }
+
+            self.decrease_reserved_alpha(netuid, listing.amount)?;
 
             // Transfer TAO to seller (minus fee)
             self.env()
@@ -927,6 +989,7 @@ mod otc_contract {
                 self.get_stake_amount(contract_coldkey, self.hotkey, netuid)?;
 
             let claimable = self.calculate_claimable_dividends(netuid, contract_stake_before)?;
+            self.ensure_available_alpha(contract_coldkey, netuid, claimable)?;
 
             self.env()
                 .extension()
@@ -947,7 +1010,7 @@ mod otc_contract {
                 && contract_decrease <= claimable;
 
             if !decrease_ok {
-                return Err(Error::StakeTransferNotVerified);
+                Self::trap_stake_transfer_not_verified();
             }
 
             self.env().emit_event(DividendsClaimed {
@@ -1009,6 +1072,7 @@ mod otc_contract {
             if seller_stake_before < alpha_amount {
                 return Err(Error::InsufficientStake);
             }
+            self.ensure_available_alpha(seller, netuid, alpha_amount)?;
             let buyer_stake_before = self.get_stake_amount(buyer, hotkey, netuid).unwrap_or(0);
 
             // Transfer Alpha directly from seller to buyer via proxy
@@ -1046,7 +1110,7 @@ mod otc_contract {
                 && buyer_increase <= alpha_amount;
 
             if !seller_decrease_ok || !buyer_increase_ok {
-                return Err(Error::StakeTransferNotVerified);
+                Self::trap_stake_transfer_not_verified();
             }
 
             self.tao_offers.remove((netuid, buyer, offer_id));
@@ -1167,17 +1231,10 @@ mod otc_contract {
 
             let contract_stake_before =
                 self.get_stake_amount(contract_coldkey, self.hotkey, netuid)?;
-
-            self.alpha_listings.remove((netuid, seller, listing_id));
-
-            let mut user_listings = self.user_listings.get((seller, netuid)).unwrap_or_default();
-            user_listings.retain(|&id| id != listing_id);
-
-            if user_listings.is_empty() {
-                self.user_listings.remove((seller, netuid));
-            } else {
-                self.user_listings.insert((seller, netuid), &user_listings);
-            }
+            self.ensure_available_alpha(contract_coldkey, netuid, listing.amount)?;
+            let seller_stake_before = self
+                .get_stake_amount(seller, self.hotkey, netuid)
+                .unwrap_or(0);
 
             self.env()
                 .extension()
@@ -1192,14 +1249,28 @@ mod otc_contract {
 
             let contract_stake_after =
                 self.get_stake_amount(contract_coldkey, self.hotkey, netuid)?;
+            let seller_stake_after = self.get_stake_amount(seller, self.hotkey, netuid)?;
             let contract_decrease = contract_stake_before.saturating_sub(contract_stake_after);
-            let contract_decrease_ok = contract_decrease
-                >= listing.amount.saturating_sub(TRANSFER_TOLERANCE)
-                && contract_decrease <= listing.amount;
+            let seller_increase = seller_stake_after.saturating_sub(seller_stake_before);
 
-            if contract_decrease_ok {
-                self.decrease_reserved_alpha(netuid, listing.amount)?;
+            if !Self::stake_delta_verified(contract_decrease, listing.amount)
+                || !Self::stake_delta_verified(seller_increase, listing.amount)
+            {
+                Self::trap_stake_transfer_not_verified();
             }
+
+            self.alpha_listings.remove((netuid, seller, listing_id));
+
+            let mut user_listings = self.user_listings.get((seller, netuid)).unwrap_or_default();
+            user_listings.retain(|&id| id != listing_id);
+
+            if user_listings.is_empty() {
+                self.user_listings.remove((seller, netuid));
+            } else {
+                self.user_listings.insert((seller, netuid), &user_listings);
+            }
+
+            self.decrease_reserved_alpha(netuid, listing.amount)?;
 
             if forced {
                 self.env().emit_event(AlphaListingForceCancelled {
