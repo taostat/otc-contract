@@ -319,7 +319,6 @@ async function runLocalnetTestBatch(files, options) {
       "run",
       "--no-file-parallelism",
       "--maxWorkers=1",
-      "--minWorkers=1",
       ...files,
     ], options);
   } finally {

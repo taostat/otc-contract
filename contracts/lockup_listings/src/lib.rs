@@ -2170,8 +2170,7 @@ mod lockup_listings {
                 .lockup_listings
                 .insert((TEST_NETUID, seller, listing_id), &listing);
 
-            let mut user_listings = Vec::new();
-            user_listings.push(listing_id);
+            let user_listings = vec![listing_id];
             contract
                 .user_lockup_listings
                 .insert((seller, TEST_NETUID), &user_listings);
