@@ -77,7 +77,7 @@ describe("Lockup Listings Contract - Claim", () => {
         await submitOk(updateMinPurchaseTx, context.accounts.alice.signer, "update_min_purchase_amount");
 
         // Create a subnet for testing
-        const aliceHotkey = createHotkey("//Alice");
+        const aliceHotkey = createHotkey();
         await fundAccount(context.api, aliceHotkey.address, taoToRao(10), context.accounts.alice.signer);
         netuid = await registerSubnet(context.api, aliceHotkey.address, context.accounts.alice.signer);
         console.log(`Created test subnet with netuid: ${netuid}`);
@@ -111,7 +111,7 @@ describe("Lockup Listings Contract - Claim", () => {
         }
 
         // Create and register Bob's hotkey
-        bobHotkey = createHotkey("//Bob");
+        bobHotkey = createHotkey();
         await fundAccount(context.api, bobHotkey.address, taoToRao(1), context.accounts.alice.signer);
         await registerValidator(context.api, netuid, bobHotkey.address, context.accounts.bob.signer, taoToRao(5000), REQUIRED_ALPHA);
 

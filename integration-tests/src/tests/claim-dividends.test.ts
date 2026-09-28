@@ -69,7 +69,7 @@ describe("Dividends Claiming", () => {
         );
 
         // Register a subnet for the tests
-        const aliceHotkey = createHotkey("//Alice");
+        const aliceHotkey = createHotkey();
         await fundAccount(context.api, aliceHotkey.address, taoToRao(10), context.accounts.alice.signer);
         netuid = await registerSubnet(context.api, aliceHotkey.address, context.accounts.alice.signer);
 
@@ -89,7 +89,7 @@ describe("Dividends Claiming", () => {
         await waitForBlocks(context.api, 1);
 
         // Prepare Bob as a seller we can use for listings
-        bobHotkey = createHotkey("//Bob/claim");
+        bobHotkey = createHotkey();
         await fundAccount(context.api, bobHotkey.address, taoToRao(1), context.accounts.alice.signer);
         await registerValidator(
             context.api,
@@ -552,7 +552,7 @@ describe("Dividends Claiming", () => {
         console.log("=== Testing multiple concurrent listings ===");
 
         // Create Charlie's hotkey for an additional seller
-        const charlieHotkey = createHotkey("//Charlie/multi");
+        const charlieHotkey = createHotkey();
         await fundAccount(context.api, charlieHotkey.address, taoToRao(1), context.accounts.alice.signer);
         await registerValidator(
             context.api,

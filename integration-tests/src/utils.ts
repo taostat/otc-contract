@@ -49,8 +49,7 @@ export const getRandomWallet = (): Wallet => getWalletFromKeypair(getRandomKeypa
  * Create a hotkey for an account
  * Used for Subtensor operations
  */
-export function createHotkey(coldkeyDerivePath: string): Wallet {
-    void coldkeyDerivePath;
+export function createHotkey(): Wallet {
     return getRandomWallet();
 }
 

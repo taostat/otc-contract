@@ -59,7 +59,7 @@ describe("Trading Execution", () => {
             feeRateResult.value.response : percentageToFixedPoint(0.5);
 
         // Create a subnet for testing
-        const aliceHotkey = createHotkey("//Alice");
+        const aliceHotkey = createHotkey();
         await fundAccount(context.api, aliceHotkey.address, taoToRao(10), context.accounts.alice.signer);
         netuid = await registerSubnet(context.api, aliceHotkey.address, context.accounts.alice.signer);
         console.log(`Created test subnet with netuid: ${netuid}`);
@@ -99,10 +99,10 @@ describe("Trading Execution", () => {
         }
 
         // Create hotkeys for validators
-        bobHotkey = createHotkey("//Bob");
-        charlieHotkey = createHotkey("//Charlie");
-        daveHotkey = createHotkey("//Dave");
-        eveHotkey = createHotkey("//Eve");
+        bobHotkey = createHotkey();
+        charlieHotkey = createHotkey();
+        daveHotkey = createHotkey();
+        eveHotkey = createHotkey();
 
         // Fund hotkeys for transaction fees
         await fundAccount(context.api, bobHotkey.address, taoToRao(1), context.accounts.alice.signer);
@@ -654,7 +654,7 @@ describe("Trading Execution", () => {
             const { accounts } = context;
 
             // Create a second subnet
-            const aliceHotkey2 = createHotkey("//Alice//2");
+            const aliceHotkey2 = createHotkey();
             await fundAccount(context.api, aliceHotkey2.address, taoToRao(10), accounts.alice.signer);
             const netuid2 = await registerSubnet(context.api, aliceHotkey2.address, accounts.alice.signer);
             console.log(`Created second subnet with netuid: ${netuid2}`);
@@ -688,8 +688,8 @@ describe("Trading Execution", () => {
             }
 
             // Register validators on second subnet
-            const bobHotkey2 = createHotkey("//Bob//2");
-            const charlieHotkey2 = createHotkey("//Charlie//2");
+            const bobHotkey2 = createHotkey();
+            const charlieHotkey2 = createHotkey();
 
             await fundAccount(context.api, bobHotkey2.address, taoToRao(1), accounts.alice.signer);
             await fundAccount(context.api, charlieHotkey2.address, taoToRao(1), accounts.alice.signer);

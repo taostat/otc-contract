@@ -52,7 +52,7 @@ describe("Subnet Risk Controls", () => {
         const { api, accounts } = context;
 
         // Register a fresh subnet for tests
-        const aliceHotkey = createHotkey("//Alice/subnet-risk");
+        const aliceHotkey = createHotkey();
         await fundAccount(api, aliceHotkey.address, taoToRao(10), accounts.alice.signer);
         netuid = await registerSubnet(api, aliceHotkey.address, accounts.alice.signer);
 
@@ -76,7 +76,7 @@ describe("Subnet Risk Controls", () => {
         await registerValidator(api, netuid, contractHotkey, accounts.alice.signer, taoToRao(60));
 
         // Prepare Charlie as the primary seller in these tests
-        charlieHotkey = createHotkey("//Charlie/subnet-risk");
+        charlieHotkey = createHotkey();
         await fundAccount(api, charlieHotkey.address, taoToRao(2), accounts.alice.signer);
         await registerValidator(api, netuid, charlieHotkey.address, accounts.charlie.signer, taoToRao(5000), RISK_REQUIRED_ALPHA);
 

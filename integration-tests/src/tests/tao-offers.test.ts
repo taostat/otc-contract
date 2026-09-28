@@ -57,7 +57,7 @@ describe("TAO Offer Operations", () => {
             feeRateResult.value.response : percentageToFixedPoint(0.5);
 
         // Create a subnet for testing
-        const aliceHotkey = createHotkey("//Alice");
+        const aliceHotkey = createHotkey();
         await fundAccount(context.api, aliceHotkey.address, taoToRao(10), context.accounts.alice.signer);
         netuid = await registerSubnet(context.api, aliceHotkey.address, context.accounts.alice.signer);
         console.log(`Created test subnet with netuid: ${netuid}`);
@@ -99,10 +99,10 @@ describe("TAO Offer Operations", () => {
         }
 
         // Create hotkeys for validators
-        bobHotkey = createHotkey("//Bob");
-        charlieHotkey = createHotkey("//Charlie");
-        daveHotkey = createHotkey("//Dave");
-        eveHotkey = createHotkey("//Eve");
+        bobHotkey = createHotkey();
+        charlieHotkey = createHotkey();
+        daveHotkey = createHotkey();
+        eveHotkey = createHotkey();
 
         // Fund hotkeys for transaction fees
         await fundAccount(context.api, bobHotkey.address, taoToRao(1), context.accounts.alice.signer);
@@ -498,7 +498,7 @@ describe("TAO Offer Operations", () => {
         it("should return empty array for users with no offers", async () => {
             const { accounts } = context;
 
-            const unusedBuyer = createHotkey("//UnusedOfferBuyer").address;
+            const unusedBuyer = createHotkey().address;
             const offersResult = await contract.query("get_user_offers", {
                 origin: accounts.alice.address,
                 data: {

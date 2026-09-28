@@ -58,7 +58,7 @@ describe("Alpha Listing Operations", () => {
         contract = context.contractSdk.getContract(context.contractAddress!);
 
         // Create a subnet for testing
-        const aliceHotkey = createHotkey("//Alice");
+        const aliceHotkey = createHotkey();
         await fundAccount(context.api, aliceHotkey.address, taoToRao(10), context.accounts.alice.signer);
         netuid = await registerSubnet(context.api, aliceHotkey.address, context.accounts.alice.signer);
         console.log(`Created test subnet with netuid: ${netuid}`);
@@ -101,9 +101,9 @@ describe("Alpha Listing Operations", () => {
         }
 
         // Register Bob, Charlie, and Dave as validators with initial stake
-        bobHotkey = createHotkey("//Bob");
-        charlieWallet = createHotkey("//Charlie");
-        daveHotkey = createHotkey("//Dave");
+        bobHotkey = createHotkey();
+        charlieWallet = createHotkey();
+        daveHotkey = createHotkey();
 
         // Fund hotkeys for transaction fees
         await fundAccount(context.api, bobHotkey.address, taoToRao(1), context.accounts.alice.signer);
@@ -157,10 +157,10 @@ describe("Alpha Listing Operations", () => {
 
         // Set up additional hotkeys for dual verification tests
         // Create additional hotkeys for test accounts
-        eveHotkey = createHotkey("//Eve");
-        charlieHotkey = createHotkey("//Charlie/hotkey2");
-        charlieSpecialHotkey = createHotkey("//Charlie/special");
-        daveHotkey2 = createHotkey("//Dave/hotkey2");
+        eveHotkey = createHotkey();
+        charlieHotkey = createHotkey();
+        charlieSpecialHotkey = createHotkey();
+        daveHotkey2 = createHotkey();
 
         // Fund hotkeys for transaction fees
         await fundAccount(context.api, eveHotkey.address, taoToRao(1), context.accounts.alice.signer);
