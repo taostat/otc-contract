@@ -499,10 +499,17 @@ mod otc_contract {
                 Self::trap_stake_transfer_not_verified();
             }
 
-            self.increase_reserved_alpha(netuid, amount)?;
+            // Subtensor can round a transfer down by a few rao. The listing holds what
+            // actually arrived, so later moves never ask for stake the contract lacks.
+            let mut listed_amount = contract_increase;
 
             // Consolidate stake if needed (move to contract's hotkey)
             if hotkey != self.hotkey {
+                let contract_account = self.env().account_id();
+                let target_stake_before = self
+                    .get_stake_amount(contract_account, self.hotkey, netuid)
+                    .unwrap_or(0);
+
                 self.env()
                     .extension()
                     .move_stake(
@@ -510,10 +517,20 @@ mod otc_contract {
                         self.hotkey,
                         netuid,
                         netuid,
-                        AlphaCurrency::from(amount),
+                        AlphaCurrency::from(listed_amount),
                     )
                     .map_err(|_| Error::RuntimeCallFailed)?;
+
+                let target_stake_after =
+                    self.get_stake_amount(contract_account, self.hotkey, netuid)?;
+                let target_increase = target_stake_after.saturating_sub(target_stake_before);
+                if !stake_delta_verified(target_increase, listed_amount) {
+                    Self::trap_stake_transfer_not_verified();
+                }
+                listed_amount = target_increase;
             }
+
+            self.increase_reserved_alpha(netuid, listed_amount)?;
 
             self.next_alpha_listing_id = next_id;
 
@@ -521,7 +538,7 @@ mod otc_contract {
                 id: listing_id,
                 netuid,
                 seller,
-                amount,
+                amount: listed_amount,
                 price_offset_bps,
                 fee_rate: self.fee_rate,
                 created_at: self.env().block_number(),
@@ -538,7 +555,7 @@ mod otc_contract {
                 hotkey,
                 netuid,
                 alpha_listing_id: listing_id,
-                amount,
+                amount: listed_amount,
                 price_offset_bps,
             });
 
