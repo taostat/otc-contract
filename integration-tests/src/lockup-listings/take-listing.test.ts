@@ -100,6 +100,23 @@ describe("Lockup Listings Contract - Take Listing", () => {
         await cleanupTestEnvironment();
     });
 
+    // Stake transfers can round down by a rao, so a listing holds slightly less
+    // than the amount requested. Full fills must take what the listing recorded.
+    async function listedAmountOf(listingId: bigint): Promise<bigint> {
+        const listingResult = await contract.query("get_listing", {
+            origin: context.accounts.alice.address,
+            data: {
+                netuid,
+                seller: context.accounts.bob.address,
+                listing_id: listingId
+            }
+        });
+        if (!listingResult.success || !listingResult.value.response) {
+            throw new Error(`Failed to read listing ${listingId}`);
+        }
+        return listingResult.value.response.remaining_amount;
+    }
+
     describe("Happy Paths", () => {
         it("should successfully take a lockup listing and create escrow", async () => {
             const { accounts } = context;
@@ -135,6 +152,7 @@ describe("Lockup Listings Contract - Take Listing", () => {
             }
 
             const listingId = listingsResult.value.response[listingsResult.value.response.length - 1];
+            const listedAmount = await listedAmountOf(listingId);
 
             // Estimate price
             const estimateResult = await contract.query("estimate_lockup_price", {
@@ -143,7 +161,7 @@ describe("Lockup Listings Contract - Take Listing", () => {
                     netuid,
                     seller: accounts.bob.address,
                     listing_id: listingId,
-                    amount: listAmount
+                    amount: listedAmount
                 }
             });
 
@@ -162,7 +180,7 @@ describe("Lockup Listings Contract - Take Listing", () => {
                     netuid,
                     seller: accounts.bob.address,
                     listing_id: listingId,
-                    amount: listAmount
+                    amount: listedAmount
                 },
                 value: totalRequired
             });
@@ -234,6 +252,7 @@ describe("Lockup Listings Contract - Take Listing", () => {
             }
 
             const listingId = listingsResult.value.response[listingsResult.value.response.length - 1];
+            const listedAmount = await listedAmountOf(listingId);
 
             // Get balances before
             const sellerBalanceBefore = await getBalance(context.api, accounts.bob.address);
@@ -246,7 +265,7 @@ describe("Lockup Listings Contract - Take Listing", () => {
                     netuid,
                     seller: accounts.bob.address,
                     listing_id: listingId,
-                    amount: listAmount
+                    amount: listedAmount
                 }
             });
 
@@ -264,7 +283,7 @@ describe("Lockup Listings Contract - Take Listing", () => {
                     netuid,
                     seller: accounts.bob.address,
                     listing_id: listingId,
-                    amount: listAmount
+                    amount: listedAmount
                 },
                 value: totalRequired
             });
@@ -545,13 +564,14 @@ describe("Lockup Listings Contract - Take Listing", () => {
             }
 
             // --- Third (final) partial purchase by Charlie to complete the listing ---
+            const finalAmount = await listedAmountOf(listingId);
             const estimate3 = await contract.query("estimate_lockup_price", {
                 origin: accounts.alice.address,
                 data: {
                     netuid,
                     seller: accounts.bob.address,
                     listing_id: listingId,
-                    amount: purchaseAmount
+                    amount: finalAmount
                 }
             });
 
@@ -564,7 +584,7 @@ describe("Lockup Listings Contract - Take Listing", () => {
                     netuid,
                     seller: accounts.bob.address,
                     listing_id: listingId,
-                    amount: purchaseAmount
+                    amount: finalAmount
                 },
                 value: totalRequired3
             });
@@ -764,6 +784,7 @@ describe("Lockup Listings Contract - Take Listing", () => {
             }
 
             const listingId = listingsResult.value.response[listingsResult.value.response.length - 1];
+            const listedAmount = await listedAmountOf(listingId);
 
             // Try to take more than listing amount
             const takeTx = contract.send("take_lockup_listing", {
@@ -772,7 +793,7 @@ describe("Lockup Listings Contract - Take Listing", () => {
                     netuid,
                     seller: accounts.bob.address,
                     listing_id: listingId,
-                    amount: listAmount + taoToRao(10) // More than available
+                    amount: listedAmount + taoToRao(10) // More than available
                 },
                 value: taoToRao(100)
             });
@@ -814,6 +835,7 @@ describe("Lockup Listings Contract - Take Listing", () => {
             }
 
             const listingId = listingsResult.value.response[listingsResult.value.response.length - 1];
+            const listedAmount = await listedAmountOf(listingId);
 
             // Estimate price
             const estimateResult = await contract.query("estimate_lockup_price", {
@@ -822,7 +844,7 @@ describe("Lockup Listings Contract - Take Listing", () => {
                     netuid,
                     seller: accounts.bob.address,
                     listing_id: listingId,
-                    amount: listAmount
+                    amount: listedAmount
                 }
             });
 
@@ -839,7 +861,7 @@ describe("Lockup Listings Contract - Take Listing", () => {
                     netuid,
                     seller: accounts.bob.address,
                     listing_id: listingId,
-                    amount: listAmount
+                    amount: listedAmount
                 },
                 value: totalRequired / 2n // Only half
             });
@@ -945,6 +967,7 @@ describe("Lockup Listings Contract - Take Listing", () => {
             }
 
             const listingId = listingsResult.value.response[listingsResult.value.response.length - 1];
+            const listedAmount = await listedAmountOf(listingId);
 
             // Estimate for full amount
             const estimateResult = await contract.query("estimate_lockup_price", {
@@ -953,7 +976,7 @@ describe("Lockup Listings Contract - Take Listing", () => {
                     netuid,
                     seller: accounts.bob.address,
                     listing_id: listingId,
-                    amount: listAmount
+                    amount: listedAmount
                 }
             });
 
@@ -970,7 +993,7 @@ describe("Lockup Listings Contract - Take Listing", () => {
                     netuid,
                     seller: accounts.bob.address,
                     listing_id: listingId,
-                    amount: listAmount
+                    amount: listedAmount
                 },
                 value: totalRequired
             });

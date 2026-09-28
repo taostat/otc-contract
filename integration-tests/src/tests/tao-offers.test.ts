@@ -865,11 +865,13 @@ describe("TAO Offer Operations", () => {
         it("should reject taking offer with insufficient Alpha stake", async () => {
             const { accounts } = context;
 
-            // Create a large offer that Eve can't fulfill
+            // Create an offer far larger than Eve's Alpha can fill at any plausible
+            // localnet price; dynamic subnet prices make a fixed smaller offer flaky.
             const largePriceOffsetBps = MARKET_PRICE;
+            const largeOfferTao = taoToRao(1000);
             const offerTx = contract.send("create_tao_offer", {
                 origin: accounts.charlie.address,
-                value: taoToRao(100), // Large offer
+                value: largeOfferTao,
                 data: {
                     netuid,
                     price_offset_bps: largePriceOffsetBps
@@ -894,7 +896,7 @@ describe("TAO Offer Operations", () => {
             // Calculate required Alpha using executed price
             const executedPriceFixed = await getExecutedPriceFixed(context.api, netuid, largePriceOffsetBps);
             const { alphaAmount } = calculateAlphaForOffer(
-                taoToRao(100),
+                largeOfferTao,
                 executedPriceFixed,
                 contractFeeRate
             );
@@ -903,7 +905,7 @@ describe("TAO Offer Operations", () => {
             const eveAlpha = await getStakeBalance(context.api, eveHotkey.address, netuid, accounts.eve.address);
             console.log(`Required Alpha: ${formatStakeAmount(alphaAmount)}, Eve has: ${formatStakeAmount(eveAlpha)}`);
 
-            // Eve should have insufficient Alpha (30 Alpha from setup)
+            // Eve should have insufficient Alpha
             expect(eveAlpha).toBeLessThan(alphaAmount);
 
             // Setup proxy for Eve if not already done
