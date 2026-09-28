@@ -1,6 +1,6 @@
 {
   "source": {
-    "hash": "0x5507661c7b2745c8c915baa60c11937fa7729c67d87d50194b0607b35bdc87ab",
+    "hash": "0xf6d72ab255c27ad6db566c02abd09001e6c5441dc8ca51f393f7598b098e6f8f",
     "language": "ink! 5.1.1",
     "compiler": "rustc 1.89.0",
     "build_info": {
@@ -2926,58 +2926,54 @@
               },
               {
                 "index": 8,
-                "name": "StakeTransferNotVerified"
-              },
-              {
-                "index": 9,
                 "name": "InsufficientStake"
               },
               {
-                "index": 10,
+                "index": 9,
                 "name": "ContractFullyPaused"
               },
               {
-                "index": 11,
+                "index": 10,
                 "name": "TradingPaused"
               },
               {
-                "index": 12,
+                "index": 11,
                 "name": "TooManyListings"
               },
               {
-                "index": 13,
+                "index": 12,
                 "name": "MarketPriceFetchFailed"
               },
               {
-                "index": 14,
+                "index": 13,
                 "name": "InvalidPriceOffset"
               },
               {
-                "index": 15,
+                "index": 14,
                 "name": "InsufficientPayment"
               },
               {
-                "index": 16,
+                "index": 15,
                 "name": "LockupDurationTooShort"
               },
               {
-                "index": 17,
+                "index": 16,
                 "name": "LockupDurationTooLong"
               },
               {
-                "index": 18,
+                "index": 17,
                 "name": "AmountExceedsRemaining"
               },
               {
-                "index": 19,
+                "index": 18,
                 "name": "EscrowInstantiationFailed"
               },
               {
-                "index": 20,
+                "index": 19,
                 "name": "CodeUpgradeFailed"
               },
               {
-                "index": 21,
+                "index": 20,
                 "name": "AmountBelowMinimumStake"
               }
             ]

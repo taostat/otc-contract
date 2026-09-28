@@ -279,14 +279,17 @@ mod lockup_listings {
             let buyer = self.env().caller();
             let tao_received = self.env().transferred_value();
 
-            if amount < self.min_purchase_amount {
-                return Err(Error::AmountTooSmall);
-            }
-
             let mut listing = self
                 .lockup_listings
                 .get((netuid, seller, listing_id))
                 .ok_or(Error::ListingNotFound)?;
+
+            // Transfers round down, so a listing can hold slightly less than it was
+            // created with. The final remainder can always be taken, even when it is
+            // below the minimum purchase; otherwise it could never be filled.
+            if amount < self.min_purchase_amount && amount != listing.remaining_amount {
+                return Err(Error::AmountTooSmall);
+            }
 
             if amount > listing.remaining_amount {
                 return Err(Error::AmountExceedsRemaining);

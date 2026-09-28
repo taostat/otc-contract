@@ -20,7 +20,13 @@ import {
     MEDIUM_LOCKUP_DURATION,
     type Wallet,
 } from "../utils";
-import { submitOk, withIntegrationGas } from "../test-helpers";
+import {
+    createLockupListing,
+    queryOk,
+    submitOk,
+    takeLockupListing,
+    withIntegrationGas,
+} from "../test-helpers";
 
 describe("Lockup Listings Contract - Take Listing", () => {
     let context: LockupListingsContext;
@@ -1027,6 +1033,56 @@ describe("Lockup Listings Contract - Take Listing", () => {
             expect(listingAfter.success).toBe(true);
             if (listingAfter.success) {
                 expect(listingAfter.value.response).toBeUndefined();
+            }
+        }, 180000);
+
+        it("should allow taking a final remainder below the minimum purchase", async () => {
+            const { accounts } = context;
+            const listAmount = taoToRao(5);
+
+            const { listingId, listedAmount } = await createLockupListing(contract, accounts.bob.signer, accounts.bob.address, {
+                hotkey: bobHotkey.address,
+                netuid,
+                amount: listAmount,
+                price_offset_bps: MARKET_PRICE,
+                lockup_duration: MEDIUM_LOCKUP_DURATION,
+            });
+
+            // Raise the minimum purchase above what the listing actually holds.
+            const minPurchaseBefore = queryOk<bigint>(await contract.query("get_min_purchase_amount", {
+                origin: accounts.alice.address,
+                data: {}
+            }), "get_min_purchase_amount");
+            await submitOk(contract.send("update_min_purchase_amount", {
+                origin: accounts.alice.address,
+                data: { new_amount: listedAmount + 1n }
+            }), accounts.alice.signer, "update_min_purchase_amount");
+
+            try {
+                const [, , totalRequired] = queryOk<[bigint, bigint, bigint]>(await contract.query("estimate_lockup_price", {
+                    origin: accounts.alice.address,
+                    data: {
+                        netuid,
+                        seller: accounts.bob.address,
+                        listing_id: listingId,
+                        amount: listedAmount
+                    }
+                }), "estimate_lockup_price");
+
+                const { result } = await takeLockupListing(contract, accounts.charlie.signer, accounts.charlie.address, {
+                    netuid,
+                    seller: accounts.bob.address,
+                    listing_id: listingId,
+                    amount: listedAmount,
+                }, totalRequired);
+                const fullyFilled = contract.filterEvents(result.events)
+                    .find(event => event.type === "LockupListingFullyFilled");
+                expect(fullyFilled).toBeDefined();
+            } finally {
+                await submitOk(contract.send("update_min_purchase_amount", {
+                    origin: accounts.alice.address,
+                    data: { new_amount: minPurchaseBefore }
+                }), accounts.alice.signer, "restore min purchase");
             }
         }, 180000);
     });
