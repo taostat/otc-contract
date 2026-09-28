@@ -64,17 +64,32 @@ npm install
 CONTRACTS_NODE_URL=ws://127.0.0.1:9944 npm test -- --run
 ```
 
-The suite deploys or reuses local artifacts from:
+The suite deploys local artifacts from:
 
 - `target/ink/alpha_lockup/alpha_lockup.wasm`
 - `target/ink/lockup_listings/lockup_listings.wasm`
 - `target/ink/otc_contract/otc_contract.wasm`
 
-Local deployment cache files are ignored by Git:
+Each run deploys fresh contracts. To reuse deployments across runs, set `OTC_TEST_REUSE_DEPLOYMENTS=1`; the cached addresses are stored in these files, which Git ignores:
 
 - `integration-tests/.contract-address`
 - `integration-tests/.lockup-listings-address`
 - `integration-tests/.alpha-lockup-code-hash`
+
+### Localnet Runner
+
+`integration-tests` ships a runner that manages the localnet for you:
+
+```bash
+npm run test:localnet -- src/lockup-listings/claim.test.ts
+npm run test:localnet:flaky
+```
+
+`test:localnet` starts `../subtensor-fork/scripts/localnet.sh`, waits for RPC on `127.0.0.1:9944`, clears the deployment cache, and runs Vitest serially. After each batch it stops the node and checks that its process group has exited and the RPC port is closed. By default it restarts localnet for every test file, so each suite gets a fresh chain and fresh contracts.
+
+- `--reuse-deployments` (or `OTC_TEST_REUSE_DEPLOYMENTS=1`) keeps the deployment cache.
+- `npm run test:localnet:combined -- ...` runs all files against one node. Use it only to diagnose coupling between suites: subnets registered later on a long-lived localnet can have different economics.
+- `BUILD_BINARY=0` skips rebuilding the node when it is already built.
 
 ## Deployment Order
 
@@ -214,15 +229,24 @@ Users are limited to 25 active lockup listings per subnet.
 
 ```rust
 claim() -> Result<()>
+propose_beneficiary(new_beneficiary) -> Result<()>
+accept_beneficiary() -> Result<()>
+cancel_beneficiary_proposal() -> Result<()>
 get_info() -> Result<LockupInfo>
 get_buyer() -> AccountId
+get_beneficiary() -> AccountId
+get_pending_beneficiary() -> Option<AccountId>
+get_tao_balance() -> Balance
+get_hotkey() -> AccountId
 get_unlock_block() -> u32
 is_claimed() -> bool
 blocks_until_unlock() -> u32
 account_id() -> AccountId
 ```
 
-Only the buyer can call `claim`. Claiming before `unlock_block` fails. A successful claim transfers all current escrow stake to the buyer, including any staking rewards, emits `AlphaClaimed`, and terminates the escrow contract.
+Anyone can call `claim` once `unlock_block` is reached; claiming earlier fails. The Alpha always goes to the current beneficiary, never to the caller. A successful claim transfers all current escrow stake, including any staking rewards, emits `AlphaClaimed`, and terminates the escrow contract, sending any TAO balance to the beneficiary.
+
+Beneficiary changes, for example after a coldkey swap, take two steps: the current beneficiary calls `propose_beneficiary`, and the proposed account calls `accept_beneficiary`. The current beneficiary can withdraw a proposal with `cancel_beneficiary_proposal`. While a proposal is pending, `claim` fails with `BeneficiaryTransferPending`, so a payout can't race a handoff away from a key that is being retired.
 
 ## Owner Controls
 
@@ -255,7 +279,7 @@ Pause states are shared:
 - Stake-moving seller flows require proxy authorization from the user before they can succeed.
 - Market-relative prices are evaluated at execution time, not listing creation time.
 - State is updated before external transfers in trade and claim flows.
-- Stake transfer verification allows a 10 rao tolerance for Subtensor rounding or micro-fees.
+- Every stake transfer is verified against the stake actually moved, allowing up to 10 rao less for Subtensor rounding. A transfer that fails verification traps, reverting the whole call. Listings record the stake that actually arrived, so later moves never ask for stake the contract does not hold.
 - Keep owner keys and upgrade authority operationally separate from test keys and development accounts.
 
 Report suspected vulnerabilities privately using the instructions in `SECURITY.md`.

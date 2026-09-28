@@ -1,10 +1,11 @@
 import { createClient, type PolkadotClient as Client, type TypedApi, Binary, TxEvent, TxFinalized } from "polkadot-api";
 import { getWsProvider } from "polkadot-api/ws-provider/web";
 import { createInkSdk } from "@polkadot-api/sdk-ink";
-import { devnet, contracts } from "@polkadot-api/descriptors";
+import { devnet, contracts, MultiAddress } from "@polkadot-api/descriptors";
 import { sr25519CreateDerive } from "@polkadot-labs/hdkd";
 import { DEV_PHRASE, entropyToMiniSecret, mnemonicToEntropy, ss58Address } from "@polkadot-labs/hdkd-helpers";
 import { getPolkadotSigner, type PolkadotSigner } from "polkadot-api/signer";
+import { randomBytes } from "crypto";
 import * as fs from "fs/promises";
 import * as fsSync from "fs";
 import * as path from "path";
@@ -18,9 +19,23 @@ export type AlphaLockupSdk = ReturnType<typeof createInkSdk<TypedApi<typeof devn
 const CONTRACT_ADDRESS_FILE = path.join(process.cwd(), ".contract-address");
 const LOCKUP_LISTINGS_ADDRESS_FILE = path.join(process.cwd(), ".lockup-listings-address");
 const ALPHA_LOCKUP_CODE_HASH_FILE = path.join(process.cwd(), ".alpha-lockup-code-hash");
+// Deployment caching is opt-in so every run gets fresh contracts by default.
+const REUSE_DEPLOYMENT_CACHE = process.env.OTC_TEST_REUSE_DEPLOYMENTS === "1";
+// pallet-contracts requires the caller to hold the full storage deposit limit, and the
+// test helpers use a generous limit, so every test account starts well funded.
+const TEST_ACCOUNT_TOP_UP = 1_000_000_000_000_000n; // 1,000,000 TAO
+
+// A random salt lets the same code and constructor arguments deploy again on one chain.
+function randomDeploymentSalt(): any {
+    return Binary.fromBytes(randomBytes(32)) as any;
+}
 
 // Load contract address from file if it exists
 function loadContractAddress(): string | null {
+    if (!REUSE_DEPLOYMENT_CACHE) {
+        return null;
+    }
+
     try {
         if (fsSync.existsSync(CONTRACT_ADDRESS_FILE)) {
             const address = fsSync.readFileSync(CONTRACT_ADDRESS_FILE, 'utf-8').trim();
@@ -35,6 +50,10 @@ function loadContractAddress(): string | null {
 
 // Save contract address to file
 function saveContractAddress(address: string): void {
+    if (!REUSE_DEPLOYMENT_CACHE) {
+        return;
+    }
+
     try {
         fsSync.writeFileSync(CONTRACT_ADDRESS_FILE, address, 'utf-8');
         console.log(`Saved contract address to file: ${address}`);
@@ -45,6 +64,10 @@ function saveContractAddress(address: string): void {
 
 // Load lockup listings address from file
 function loadLockupListingsAddress(): string | null {
+    if (!REUSE_DEPLOYMENT_CACHE) {
+        return null;
+    }
+
     try {
         if (fsSync.existsSync(LOCKUP_LISTINGS_ADDRESS_FILE)) {
             const address = fsSync.readFileSync(LOCKUP_LISTINGS_ADDRESS_FILE, 'utf-8').trim();
@@ -59,6 +82,10 @@ function loadLockupListingsAddress(): string | null {
 
 // Save lockup listings address to file
 function saveLockupListingsAddress(address: string): void {
+    if (!REUSE_DEPLOYMENT_CACHE) {
+        return;
+    }
+
     try {
         fsSync.writeFileSync(LOCKUP_LISTINGS_ADDRESS_FILE, address, 'utf-8');
         console.log(`Saved lockup listings address to file: ${address}`);
@@ -69,6 +96,10 @@ function saveLockupListingsAddress(address: string): void {
 
 // Load alpha lockup code hash from file
 function loadAlphaLockupCodeHash(): string | null {
+    if (!REUSE_DEPLOYMENT_CACHE) {
+        return null;
+    }
+
     try {
         if (fsSync.existsSync(ALPHA_LOCKUP_CODE_HASH_FILE)) {
             const codeHash = fsSync.readFileSync(ALPHA_LOCKUP_CODE_HASH_FILE, 'utf-8').trim();
@@ -83,6 +114,10 @@ function loadAlphaLockupCodeHash(): string | null {
 
 // Save alpha lockup code hash to file
 function saveAlphaLockupCodeHash(codeHash: string): void {
+    if (!REUSE_DEPLOYMENT_CACHE) {
+        return;
+    }
+
     try {
         fsSync.writeFileSync(ALPHA_LOCKUP_CODE_HASH_FILE, codeHash, 'utf-8');
         console.log(`Saved alpha lockup code hash to file: ${codeHash}`);
@@ -216,6 +251,7 @@ export class TestSetup {
             const dryRunResult = await deployer.dryRun("new", {
                 origin: accounts.alice.address,
                 data: constructorArgs,
+                options: { salt: randomDeploymentSalt() },
             });
 
             if (!dryRunResult.success) {
@@ -395,6 +431,7 @@ export class TestSetup {
             const dryRunResult = await deployer.dryRun("new", {
                 origin: accounts.alice.address,
                 data: constructorArgs,
+                options: { salt: randomDeploymentSalt() },
             });
 
             if (!dryRunResult.success) {
@@ -439,6 +476,7 @@ export class TestSetup {
     async createLockupListingsContext(): Promise<LockupListingsContext> {
         const api = await this.getApi();
         const accounts = this.createTestAccounts();
+        await this.fundTestAccounts(api, accounts);
 
         // First upload the alpha_lockup code to get its code hash
         const escrowCodeHash = await this.uploadAlphaLockupCode(api, accounts);
@@ -470,6 +508,7 @@ export class TestSetup {
     async createTestContext(): Promise<TestContext> {
         const api = await this.getApi();
         const accounts = this.createTestAccounts();
+        await this.fundTestAccounts(api, accounts);
         const contractSdk = createInkSdk(api, contracts.otc_contract);
 
         const context: TestContext = {
@@ -482,6 +521,23 @@ export class TestSetup {
         context.contractAddress = contractAddress;
 
         return context;
+    }
+
+    private async fundTestAccounts(
+        api: TypedApi<typeof devnet>,
+        accounts: TestContext['accounts']
+    ): Promise<void> {
+        for (const account of [accounts.bob, accounts.charlie, accounts.dave, accounts.eve]) {
+            const setBalance = api.tx.Balances.force_set_balance({
+                who: MultiAddress.Id(account.address),
+                new_free: TEST_ACCOUNT_TOP_UP,
+            });
+            const result = await api.tx.Sudo.sudo({ call: setBalance.decodedCall }).signAndSubmit(accounts.alice.signer);
+            const sudid = result.events.find((event: any) => event.type === "Sudo" && event.value.type === "Sudid");
+            if (!result.ok || !sudid || sudid.value.value.success === false) {
+                throw new Error(`Failed to top up test account ${account.address}`);
+            }
+        }
     }
 }
 

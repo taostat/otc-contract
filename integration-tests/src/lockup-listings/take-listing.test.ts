@@ -20,6 +20,13 @@ import {
     MEDIUM_LOCKUP_DURATION,
     type Wallet,
 } from "../utils";
+import {
+    createLockupListing,
+    queryOk,
+    submitOk,
+    takeLockupListing,
+    withIntegrationGas,
+} from "../test-helpers";
 
 describe("Lockup Listings Contract - Take Listing", () => {
     let context: LockupListingsContext;
@@ -100,13 +107,30 @@ describe("Lockup Listings Contract - Take Listing", () => {
         await cleanupTestEnvironment();
     });
 
+    // Stake transfers can round down by a rao, so a listing holds slightly less
+    // than the amount requested. Full fills must take what the listing recorded.
+    async function listedAmountOf(listingId: bigint): Promise<bigint> {
+        const listingResult = await contract.query("get_listing", {
+            origin: context.accounts.alice.address,
+            data: {
+                netuid,
+                seller: context.accounts.bob.address,
+                listing_id: listingId
+            }
+        });
+        if (!listingResult.success || !listingResult.value.response) {
+            throw new Error(`Failed to read listing ${listingId}`);
+        }
+        return listingResult.value.response.remaining_amount;
+    }
+
     describe("Happy Paths", () => {
         it("should successfully take a lockup listing and create escrow", async () => {
             const { accounts } = context;
             const listAmount = taoToRao(10);
 
             // Bob creates a listing
-            const listTx = contract.send("create_lockup_listing", {
+            const listTx = contract.send("create_lockup_listing", withIntegrationGas({
                 origin: accounts.bob.address,
                 data: {
                     hotkey: bobHotkey.address,
@@ -115,9 +139,9 @@ describe("Lockup Listings Contract - Take Listing", () => {
                     price_offset_bps: MARKET_PRICE,
                     lockup_duration: MEDIUM_LOCKUP_DURATION
                 }
-            });
+            }));
 
-            await listTx.signAndSubmit(accounts.bob.signer);
+            await submitOk(listTx, accounts.bob.signer, "create_lockup_listing");
             await waitForBlocks(context.api, 2);
 
             // Get the listing
@@ -135,6 +159,7 @@ describe("Lockup Listings Contract - Take Listing", () => {
             }
 
             const listingId = listingsResult.value.response[listingsResult.value.response.length - 1];
+            const listedAmount = await listedAmountOf(listingId);
 
             // Estimate price
             const estimateResult = await contract.query("estimate_lockup_price", {
@@ -143,7 +168,7 @@ describe("Lockup Listings Contract - Take Listing", () => {
                     netuid,
                     seller: accounts.bob.address,
                     listing_id: listingId,
-                    amount: listAmount
+                    amount: listedAmount
                 }
             });
 
@@ -162,7 +187,7 @@ describe("Lockup Listings Contract - Take Listing", () => {
                     netuid,
                     seller: accounts.bob.address,
                     listing_id: listingId,
-                    amount: listAmount
+                    amount: listedAmount
                 },
                 value: totalRequired
             });
@@ -206,7 +231,7 @@ describe("Lockup Listings Contract - Take Listing", () => {
             const listAmount = taoToRao(5);
 
             // Create listing
-            const listTx = contract.send("create_lockup_listing", {
+            const listTx = contract.send("create_lockup_listing", withIntegrationGas({
                 origin: accounts.bob.address,
                 data: {
                     hotkey: bobHotkey.address,
@@ -215,9 +240,9 @@ describe("Lockup Listings Contract - Take Listing", () => {
                     price_offset_bps: MARKET_PRICE,
                     lockup_duration: MEDIUM_LOCKUP_DURATION
                 }
-            });
+            }));
 
-            await listTx.signAndSubmit(accounts.bob.signer);
+            await submitOk(listTx, accounts.bob.signer, "create_lockup_listing");
             await waitForBlocks(context.api, 2);
 
             // Get listing
@@ -234,6 +259,7 @@ describe("Lockup Listings Contract - Take Listing", () => {
             }
 
             const listingId = listingsResult.value.response[listingsResult.value.response.length - 1];
+            const listedAmount = await listedAmountOf(listingId);
 
             // Get balances before
             const sellerBalanceBefore = await getBalance(context.api, accounts.bob.address);
@@ -246,7 +272,7 @@ describe("Lockup Listings Contract - Take Listing", () => {
                     netuid,
                     seller: accounts.bob.address,
                     listing_id: listingId,
-                    amount: listAmount
+                    amount: listedAmount
                 }
             });
 
@@ -264,7 +290,7 @@ describe("Lockup Listings Contract - Take Listing", () => {
                     netuid,
                     seller: accounts.bob.address,
                     listing_id: listingId,
-                    amount: listAmount
+                    amount: listedAmount
                 },
                 value: totalRequired
             });
@@ -295,7 +321,7 @@ describe("Lockup Listings Contract - Take Listing", () => {
             const purchaseAmount = taoToRao(10);
 
             // Create listing
-            const listTx = contract.send("create_lockup_listing", {
+            const listTx = contract.send("create_lockup_listing", withIntegrationGas({
                 origin: accounts.bob.address,
                 data: {
                     hotkey: bobHotkey.address,
@@ -304,9 +330,9 @@ describe("Lockup Listings Contract - Take Listing", () => {
                     price_offset_bps: MARKET_PRICE,
                     lockup_duration: MEDIUM_LOCKUP_DURATION
                 }
-            });
+            }));
 
-            await listTx.signAndSubmit(accounts.bob.signer);
+            await submitOk(listTx, accounts.bob.signer, "create_lockup_listing");
             await waitForBlocks(context.api, 2);
 
             // Get listing
@@ -382,7 +408,7 @@ describe("Lockup Listings Contract - Take Listing", () => {
             const purchaseAmount = taoToRao(10);
 
             // Create a larger listing
-            const listTx = contract.send("create_lockup_listing", {
+            const listTx = contract.send("create_lockup_listing", withIntegrationGas({
                 origin: accounts.bob.address,
                 data: {
                     hotkey: bobHotkey.address,
@@ -391,9 +417,9 @@ describe("Lockup Listings Contract - Take Listing", () => {
                     price_offset_bps: MARKET_PRICE,
                     lockup_duration: MEDIUM_LOCKUP_DURATION
                 }
-            });
+            }));
 
-            await listTx.signAndSubmit(accounts.bob.signer);
+            await submitOk(listTx, accounts.bob.signer, "create_lockup_listing");
             await waitForBlocks(context.api, 2);
 
             // Get listing ID
@@ -545,13 +571,14 @@ describe("Lockup Listings Contract - Take Listing", () => {
             }
 
             // --- Third (final) partial purchase by Charlie to complete the listing ---
+            const finalAmount = await listedAmountOf(listingId);
             const estimate3 = await contract.query("estimate_lockup_price", {
                 origin: accounts.alice.address,
                 data: {
                     netuid,
                     seller: accounts.bob.address,
                     listing_id: listingId,
-                    amount: purchaseAmount
+                    amount: finalAmount
                 }
             });
 
@@ -564,7 +591,7 @@ describe("Lockup Listings Contract - Take Listing", () => {
                     netuid,
                     seller: accounts.bob.address,
                     listing_id: listingId,
-                    amount: purchaseAmount
+                    amount: finalAmount
                 },
                 value: totalRequired3
             });
@@ -656,7 +683,7 @@ describe("Lockup Listings Contract - Take Listing", () => {
             const listAmount = taoToRao(10);
 
             // Create listing
-            const listTx = contract.send("create_lockup_listing", {
+            const listTx = contract.send("create_lockup_listing", withIntegrationGas({
                 origin: accounts.bob.address,
                 data: {
                     hotkey: bobHotkey.address,
@@ -665,9 +692,9 @@ describe("Lockup Listings Contract - Take Listing", () => {
                     price_offset_bps: MARKET_PRICE,
                     lockup_duration: MEDIUM_LOCKUP_DURATION
                 }
-            });
+            }));
 
-            await listTx.signAndSubmit(accounts.bob.signer);
+            await submitOk(listTx, accounts.bob.signer, "create_lockup_listing");
             await waitForBlocks(context.api, 2);
 
             // Get minimum purchase amount
@@ -736,7 +763,7 @@ describe("Lockup Listings Contract - Take Listing", () => {
             const listAmount = taoToRao(5);
 
             // Create small listing
-            const listTx = contract.send("create_lockup_listing", {
+            const listTx = contract.send("create_lockup_listing", withIntegrationGas({
                 origin: accounts.bob.address,
                 data: {
                     hotkey: bobHotkey.address,
@@ -745,9 +772,9 @@ describe("Lockup Listings Contract - Take Listing", () => {
                     price_offset_bps: MARKET_PRICE,
                     lockup_duration: MEDIUM_LOCKUP_DURATION
                 }
-            });
+            }));
 
-            await listTx.signAndSubmit(accounts.bob.signer);
+            await submitOk(listTx, accounts.bob.signer, "create_lockup_listing");
             await waitForBlocks(context.api, 2);
 
             // Get listing
@@ -764,6 +791,7 @@ describe("Lockup Listings Contract - Take Listing", () => {
             }
 
             const listingId = listingsResult.value.response[listingsResult.value.response.length - 1];
+            const listedAmount = await listedAmountOf(listingId);
 
             // Try to take more than listing amount
             const takeTx = contract.send("take_lockup_listing", {
@@ -772,7 +800,7 @@ describe("Lockup Listings Contract - Take Listing", () => {
                     netuid,
                     seller: accounts.bob.address,
                     listing_id: listingId,
-                    amount: listAmount + taoToRao(10) // More than available
+                    amount: listedAmount + taoToRao(10) // More than available
                 },
                 value: taoToRao(100)
             });
@@ -786,7 +814,7 @@ describe("Lockup Listings Contract - Take Listing", () => {
             const listAmount = taoToRao(5);
 
             // Create listing
-            const listTx = contract.send("create_lockup_listing", {
+            const listTx = contract.send("create_lockup_listing", withIntegrationGas({
                 origin: accounts.bob.address,
                 data: {
                     hotkey: bobHotkey.address,
@@ -795,9 +823,9 @@ describe("Lockup Listings Contract - Take Listing", () => {
                     price_offset_bps: MARKET_PRICE,
                     lockup_duration: MEDIUM_LOCKUP_DURATION
                 }
-            });
+            }));
 
-            await listTx.signAndSubmit(accounts.bob.signer);
+            await submitOk(listTx, accounts.bob.signer, "create_lockup_listing");
             await waitForBlocks(context.api, 2);
 
             // Get listing
@@ -814,6 +842,7 @@ describe("Lockup Listings Contract - Take Listing", () => {
             }
 
             const listingId = listingsResult.value.response[listingsResult.value.response.length - 1];
+            const listedAmount = await listedAmountOf(listingId);
 
             // Estimate price
             const estimateResult = await contract.query("estimate_lockup_price", {
@@ -822,7 +851,7 @@ describe("Lockup Listings Contract - Take Listing", () => {
                     netuid,
                     seller: accounts.bob.address,
                     listing_id: listingId,
-                    amount: listAmount
+                    amount: listedAmount
                 }
             });
 
@@ -839,7 +868,7 @@ describe("Lockup Listings Contract - Take Listing", () => {
                     netuid,
                     seller: accounts.bob.address,
                     listing_id: listingId,
-                    amount: listAmount
+                    amount: listedAmount
                 },
                 value: totalRequired / 2n // Only half
             });
@@ -852,7 +881,7 @@ describe("Lockup Listings Contract - Take Listing", () => {
             const { accounts } = context;
 
             // Create listing first
-            const listTx = contract.send("create_lockup_listing", {
+            const listTx = contract.send("create_lockup_listing", withIntegrationGas({
                 origin: accounts.bob.address,
                 data: {
                     hotkey: bobHotkey.address,
@@ -861,9 +890,9 @@ describe("Lockup Listings Contract - Take Listing", () => {
                     price_offset_bps: MARKET_PRICE,
                     lockup_duration: MEDIUM_LOCKUP_DURATION
                 }
-            });
+            }));
 
-            await listTx.signAndSubmit(accounts.bob.signer);
+            await submitOk(listTx, accounts.bob.signer, "create_lockup_listing");
             await waitForBlocks(context.api, 2);
 
             const listingsResult = await contract.query("get_user_listings", {
@@ -917,7 +946,7 @@ describe("Lockup Listings Contract - Take Listing", () => {
             const listAmount = taoToRao(5);
 
             // Create listing
-            const listTx = contract.send("create_lockup_listing", {
+            const listTx = contract.send("create_lockup_listing", withIntegrationGas({
                 origin: accounts.bob.address,
                 data: {
                     hotkey: bobHotkey.address,
@@ -926,9 +955,9 @@ describe("Lockup Listings Contract - Take Listing", () => {
                     price_offset_bps: MARKET_PRICE,
                     lockup_duration: MEDIUM_LOCKUP_DURATION
                 }
-            });
+            }));
 
-            await listTx.signAndSubmit(accounts.bob.signer);
+            await submitOk(listTx, accounts.bob.signer, "create_lockup_listing");
             await waitForBlocks(context.api, 2);
 
             // Get listing
@@ -945,6 +974,7 @@ describe("Lockup Listings Contract - Take Listing", () => {
             }
 
             const listingId = listingsResult.value.response[listingsResult.value.response.length - 1];
+            const listedAmount = await listedAmountOf(listingId);
 
             // Estimate for full amount
             const estimateResult = await contract.query("estimate_lockup_price", {
@@ -953,7 +983,7 @@ describe("Lockup Listings Contract - Take Listing", () => {
                     netuid,
                     seller: accounts.bob.address,
                     listing_id: listingId,
-                    amount: listAmount
+                    amount: listedAmount
                 }
             });
 
@@ -970,7 +1000,7 @@ describe("Lockup Listings Contract - Take Listing", () => {
                     netuid,
                     seller: accounts.bob.address,
                     listing_id: listingId,
-                    amount: listAmount
+                    amount: listedAmount
                 },
                 value: totalRequired
             });
@@ -1003,6 +1033,56 @@ describe("Lockup Listings Contract - Take Listing", () => {
             expect(listingAfter.success).toBe(true);
             if (listingAfter.success) {
                 expect(listingAfter.value.response).toBeUndefined();
+            }
+        }, 180000);
+
+        it("should allow taking a final remainder below the minimum purchase", async () => {
+            const { accounts } = context;
+            const listAmount = taoToRao(5);
+
+            const { listingId, listedAmount } = await createLockupListing(contract, accounts.bob.signer, accounts.bob.address, {
+                hotkey: bobHotkey.address,
+                netuid,
+                amount: listAmount,
+                price_offset_bps: MARKET_PRICE,
+                lockup_duration: MEDIUM_LOCKUP_DURATION,
+            });
+
+            // Raise the minimum purchase above what the listing actually holds.
+            const minPurchaseBefore = queryOk<bigint>(await contract.query("get_min_purchase_amount", {
+                origin: accounts.alice.address,
+                data: {}
+            }), "get_min_purchase_amount");
+            await submitOk(contract.send("update_min_purchase_amount", {
+                origin: accounts.alice.address,
+                data: { new_amount: listedAmount + 1n }
+            }), accounts.alice.signer, "update_min_purchase_amount");
+
+            try {
+                const [, , totalRequired] = queryOk<[bigint, bigint, bigint]>(await contract.query("estimate_lockup_price", {
+                    origin: accounts.alice.address,
+                    data: {
+                        netuid,
+                        seller: accounts.bob.address,
+                        listing_id: listingId,
+                        amount: listedAmount
+                    }
+                }), "estimate_lockup_price");
+
+                const { result } = await takeLockupListing(contract, accounts.charlie.signer, accounts.charlie.address, {
+                    netuid,
+                    seller: accounts.bob.address,
+                    listing_id: listingId,
+                    amount: listedAmount,
+                }, totalRequired);
+                const fullyFilled = contract.filterEvents(result.events)
+                    .find(event => event.type === "LockupListingFullyFilled");
+                expect(fullyFilled).toBeDefined();
+            } finally {
+                await submitOk(contract.send("update_min_purchase_amount", {
+                    origin: accounts.alice.address,
+                    data: { new_amount: minPurchaseBefore }
+                }), accounts.alice.signer, "restore min purchase");
             }
         }, 180000);
     });

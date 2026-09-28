@@ -14,6 +14,7 @@ import {
     MARKET_PRICE,
     bpsToPercentage,
 } from "../utils";
+import { withIntegrationGas } from "../test-helpers";
 import {
     getStakeBalance,
     transferStake,
@@ -323,11 +324,13 @@ describe("Dividends Claiming", () => {
         expect(contractPostDelta).toBeLessThanOrEqual(driftTolerance);
         expect(reservedPostClaim).toBe(reservedPreClaim);
 
-        // Subsequent claim without new rewards should produce only minimal drift-sized dividends
-        const secondClaim = contract.send("claim_dividends", {
+        // Subsequent claim without new rewards should produce only minimal drift-sized dividends.
+        // Emissions can accrue between the dry run and inclusion, so a dry-run gas estimate
+        // taken on the "nothing to claim" path may not cover the transfer path.
+        const secondClaim = contract.send("claim_dividends", withIntegrationGas({
             origin: accounts.alice.address,
             data: { netuid },
-        });
+        }));
         const secondClaimResult = await secondClaim.signAndSubmit(accounts.alice.signer);
         if (secondClaimResult.ok) {
             const secondEvents = contract.filterEvents(secondClaimResult.events);

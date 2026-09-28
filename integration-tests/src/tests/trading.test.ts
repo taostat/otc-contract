@@ -22,6 +22,7 @@ import {
     getStakeBalance,
     formatStakeAmount,
 } from "../utils/stake-helpers";
+import { submitOk, withIntegrationGas } from "../test-helpers";
 
 type ContractsError = {
     type: 'Contracts',
@@ -133,6 +134,19 @@ describe("Trading Execution", () => {
         await cleanupTestEnvironment();
     });
 
+    // Stake transfers can round down by a rao, so a listing holds slightly less
+    // than the amount requested. Price checks use what the listing recorded.
+    async function listedAmountOf(seller: string, listingId: bigint): Promise<bigint> {
+        const listingResult = await contract.query("get_listing", {
+            origin: context.accounts.alice.address,
+            data: { netuid, seller, listing_id: listingId }
+        });
+        if (!listingResult.success || !listingResult.value.response) {
+            throw new Error(`Failed to read listing ${listingId}`);
+        }
+        return listingResult.value.response.amount;
+    }
+
     describe("Taking Alpha Listings", () => {
         it("should successfully take an Alpha listing with exact TAO payment", async () => {
             const { accounts } = context;
@@ -166,11 +180,12 @@ describe("Trading Execution", () => {
             expect(listingsResult.success).toBe(true);
             const listingId = listingsResult.success ?
                 listingsResult.value.response[0] : 0n;
+            const listedAmount = await listedAmountOf(accounts.bob.address, listingId);
 
             // === Calculate required TAO payment using market price with offset ===
             const executedPriceFixed = await getExecutedPriceFixed(context.api, netuid, priceOffsetBps);
             const { taoAmount, feeAmount, totalRequired } = calculateTotalTaoForListing(
-                listAmount,
+                listedAmount,
                 executedPriceFixed,
                 contractFeeRate
             );
@@ -214,7 +229,7 @@ describe("Trading Execution", () => {
 
             if (alphaListingTakenEvent) {
                 // Verify the event contains expected values
-                expect(BigInt(alphaListingTakenEvent.value.alpha_amount)).toBe(listAmount);
+                expect(BigInt(alphaListingTakenEvent.value.alpha_amount)).toBe(listedAmount);
                 expect(BigInt(alphaListingTakenEvent.value.tao_amount)).toBe(taoAmount);
                 expect(alphaListingTakenEvent.value.seller).toBe(accounts.bob.address);
                 expect(alphaListingTakenEvent.value.buyer).toBe(accounts.dave.address);
@@ -302,11 +317,12 @@ describe("Trading Execution", () => {
             expect(listingsResult.success).toBe(true);
             const listingId = listingsResult.success ?
                 listingsResult.value.response[listingsResult.value.response.length - 1] : 0n;
+            const listedAmount = await listedAmountOf(accounts.charlie.address, listingId);
 
             // === Calculate required TAO payment using the offset price ===
             const executedPriceFixed = await getExecutedPriceFixed(context.api, netuid, priceOffsetBps);
             const { taoAmount, feeAmount, totalRequired } = calculateTotalTaoForListing(
-                listAmount,
+                listedAmount,
                 executedPriceFixed,
                 contractFeeRate
             );
@@ -357,7 +373,7 @@ describe("Trading Execution", () => {
 
             if (alphaListingTakenEvent) {
                 // Verify the event contains expected values
-                expect(BigInt(alphaListingTakenEvent.value.alpha_amount)).toBe(listAmount);
+                expect(BigInt(alphaListingTakenEvent.value.alpha_amount)).toBe(listedAmount);
                 expect(BigInt(alphaListingTakenEvent.value.tao_amount)).toBe(taoAmount);
                 expect(alphaListingTakenEvent.value.seller).toBe(accounts.charlie.address);
                 expect(alphaListingTakenEvent.value.buyer).toBe(accounts.eve.address);
@@ -425,7 +441,7 @@ describe("Trading Execution", () => {
             const listAmount = taoToRao(30);
             const priceOffsetBps = MARKET_PRICE;
 
-            const listTx = contract.send("list_alpha", {
+            const listTx = contract.send("list_alpha", withIntegrationGas({
                 origin: accounts.charlie.address,
                 data: {
                     hotkey: charlieHotkey.address,
@@ -433,9 +449,9 @@ describe("Trading Execution", () => {
                     amount: listAmount,
                     price_offset_bps: priceOffsetBps
                 }
-            });
+            }));
 
-            await listTx.signAndSubmit(accounts.charlie.signer);
+            await submitOk(listTx, accounts.charlie.signer, "list_alpha");
             await waitForBlocks(context.api, 2);
 
             // Get listing ID
