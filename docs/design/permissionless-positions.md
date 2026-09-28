@@ -118,7 +118,7 @@ Messages:
 
 | Message | Caller | Effect |
 |---|---|---|
-| `activate()` | seller | Requires the vault's stake on `hotkey` to be at least `total`. Best-effort `move_stake` to the factory's validator hotkey. Status becomes Open. |
+| `activate()` | seller | Requires the vault's stake on `hotkey` to be within the transfer tolerance of the requested amount, and records the measured stake as `total`, since transfers can round down by a rao or two. Best-effort `move_stake` to the factory's validator hotkey. Status becomes Open. |
 | `take(amount, recipient)` payable | anyone | Price = spot × (1 + offset); rejected if below `min_price`. Pays the seller and the fee recipient and refunds any excess. Spot listings: `transfer_stake` to `recipient`. Lockup listings: creates an escrow for `recipient` from the registry's current escrow code and transfers into it. Blocked while the factory's trading pause is active. |
 | `cancel()` | seller | Status becomes Closed. Transfers all stake, including emissions, to the seller if possible, and sweeps TAO. Never pausable. The listing closes even if the transfer fails (for example, the subnet is dissolving). |
 | `sweep_tao()` | anyone | Sends the whole TAO balance to the seller. Never terminates the vault. |

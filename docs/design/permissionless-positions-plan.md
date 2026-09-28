@@ -28,6 +28,8 @@ Every PR must pass the following before review:
 
 **Upgrade-safe storage.** The root storage struct holds only fields that never change shape. Everything else lives in a `Mapping` or `Lazy` with an explicit key. Each contract stores `version: u16`, and new code runs `migrate()` before doing anything else when the stored version is older.
 
+**Measured amounts.** On the current runtime a stake transfer can deliver a rao or two less than requested, and moving the requested amount afterwards fails with `NotEnoughStakeToWithdraw`. Contracts record the stake they actually hold after each transfer and move measured amounts, never requested ones.
+
 **Fund invariant.** A position contract only sends Alpha or TAO to its owner, to a buyer who paid in the same call, or to an escrow it creates in the same call. Each PR that touches a position includes a test for this.
 
 **Decisions** (from the design doc):
@@ -156,7 +158,7 @@ Kinds are plain `u16` ids defined in `otc-shared` (`LISTING_VAULT = 1`, `ESCROW 
 
 | Message | Caller | Rule |
 |---|---|---|
-| `activate()` | seller | Pending only. Stake on `hotkey` must be at least `total`. Best-effort `move_stake` to `validator_hotkey(netuid)`, with verified deltas. Status becomes Open. |
+| `activate()` | seller | Pending only. Stake on `hotkey` must be within the transfer tolerance of the requested amount; `total` and `remaining` record the measured stake. Best-effort `move_stake` of that amount to `validator_hotkey(netuid)`, re-measured afterwards. Status becomes Open. |
 | `take(amount, recipient)` payable | anyone | Open; factory not paused; `min_purchase <= amount <= remaining`; the remainder is 0 or at least `BITTENSOR_MIN_STAKE`; price = spot × (10000 + offset) / 10000, rejected below `min_price`; value must cover price × amount plus the fee. Spot listings transfer to `recipient`. Lockup listings instantiate an escrow from the registry's current `ESCROW` code (salt = vault address + purchase counter) and transfer into it. Pays the seller and the fee recipient and refunds the excess. On the final fill, status becomes Closed, and the vault terminates if its stake is 0 after the transfer. |
 | `cancel()` | seller | Not Closed; `now >= cancellable_after`. Status becomes Closed. Tries to transfer all stake to the seller; if that fails the listing still closes. Terminates only if the transfer succeeded and the stake is 0. |
 | `sweep_stake()` | anyone | Sends stake above `remaining` to the seller (all of it once Closed). Terminates when Closed and the stake reaches 0 in this call. |
@@ -231,3 +233,4 @@ All of `main`'s pooled code goes: `reserved_alpha`, and take, cancel and escrow 
 | Cost of a vault per listing | Measure the storage deposit and weights in PR 4 and report them in the PR |
 | Frontend single-batch funding depends on predicting the vault address | Two-transaction flow first; address prediction added and tested in PR 6 |
 | Subtensor changes during implementation | Every chain call stays in `otc-shared`; the localnet suite runs against the fork's `main` |
+| A proxied `transfer_stake` pre-charges a full 256-entry `StakingHotkeys` walk (about 90e9 ref_time) before refunding, so contract calls that make it need a large gas limit | Vault funding is proxy-free. `take_tao_offer` keeps the proxy, so frontends must use the dry-run gas estimate rather than a fixed limit |
