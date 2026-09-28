@@ -1,12 +1,12 @@
 {
   "source": {
-    "hash": "0xc8b0803017abf055a108855d3a15988a32019a337bdc396695ba22448345fb10",
+    "hash": "0x190370f553996602f21229e47258cd9c2a3cf1f8a16aef8795c57f875df6f9ad",
     "language": "ink! 5.1.1",
-    "compiler": "rustc 1.90.0",
+    "compiler": "rustc 1.89.0",
     "build_info": {
       "build_mode": "Release",
       "cargo_contract_version": "5.0.3",
-      "rust_toolchain": "stable-x86_64-unknown-linux-gnu",
+      "rust_toolchain": "stable-aarch64-apple-darwin",
       "wasm_opt_settings": {
         "keep_debug_symbols": false,
         "optimization_passes": "Z"
@@ -83,7 +83,7 @@
             "ink_primitives",
             "ConstructorResult"
           ],
-          "type": 8
+          "type": 9
         },
         "selector": "0x9bae9d5e"
       }
@@ -112,13 +112,13 @@
         "displayName": [
           "ChainExtension"
         ],
-        "type": 21
+        "type": 24
       },
       "hash": {
         "displayName": [
           "Hash"
         ],
-        "type": 20
+        "type": 23
       },
       "maxEventTopics": 4,
       "staticBufferSize": 16384,
@@ -136,6 +136,17 @@
             "docs": [],
             "indexed": true,
             "label": "buyer",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "initiated_by",
             "type": {
               "displayName": [
                 "AccountId"
@@ -182,7 +193,103 @@
         ],
         "label": "AlphaClaimed",
         "module_path": "alpha_lockup::alpha_lockup",
-        "signature_topic": "0x44c0ae0ad4da5c6882f76f2cbaf42503102959c574c0aaba20a9b89bb63e443b"
+        "signature_topic": "0x00308cd914543c346285779c8a4ee80bb7ead360ab6f3cf078804769e99b8bcd"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "current_beneficiary",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "proposed_beneficiary",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          }
+        ],
+        "docs": [
+          "Event emitted when a beneficiary transfer is proposed"
+        ],
+        "label": "BeneficiaryTransferProposed",
+        "module_path": "alpha_lockup::alpha_lockup",
+        "signature_topic": "0xada657f31949bc09094cd7d7a69ee4cb140e5b8aacf1eda51ef4ad42dbf39fb2"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "beneficiary",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "cancelled_beneficiary",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          }
+        ],
+        "docs": [
+          "Event emitted when a beneficiary transfer proposal is cancelled"
+        ],
+        "label": "BeneficiaryTransferCancelled",
+        "module_path": "alpha_lockup::alpha_lockup",
+        "signature_topic": "0x52d7c6a35cd48b128ba09be3e832c882230eb6e2705bff3b73079ac278ea9554"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "old_beneficiary",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "new_beneficiary",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          }
+        ],
+        "docs": [
+          "Event emitted when a beneficiary transfer is accepted"
+        ],
+        "label": "BeneficiaryTransferred",
+        "module_path": "alpha_lockup::alpha_lockup",
+        "signature_topic": "0xa8b0cfcc2435f490ef0ce7be9c36a671cb2f6fc0610e7c89be015b735509db24"
       }
     ],
     "lang_error": {
@@ -190,7 +297,7 @@
         "ink",
         "LangError"
       ],
-      "type": 10
+      "type": 11
     },
     "messages": [
       {
@@ -198,8 +305,8 @@
         "default": false,
         "docs": [
           " Claim the locked Alpha after the lockup period has expired",
-          " Only the designated buyer can claim",
-          " Transfers all stake (including dividends) to the buyer",
+          " Anyone can trigger claim after unlock.",
+          " Transfers all stake (including dividends) to the current beneficiary",
           " Terminates the contract after successful claim"
         ],
         "label": "claim",
@@ -210,9 +317,73 @@
             "ink",
             "MessageResult"
           ],
-          "type": 11
+          "type": 12
         },
         "selector": "0xb388803f"
+      },
+      {
+        "args": [
+          {
+            "label": "new_beneficiary",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          }
+        ],
+        "default": false,
+        "docs": [
+          " Propose a new beneficiary for coldkey swaps"
+        ],
+        "label": "propose_beneficiary",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 12
+        },
+        "selector": "0xd4e6520b"
+      },
+      {
+        "args": [],
+        "default": false,
+        "docs": [
+          " Accept a pending beneficiary transfer"
+        ],
+        "label": "accept_beneficiary",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 12
+        },
+        "selector": "0x5ea1391e"
+      },
+      {
+        "args": [],
+        "default": false,
+        "docs": [
+          " Cancel a pending beneficiary transfer"
+        ],
+        "label": "cancel_beneficiary_proposal",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 12
+        },
+        "selector": "0xafa64855"
       },
       {
         "args": [],
@@ -228,7 +399,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 14
+          "type": 15
         },
         "selector": "0x67889d2b"
       },
@@ -246,9 +417,81 @@
             "ink",
             "MessageResult"
           ],
-          "type": 17
+          "type": 18
         },
         "selector": "0x72eb13ec"
+      },
+      {
+        "args": [],
+        "default": false,
+        "docs": [
+          " Get the current beneficiary address"
+        ],
+        "label": "get_beneficiary",
+        "mutates": false,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 18
+        },
+        "selector": "0x9510a8c5"
+      },
+      {
+        "args": [],
+        "default": false,
+        "docs": [
+          " Get the pending beneficiary address"
+        ],
+        "label": "get_pending_beneficiary",
+        "mutates": false,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 19
+        },
+        "selector": "0x0e40d549"
+      },
+      {
+        "args": [],
+        "default": false,
+        "docs": [
+          " Get the escrow's TAO balance"
+        ],
+        "label": "get_tao_balance",
+        "mutates": false,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 20
+        },
+        "selector": "0x59061f47"
+      },
+      {
+        "args": [],
+        "default": false,
+        "docs": [
+          " Get the hotkey holding escrow stake"
+        ],
+        "label": "get_hotkey",
+        "mutates": false,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 18
+        },
+        "selector": "0xead097fa"
       },
       {
         "args": [],
@@ -264,7 +507,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 18
+          "type": 21
         },
         "selector": "0xff067f36"
       },
@@ -282,7 +525,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 19
+          "type": 22
         },
         "selector": "0xc58eed46"
       },
@@ -300,7 +543,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 18
+          "type": 21
         },
         "selector": "0x51626016"
       },
@@ -318,7 +561,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 17
+          "type": 18
         },
         "selector": "0x2be79821"
       }
@@ -337,6 +580,35 @@
                 }
               },
               "name": "buyer"
+            },
+            {
+              "layout": {
+                "enum": {
+                  "dispatchKey": "0x00000000",
+                  "name": "Option",
+                  "variants": {
+                    "0": {
+                      "fields": [],
+                      "name": "None"
+                    },
+                    "1": {
+                      "fields": [
+                        {
+                          "layout": {
+                            "leaf": {
+                              "key": "0x00000000",
+                              "ty": 0
+                            }
+                          },
+                          "name": "0"
+                        }
+                      ],
+                      "name": "Some"
+                    }
+                  }
+                }
+              },
+              "name": "pending_beneficiary"
             },
             {
               "layout": {
@@ -475,6 +747,11 @@
                 "typeName": "<AccountId as::ink::storage::traits::AutoStorableHint<::ink::\nstorage::traits::ManualKey<2327234640u32, ()>,>>::Type"
               },
               {
+                "name": "pending_beneficiary",
+                "type": 8,
+                "typeName": "<Option<AccountId> as::ink::storage::traits::AutoStorableHint<::\nink::storage::traits::ManualKey<1092039981u32, ()>,>>::Type"
+              },
+              {
                 "name": "netuid",
                 "type": 3,
                 "typeName": "<NetUid as::ink::storage::traits::AutoStorableHint<::ink::\nstorage::traits::ManualKey<568889060u32, ()>,>>::Type"
@@ -516,9 +793,42 @@
           "variant": {
             "variants": [
               {
+                "index": 0,
+                "name": "None"
+              },
+              {
                 "fields": [
                   {
-                    "type": 9
+                    "type": 0
+                  }
+                ],
+                "index": 1,
+                "name": "Some"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 0
+          }
+        ],
+        "path": [
+          "Option"
+        ]
+      }
+    },
+    {
+      "id": 9,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 10
                   }
                 ],
                 "index": 0,
@@ -527,7 +837,7 @@
               {
                 "fields": [
                   {
-                    "type": 10
+                    "type": 11
                   }
                 ],
                 "index": 1,
@@ -539,11 +849,11 @@
         "params": [
           {
             "name": "T",
-            "type": 9
+            "type": 10
           },
           {
             "name": "E",
-            "type": 10
+            "type": 11
           }
         ],
         "path": [
@@ -552,7 +862,7 @@
       }
     },
     {
-      "id": 9,
+      "id": 10,
       "type": {
         "def": {
           "tuple": []
@@ -560,7 +870,7 @@
       }
     },
     {
-      "id": 10,
+      "id": 11,
       "type": {
         "def": {
           "variant": {
@@ -579,48 +889,6 @@
       }
     },
     {
-      "id": 11,
-      "type": {
-        "def": {
-          "variant": {
-            "variants": [
-              {
-                "fields": [
-                  {
-                    "type": 12
-                  }
-                ],
-                "index": 0,
-                "name": "Ok"
-              },
-              {
-                "fields": [
-                  {
-                    "type": 10
-                  }
-                ],
-                "index": 1,
-                "name": "Err"
-              }
-            ]
-          }
-        },
-        "params": [
-          {
-            "name": "T",
-            "type": 12
-          },
-          {
-            "name": "E",
-            "type": 10
-          }
-        ],
-        "path": [
-          "Result"
-        ]
-      }
-    },
-    {
       "id": 12,
       "type": {
         "def": {
@@ -629,7 +897,7 @@
               {
                 "fields": [
                   {
-                    "type": 9
+                    "type": 13
                   }
                 ],
                 "index": 0,
@@ -638,7 +906,7 @@
               {
                 "fields": [
                   {
-                    "type": 13
+                    "type": 11
                   }
                 ],
                 "index": 1,
@@ -650,11 +918,11 @@
         "params": [
           {
             "name": "T",
-            "type": 9
+            "type": 13
           },
           {
             "name": "E",
-            "type": 13
+            "type": 11
           }
         ],
         "path": [
@@ -664,6 +932,48 @@
     },
     {
       "id": 13,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 10
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 14
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 10
+          },
+          {
+            "name": "E",
+            "type": 14
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 14,
       "type": {
         "def": {
           "variant": {
@@ -687,6 +997,22 @@
               {
                 "index": 4,
                 "name": "StakeTransferFailed"
+              },
+              {
+                "index": 5,
+                "name": "InvalidBeneficiary"
+              },
+              {
+                "index": 6,
+                "name": "NoPendingBeneficiary"
+              },
+              {
+                "index": 7,
+                "name": "NoAlphaToClaim"
+              },
+              {
+                "index": 8,
+                "name": "BeneficiaryTransferPending"
               }
             ]
           }
@@ -695,48 +1021,6 @@
           "alpha_lockup",
           "alpha_lockup",
           "Error"
-        ]
-      }
-    },
-    {
-      "id": 14,
-      "type": {
-        "def": {
-          "variant": {
-            "variants": [
-              {
-                "fields": [
-                  {
-                    "type": 15
-                  }
-                ],
-                "index": 0,
-                "name": "Ok"
-              },
-              {
-                "fields": [
-                  {
-                    "type": 10
-                  }
-                ],
-                "index": 1,
-                "name": "Err"
-              }
-            ]
-          }
-        },
-        "params": [
-          {
-            "name": "T",
-            "type": 15
-          },
-          {
-            "name": "E",
-            "type": 10
-          }
-        ],
-        "path": [
-          "Result"
         ]
       }
     },
@@ -758,7 +1042,7 @@
               {
                 "fields": [
                   {
-                    "type": 13
+                    "type": 11
                   }
                 ],
                 "index": 1,
@@ -774,7 +1058,7 @@
           },
           {
             "name": "E",
-            "type": 13
+            "type": 11
           }
         ],
         "path": [
@@ -786,12 +1070,59 @@
       "id": 16,
       "type": {
         "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 17
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 14
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 17
+          },
+          {
+            "name": "E",
+            "type": 14
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 17,
+      "type": {
+        "def": {
           "composite": {
             "fields": [
               {
                 "name": "buyer",
                 "type": 0,
                 "typeName": "AccountId"
+              },
+              {
+                "name": "pending_beneficiary",
+                "type": 8,
+                "typeName": "Option<AccountId>"
               },
               {
                 "name": "netuid",
@@ -822,6 +1153,11 @@
                 "name": "current_stake",
                 "type": 4,
                 "typeName": "AlphaAmount"
+              },
+              {
+                "name": "tao_balance",
+                "type": 4,
+                "typeName": "Balance"
               }
             ]
           }
@@ -834,7 +1170,7 @@
       }
     },
     {
-      "id": 17,
+      "id": 18,
       "type": {
         "def": {
           "variant": {
@@ -851,7 +1187,7 @@
               {
                 "fields": [
                   {
-                    "type": 10
+                    "type": 11
                   }
                 ],
                 "index": 1,
@@ -867,49 +1203,7 @@
           },
           {
             "name": "E",
-            "type": 10
-          }
-        ],
-        "path": [
-          "Result"
-        ]
-      }
-    },
-    {
-      "id": 18,
-      "type": {
-        "def": {
-          "variant": {
-            "variants": [
-              {
-                "fields": [
-                  {
-                    "type": 5
-                  }
-                ],
-                "index": 0,
-                "name": "Ok"
-              },
-              {
-                "fields": [
-                  {
-                    "type": 10
-                  }
-                ],
-                "index": 1,
-                "name": "Err"
-              }
-            ]
-          }
-        },
-        "params": [
-          {
-            "name": "T",
-            "type": 5
-          },
-          {
-            "name": "E",
-            "type": 10
+            "type": 11
           }
         ],
         "path": [
@@ -926,6 +1220,132 @@
               {
                 "fields": [
                   {
+                    "type": 8
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 11
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 8
+          },
+          {
+            "name": "E",
+            "type": 11
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 20,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 4
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 11
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 4
+          },
+          {
+            "name": "E",
+            "type": 11
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 21,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 5
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 11
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 5
+          },
+          {
+            "name": "E",
+            "type": 11
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 22,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
                     "type": 6
                   }
                 ],
@@ -935,7 +1355,7 @@
               {
                 "fields": [
                   {
-                    "type": 10
+                    "type": 11
                   }
                 ],
                 "index": 1,
@@ -951,7 +1371,7 @@
           },
           {
             "name": "E",
-            "type": 10
+            "type": 11
           }
         ],
         "path": [
@@ -960,7 +1380,7 @@
       }
     },
     {
-      "id": 20,
+      "id": 23,
       "type": {
         "def": {
           "composite": {
@@ -980,7 +1400,7 @@
       }
     },
     {
-      "id": 21,
+      "id": 24,
       "type": {
         "def": {
           "variant": {}

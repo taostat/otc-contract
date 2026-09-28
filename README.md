@@ -229,15 +229,24 @@ Users are limited to 25 active lockup listings per subnet.
 
 ```rust
 claim() -> Result<()>
+propose_beneficiary(new_beneficiary) -> Result<()>
+accept_beneficiary() -> Result<()>
+cancel_beneficiary_proposal() -> Result<()>
 get_info() -> Result<LockupInfo>
 get_buyer() -> AccountId
+get_beneficiary() -> AccountId
+get_pending_beneficiary() -> Option<AccountId>
+get_tao_balance() -> Balance
+get_hotkey() -> AccountId
 get_unlock_block() -> u32
 is_claimed() -> bool
 blocks_until_unlock() -> u32
 account_id() -> AccountId
 ```
 
-Only the buyer can call `claim`. Claiming before `unlock_block` fails. A successful claim transfers all current escrow stake to the buyer, including any staking rewards, emits `AlphaClaimed`, and terminates the escrow contract.
+Anyone can call `claim` once `unlock_block` is reached; claiming earlier fails. The Alpha always goes to the current beneficiary, never to the caller. A successful claim transfers all current escrow stake, including any staking rewards, emits `AlphaClaimed`, and terminates the escrow contract, sending any TAO balance to the beneficiary.
+
+Beneficiary changes, for example after a coldkey swap, take two steps: the current beneficiary calls `propose_beneficiary`, and the proposed account calls `accept_beneficiary`. The current beneficiary can withdraw a proposal with `cancel_beneficiary_proposal`. While a proposal is pending, `claim` fails with `BeneficiaryTransferPending`, so a payout can't race a handoff away from a key that is being retired.
 
 ## Owner Controls
 
