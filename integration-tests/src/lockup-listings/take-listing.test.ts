@@ -20,6 +20,7 @@ import {
     MEDIUM_LOCKUP_DURATION,
     type Wallet,
 } from "../utils";
+import { submitOk, withIntegrationGas } from "../test-helpers";
 
 describe("Lockup Listings Contract - Take Listing", () => {
     let context: LockupListingsContext;
@@ -123,7 +124,7 @@ describe("Lockup Listings Contract - Take Listing", () => {
             const listAmount = taoToRao(10);
 
             // Bob creates a listing
-            const listTx = contract.send("create_lockup_listing", {
+            const listTx = contract.send("create_lockup_listing", withIntegrationGas({
                 origin: accounts.bob.address,
                 data: {
                     hotkey: bobHotkey.address,
@@ -132,9 +133,9 @@ describe("Lockup Listings Contract - Take Listing", () => {
                     price_offset_bps: MARKET_PRICE,
                     lockup_duration: MEDIUM_LOCKUP_DURATION
                 }
-            });
+            }));
 
-            await listTx.signAndSubmit(accounts.bob.signer);
+            await submitOk(listTx, accounts.bob.signer, "create_lockup_listing");
             await waitForBlocks(context.api, 2);
 
             // Get the listing
@@ -224,7 +225,7 @@ describe("Lockup Listings Contract - Take Listing", () => {
             const listAmount = taoToRao(5);
 
             // Create listing
-            const listTx = contract.send("create_lockup_listing", {
+            const listTx = contract.send("create_lockup_listing", withIntegrationGas({
                 origin: accounts.bob.address,
                 data: {
                     hotkey: bobHotkey.address,
@@ -233,9 +234,9 @@ describe("Lockup Listings Contract - Take Listing", () => {
                     price_offset_bps: MARKET_PRICE,
                     lockup_duration: MEDIUM_LOCKUP_DURATION
                 }
-            });
+            }));
 
-            await listTx.signAndSubmit(accounts.bob.signer);
+            await submitOk(listTx, accounts.bob.signer, "create_lockup_listing");
             await waitForBlocks(context.api, 2);
 
             // Get listing
@@ -314,7 +315,7 @@ describe("Lockup Listings Contract - Take Listing", () => {
             const purchaseAmount = taoToRao(10);
 
             // Create listing
-            const listTx = contract.send("create_lockup_listing", {
+            const listTx = contract.send("create_lockup_listing", withIntegrationGas({
                 origin: accounts.bob.address,
                 data: {
                     hotkey: bobHotkey.address,
@@ -323,9 +324,9 @@ describe("Lockup Listings Contract - Take Listing", () => {
                     price_offset_bps: MARKET_PRICE,
                     lockup_duration: MEDIUM_LOCKUP_DURATION
                 }
-            });
+            }));
 
-            await listTx.signAndSubmit(accounts.bob.signer);
+            await submitOk(listTx, accounts.bob.signer, "create_lockup_listing");
             await waitForBlocks(context.api, 2);
 
             // Get listing
@@ -401,7 +402,7 @@ describe("Lockup Listings Contract - Take Listing", () => {
             const purchaseAmount = taoToRao(10);
 
             // Create a larger listing
-            const listTx = contract.send("create_lockup_listing", {
+            const listTx = contract.send("create_lockup_listing", withIntegrationGas({
                 origin: accounts.bob.address,
                 data: {
                     hotkey: bobHotkey.address,
@@ -410,9 +411,9 @@ describe("Lockup Listings Contract - Take Listing", () => {
                     price_offset_bps: MARKET_PRICE,
                     lockup_duration: MEDIUM_LOCKUP_DURATION
                 }
-            });
+            }));
 
-            await listTx.signAndSubmit(accounts.bob.signer);
+            await submitOk(listTx, accounts.bob.signer, "create_lockup_listing");
             await waitForBlocks(context.api, 2);
 
             // Get listing ID
@@ -676,7 +677,7 @@ describe("Lockup Listings Contract - Take Listing", () => {
             const listAmount = taoToRao(10);
 
             // Create listing
-            const listTx = contract.send("create_lockup_listing", {
+            const listTx = contract.send("create_lockup_listing", withIntegrationGas({
                 origin: accounts.bob.address,
                 data: {
                     hotkey: bobHotkey.address,
@@ -685,9 +686,9 @@ describe("Lockup Listings Contract - Take Listing", () => {
                     price_offset_bps: MARKET_PRICE,
                     lockup_duration: MEDIUM_LOCKUP_DURATION
                 }
-            });
+            }));
 
-            await listTx.signAndSubmit(accounts.bob.signer);
+            await submitOk(listTx, accounts.bob.signer, "create_lockup_listing");
             await waitForBlocks(context.api, 2);
 
             // Get minimum purchase amount
@@ -756,7 +757,7 @@ describe("Lockup Listings Contract - Take Listing", () => {
             const listAmount = taoToRao(5);
 
             // Create small listing
-            const listTx = contract.send("create_lockup_listing", {
+            const listTx = contract.send("create_lockup_listing", withIntegrationGas({
                 origin: accounts.bob.address,
                 data: {
                     hotkey: bobHotkey.address,
@@ -765,9 +766,9 @@ describe("Lockup Listings Contract - Take Listing", () => {
                     price_offset_bps: MARKET_PRICE,
                     lockup_duration: MEDIUM_LOCKUP_DURATION
                 }
-            });
+            }));
 
-            await listTx.signAndSubmit(accounts.bob.signer);
+            await submitOk(listTx, accounts.bob.signer, "create_lockup_listing");
             await waitForBlocks(context.api, 2);
 
             // Get listing
@@ -807,7 +808,7 @@ describe("Lockup Listings Contract - Take Listing", () => {
             const listAmount = taoToRao(5);
 
             // Create listing
-            const listTx = contract.send("create_lockup_listing", {
+            const listTx = contract.send("create_lockup_listing", withIntegrationGas({
                 origin: accounts.bob.address,
                 data: {
                     hotkey: bobHotkey.address,
@@ -816,9 +817,9 @@ describe("Lockup Listings Contract - Take Listing", () => {
                     price_offset_bps: MARKET_PRICE,
                     lockup_duration: MEDIUM_LOCKUP_DURATION
                 }
-            });
+            }));
 
-            await listTx.signAndSubmit(accounts.bob.signer);
+            await submitOk(listTx, accounts.bob.signer, "create_lockup_listing");
             await waitForBlocks(context.api, 2);
 
             // Get listing
@@ -874,7 +875,7 @@ describe("Lockup Listings Contract - Take Listing", () => {
             const { accounts } = context;
 
             // Create listing first
-            const listTx = contract.send("create_lockup_listing", {
+            const listTx = contract.send("create_lockup_listing", withIntegrationGas({
                 origin: accounts.bob.address,
                 data: {
                     hotkey: bobHotkey.address,
@@ -883,9 +884,9 @@ describe("Lockup Listings Contract - Take Listing", () => {
                     price_offset_bps: MARKET_PRICE,
                     lockup_duration: MEDIUM_LOCKUP_DURATION
                 }
-            });
+            }));
 
-            await listTx.signAndSubmit(accounts.bob.signer);
+            await submitOk(listTx, accounts.bob.signer, "create_lockup_listing");
             await waitForBlocks(context.api, 2);
 
             const listingsResult = await contract.query("get_user_listings", {
@@ -939,7 +940,7 @@ describe("Lockup Listings Contract - Take Listing", () => {
             const listAmount = taoToRao(5);
 
             // Create listing
-            const listTx = contract.send("create_lockup_listing", {
+            const listTx = contract.send("create_lockup_listing", withIntegrationGas({
                 origin: accounts.bob.address,
                 data: {
                     hotkey: bobHotkey.address,
@@ -948,9 +949,9 @@ describe("Lockup Listings Contract - Take Listing", () => {
                     price_offset_bps: MARKET_PRICE,
                     lockup_duration: MEDIUM_LOCKUP_DURATION
                 }
-            });
+            }));
 
-            await listTx.signAndSubmit(accounts.bob.signer);
+            await submitOk(listTx, accounts.bob.signer, "create_lockup_listing");
             await waitForBlocks(context.api, 2);
 
             // Get listing

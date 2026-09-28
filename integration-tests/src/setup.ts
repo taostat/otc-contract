@@ -532,7 +532,11 @@ export class TestSetup {
                 who: MultiAddress.Id(account.address),
                 new_free: TEST_ACCOUNT_TOP_UP,
             });
-            await api.tx.Sudo.sudo({ call: setBalance.decodedCall }).signAndSubmit(accounts.alice.signer);
+            const result = await api.tx.Sudo.sudo({ call: setBalance.decodedCall }).signAndSubmit(accounts.alice.signer);
+            const sudid = result.events.find((event: any) => event.type === "Sudo" && event.value.type === "Sudid");
+            if (!result.ok || !sudid || sudid.value.value.success === false) {
+                throw new Error(`Failed to top up test account ${account.address}`);
+            }
         }
     }
 }
