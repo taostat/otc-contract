@@ -42,6 +42,8 @@ mod alpha_lockup {
         SubnetRegistrationQueryFailed,
         /// Alpha is currently unavailable because of conviction locks
         StakeUnavailable,
+        /// A beneficiary transfer is pending; resolve it before payout
+        BeneficiaryTransferPending,
     }
 
     /// Event emitted when Alpha is claimed
@@ -191,6 +193,13 @@ mod alpha_lockup {
                 return Err(Error::AlreadyClaimed);
             }
 
+            // Claim is permissionless, but while a beneficiary handoff is pending the
+            // rightful recipient is ambiguous (the current buyer key may be being
+            // abandoned or compromised). Block payout until the proposal is resolved.
+            if self.pending_beneficiary.is_some() {
+                return Err(Error::BeneficiaryTransferPending);
+            }
+
             self.ensure_subnet_generation_active()?;
 
             // Get current stake (original + dividends)
@@ -306,6 +315,10 @@ mod alpha_lockup {
 
             if self.claimed {
                 return Err(Error::AlreadyClaimed);
+            }
+
+            if self.pending_beneficiary.is_some() {
+                return Err(Error::BeneficiaryTransferPending);
             }
 
             let tao_balance = self.env().balance();
@@ -1010,6 +1023,43 @@ mod alpha_lockup {
         }
 
         #[ink::test]
+        fn claim_rejects_while_beneficiary_transfer_pending() {
+            let accounts = default_accounts();
+            register_mock_extension(StakeResponse::Stake(LOCKED_ALPHA));
+
+            let mut contract = new_contract(accounts.alice, accounts.bob);
+            test::set_caller::<BittensorEnvironment>(accounts.alice);
+            assert_eq!(contract.propose_beneficiary(accounts.charlie), Ok(()));
+
+            test::set_callee::<BittensorEnvironment>(accounts.bob);
+            test::set_block_number::<BittensorEnvironment>(UNLOCK_BLOCK);
+            test::set_caller::<BittensorEnvironment>(accounts.django);
+
+            assert_eq!(contract.claim(), Err(Error::BeneficiaryTransferPending));
+            assert!(!contract.is_claimed());
+            assert_eq!(last_transfer(), None);
+        }
+
+        #[ink::test]
+        fn claim_succeeds_after_beneficiary_proposal_cancelled() {
+            let accounts = default_accounts();
+            register_mock_extension(StakeResponse::Stake(LOCKED_ALPHA));
+
+            let mut contract = new_contract(accounts.alice, accounts.bob);
+            test::set_caller::<BittensorEnvironment>(accounts.alice);
+            assert_eq!(contract.propose_beneficiary(accounts.charlie), Ok(()));
+            assert_eq!(contract.cancel_beneficiary_proposal(), Ok(()));
+
+            test::set_callee::<BittensorEnvironment>(accounts.bob);
+            test::set_block_number::<BittensorEnvironment>(UNLOCK_BLOCK);
+            test::set_caller::<BittensorEnvironment>(accounts.django);
+
+            let result = std::panic::catch_unwind(AssertUnwindSafe(|| contract.claim()));
+            assert_terminated_to(result, accounts.alice, ESCROW_TAO_BALANCE);
+            assert!(last_transfer().is_some());
+        }
+
+        #[ink::test]
         fn claim_rejects_when_subnet_is_gone() {
             let accounts = default_accounts();
             register_mock_extension(StakeResponse::Stake(LOCKED_ALPHA));
@@ -1274,6 +1324,27 @@ mod alpha_lockup {
                 contract.recover_tao_after_deregistration(),
                 Err(Error::AlphaStillLocked)
             );
+        }
+
+        #[ink::test]
+        fn tao_recovery_rejects_while_beneficiary_transfer_pending() {
+            let accounts = default_accounts();
+            register_mock_extension(StakeResponse::None);
+            set_subnet_registration_state(false, SUBNET_GENERATION);
+
+            let mut contract = new_contract(accounts.alice, accounts.bob);
+            test::set_caller::<BittensorEnvironment>(accounts.alice);
+            assert_eq!(contract.propose_beneficiary(accounts.charlie), Ok(()));
+
+            test::set_callee::<BittensorEnvironment>(accounts.bob);
+            test::set_block_number::<BittensorEnvironment>(UNLOCK_BLOCK);
+            test::set_caller::<BittensorEnvironment>(accounts.django);
+
+            assert_eq!(
+                contract.recover_tao_after_deregistration(),
+                Err(Error::BeneficiaryTransferPending)
+            );
+            assert!(!contract.is_claimed());
         }
 
         #[ink::test]

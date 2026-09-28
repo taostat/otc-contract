@@ -380,6 +380,55 @@ describe("Lockup Listings Contract - Claim", () => {
     });
 
     describe("Beneficiary Transfer and Recovery", () => {
+        it("should reject third-party claim while a beneficiary transfer is pending", async () => {
+            const { accounts } = context;
+            const purchase = await createPurchasedEscrow(
+                accounts.charlie,
+                VALID_LISTING_AMOUNT,
+                SHORT_LOCKUP_DURATION,
+            );
+            const escrowContract = context.alphaLockupSdk.getContract(purchase.escrowAccount);
+
+            await submitOk(escrowContract.send("propose_beneficiary", {
+                origin: accounts.charlie.address,
+                data: { new_beneficiary: accounts.dave.address }
+            }), accounts.charlie.signer, "propose_beneficiary");
+
+            const unlockBlock = queryOk<number>(await escrowContract.query("get_unlock_block", {
+                origin: accounts.alice.address,
+                data: {}
+            }), "get_unlock_block");
+            await waitUntilBlock(context.api, unlockBlock);
+
+            const pendingClaimQuery = await escrowContract.query("claim", {
+                origin: accounts.eve.address,
+                data: {}
+            });
+            expect(pendingClaimQuery.success).toBe(false);
+            if (!pendingClaimQuery.success) {
+                expect(pendingClaimQuery.value.type).toBe("FlagReverted");
+            }
+
+            await submitReverted(escrowContract.send("claim", withIntegrationGas({
+                origin: accounts.eve.address,
+                data: {}
+            })), accounts.eve.signer, "claim with pending beneficiary");
+
+            await submitOk(escrowContract.send("cancel_beneficiary_proposal", {
+                origin: accounts.charlie.address,
+                data: {}
+            }), accounts.charlie.signer, "cancel_beneficiary_proposal");
+
+            const claimResult = await submitOk(escrowContract.send("claim", withIntegrationGas({
+                origin: accounts.eve.address,
+                data: {}
+            })), accounts.eve.signer, "claim after beneficiary proposal cancellation");
+            const claimedEvent = escrowContract.filterEvents(claimResult.events)
+                .find(event => event.type === "AlphaClaimed");
+            expect(claimedEvent).toBeDefined();
+            expect(claimedEvent!.value.buyer).toBe(accounts.charlie.address);
+        }, 600000);
+
         it("should allow coldkey handoff before backend-triggered claim", async () => {
             const { accounts } = context;
             const listAmount = VALID_LISTING_AMOUNT;

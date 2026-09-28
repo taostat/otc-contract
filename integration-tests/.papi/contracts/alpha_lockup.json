@@ -1,6 +1,6 @@
 {
   "source": {
-    "hash": "0x0b317ccc34f7206968ce77a5b613eba67c9dc75032361f241f2d7899ef12b4d6",
+    "hash": "0x2670c576d99b48b7bccf6091bdad2d5b8488ba2e7923b8bad6d76bce6481a4c6",
     "language": "ink! 5.1.1",
     "compiler": "rustc 1.89.0",
     "build_info": {
@@ -1314,6 +1314,10 @@
               {
                 "index": 15,
                 "name": "StakeUnavailable"
+              },
+              {
+                "index": 16,
+                "name": "BeneficiaryTransferPending"
               }
             ]
           }
