@@ -1,6 +1,6 @@
 {
   "source": {
-    "hash": "0xcaa669f3b00b5d9b47ab6ad2f637b617bfb7cb1f9b9410f4943ea860bf06c8d9",
+    "hash": "0x7383de1be191b765aee284bb1f8e387fd22bb4c78337962754b0c55857d077cc",
     "language": "ink! 5.1.1",
     "compiler": "rustc 1.89.0",
     "build_info": {
@@ -3720,54 +3720,50 @@
               },
               {
                 "index": 16,
-                "name": "StakeTransferNotVerified"
-              },
-              {
-                "index": 17,
                 "name": "InsufficientStake"
               },
               {
-                "index": 18,
+                "index": 17,
                 "name": "TaoBalanceQueryFailed"
               },
               {
-                "index": 19,
+                "index": 18,
                 "name": "CodeUpgradeFailed"
               },
               {
-                "index": 20,
+                "index": 19,
                 "name": "NoDividendsAvailable"
               },
               {
-                "index": 21,
+                "index": 20,
                 "name": "ContractFullyPaused"
               },
               {
-                "index": 22,
+                "index": 21,
                 "name": "TradingPaused"
               },
               {
-                "index": 23,
+                "index": 22,
                 "name": "TooManyListings"
               },
               {
-                "index": 24,
+                "index": 23,
                 "name": "TooManyOffers"
               },
               {
-                "index": 25,
+                "index": 24,
                 "name": "SubnetListingsFrozen"
               },
               {
-                "index": 26,
+                "index": 25,
                 "name": "MarketPriceFetchFailed"
               },
               {
-                "index": 27,
+                "index": 26,
                 "name": "InvalidPriceOffset"
               },
               {
-                "index": 28,
+                "index": 27,
                 "name": "InsufficientPayment"
               }
             ]

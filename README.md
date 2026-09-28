@@ -279,7 +279,7 @@ Pause states are shared:
 - Stake-moving seller flows require proxy authorization from the user before they can succeed.
 - Market-relative prices are evaluated at execution time, not listing creation time.
 - State is updated before external transfers in trade and claim flows.
-- Stake transfer verification allows a 10 rao tolerance for Subtensor rounding or micro-fees.
+- Every stake transfer is verified against the stake actually moved, allowing up to 10 rao less for Subtensor rounding. A transfer that fails verification traps, reverting the whole call. Listings record the stake that actually arrived, so later moves never ask for stake the contract does not hold.
 - Keep owner keys and upgrade authority operationally separate from test keys and development accounts.
 
 Report suspected vulnerabilities privately using the instructions in `SECURITY.md`.

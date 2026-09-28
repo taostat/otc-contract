@@ -349,6 +349,12 @@ mod lockup_listings {
                 .instantiate();
 
             let escrow_account = escrow.account_id();
+            let contract_account = self.env().account_id();
+            let contract_stake_before =
+                self.get_stake_amount(contract_account, self.hotkey, netuid)?;
+            let escrow_stake_before = self
+                .get_stake_amount(escrow_account, self.hotkey, netuid)
+                .unwrap_or(0);
 
             // Transfer Alpha from contract to escrow
             self.env()
@@ -361,6 +367,18 @@ mod lockup_listings {
                     AlphaCurrency::from(amount),
                 )
                 .map_err(|_| Error::RuntimeCallFailed)?;
+
+            let contract_stake_after =
+                self.get_stake_amount(contract_account, self.hotkey, netuid)?;
+            let escrow_stake_after = self.get_stake_amount(escrow_account, self.hotkey, netuid)?;
+            let contract_decrease = contract_stake_before.saturating_sub(contract_stake_after);
+            let escrow_increase = escrow_stake_after.saturating_sub(escrow_stake_before);
+
+            if !stake_delta_verified(contract_decrease, amount)
+                || !stake_delta_verified(escrow_increase, amount)
+            {
+                Self::trap_stake_transfer_not_verified();
+            }
 
             // Update reserved alpha
             self.decrease_reserved_alpha(netuid, amount)?;
@@ -886,6 +904,13 @@ mod lockup_listings {
                     .insert((seller, netuid), &user_listings);
             }
 
+            let contract_account = self.env().account_id();
+            let contract_stake_before =
+                self.get_stake_amount(contract_account, self.hotkey, netuid)?;
+            let seller_stake_before = self
+                .get_stake_amount(seller, self.hotkey, netuid)
+                .unwrap_or(0);
+
             // Transfer remaining Alpha back to seller
             self.env()
                 .extension()
@@ -897,6 +922,18 @@ mod lockup_listings {
                     AlphaCurrency::from(amount),
                 )
                 .map_err(|_| Error::RuntimeCallFailed)?;
+
+            let contract_stake_after =
+                self.get_stake_amount(contract_account, self.hotkey, netuid)?;
+            let seller_stake_after = self.get_stake_amount(seller, self.hotkey, netuid)?;
+            let contract_decrease = contract_stake_before.saturating_sub(contract_stake_after);
+            let seller_increase = seller_stake_after.saturating_sub(seller_stake_before);
+
+            if !stake_delta_verified(contract_decrease, amount)
+                || !stake_delta_verified(seller_increase, amount)
+            {
+                Self::trap_stake_transfer_not_verified();
+            }
 
             // Update reserved alpha
             self.decrease_reserved_alpha(netuid, amount)?;
