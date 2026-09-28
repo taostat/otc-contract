@@ -4,10 +4,7 @@ pub use self::alpha_lockup::{AlphaLockup, AlphaLockupRef};
 
 #[ink::contract(env = otc_shared::BittensorEnvironment)]
 mod alpha_lockup {
-    use otc_shared::{AlphaAmount, AlphaCurrency, NetUid, SubtensorError};
-
-    /// Tolerance for post-transfer stake verification (in rao).
-    const TRANSFER_TOLERANCE: u64 = 10;
+    use otc_shared::{AlphaAmount, AlphaCurrency, NetUid, SubtensorError, TRANSFER_TOLERANCE};
 
     /// Error types for the Alpha Lockup escrow contract
     #[derive(Debug, PartialEq, Eq)]

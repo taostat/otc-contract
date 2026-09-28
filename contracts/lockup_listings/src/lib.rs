@@ -21,13 +21,11 @@ mod lockup_listings {
     use ink::env::call::FromAccountId;
     use ink::prelude::{boxed::Box, vec::Vec};
     use otc_shared::{
-        AlphaAmount, AlphaCurrency, BlockAge, FixedDecimal, NetUid, PauseState, PriceOffsetBps,
-        ProxyCall, RuntimeCall, SubnetRegistrationState, SubtensorCall, TaoAmount,
+        stake_delta_verified, AlphaAmount, AlphaCurrency, BlockAge, FixedDecimal, NetUid,
+        PauseState, PriceOffsetBps, ProxyCall, RuntimeCall, SubnetRegistrationState, SubtensorCall,
+        TaoAmount,
     };
     use sp_runtime::MultiAddress;
-
-    /// Tolerance for stake transfer verification (in rao)
-    const TRANSFER_TOLERANCE: u64 = 10;
 
     /// Maximum number of active lockup listings a user can maintain per subnet
     const MAX_LISTINGS_PER_USER_PER_NETUID: usize = 25;
@@ -242,13 +240,9 @@ mod lockup_listings {
             let seller_decrease = seller_stake_before.saturating_sub(seller_stake_after);
             let contract_increase = contract_stake_after.saturating_sub(contract_stake_before);
 
-            let seller_decrease_ok = seller_decrease >= amount.saturating_sub(TRANSFER_TOLERANCE)
-                && seller_decrease <= amount;
-            let contract_increase_ok = contract_increase
-                >= amount.saturating_sub(TRANSFER_TOLERANCE)
-                && contract_increase <= amount;
-
-            if !seller_decrease_ok || !contract_increase_ok {
+            if !stake_delta_verified(seller_decrease, amount)
+                || !stake_delta_verified(contract_increase, amount)
+            {
                 Self::trap_stake_transfer_not_verified();
             }
 
@@ -425,8 +419,8 @@ mod lockup_listings {
             let contract_decrease = contract_stake_before.saturating_sub(contract_stake_after);
             let escrow_increase = escrow_stake_after.saturating_sub(escrow_stake_before);
 
-            if !Self::stake_delta_verified(contract_decrease, amount)
-                || !Self::stake_delta_verified(escrow_increase, amount)
+            if !stake_delta_verified(contract_decrease, amount)
+                || !stake_delta_verified(escrow_increase, amount)
             {
                 Self::trap_stake_transfer_not_verified();
             }
@@ -1503,10 +1497,6 @@ mod lockup_listings {
             Ok(())
         }
 
-        fn stake_delta_verified(delta: AlphaAmount, amount: AlphaAmount) -> bool {
-            delta >= amount.saturating_sub(TRANSFER_TOLERANCE) && delta <= amount
-        }
-
         fn trap_stake_transfer_not_verified() -> ! {
             panic!("post-transfer stake verification failed")
         }
@@ -1628,8 +1618,8 @@ mod lockup_listings {
             let target_increase =
                 target_hotkey_stake_after.saturating_sub(target_hotkey_stake_before);
 
-            if !Self::stake_delta_verified(old_decrease, amount)
-                || !Self::stake_delta_verified(target_increase, amount)
+            if !stake_delta_verified(old_decrease, amount)
+                || !stake_delta_verified(target_increase, amount)
             {
                 Self::trap_stake_transfer_not_verified();
             }
@@ -1805,8 +1795,8 @@ mod lockup_listings {
             let contract_decrease = contract_stake_before.saturating_sub(contract_stake_after);
             let seller_increase = seller_stake_after.saturating_sub(seller_stake_before);
 
-            if !Self::stake_delta_verified(contract_decrease, amount)
-                || !Self::stake_delta_verified(seller_increase, amount)
+            if !stake_delta_verified(contract_decrease, amount)
+                || !stake_delta_verified(seller_increase, amount)
             {
                 Self::trap_stake_transfer_not_verified();
             }
