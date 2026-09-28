@@ -73,8 +73,8 @@ The suite deploys or reuses local artifacts from:
 Local deployment cache files are ignored by Git:
 
 - `integration-tests/.contract-address`
-- `integration-tests/.lockup-listings-address`
-- `integration-tests/.alpha-lockup-code-hash`
+- `integration-tests/.lockup-listings-address-runtime-subnet-generation`
+- `integration-tests/.alpha-lockup-code-hash-runtime-subnet-generation`
 
 ### Deterministic Localnet Gate
 
