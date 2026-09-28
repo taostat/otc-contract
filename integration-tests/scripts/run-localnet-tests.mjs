@@ -161,24 +161,62 @@ async function isPortOpen() {
   });
 }
 
-async function waitForPortClosed() {
-  const startedAt = Date.now();
-  while (Date.now() - startedAt < shutdownTimeoutMs) {
-    if (!(await isPortOpen())) {
-      return;
-    }
-    await sleep(500);
+function isProcessGroupAlive(pid) {
+  if (!Number.isInteger(pid)) {
+    return false;
   }
-  throw new Error(`RPC port ${rpcPort} remained open after shutdown`);
+
+  try {
+    process.kill(-pid, 0);
+    return true;
+  } catch (error) {
+    if (error.code === "ESRCH") {
+      return false;
+    }
+    if (error.code === "EPERM") {
+      return true;
+    }
+    throw error;
+  }
 }
 
-async function queryCurrentBlock() {
+async function waitForLocalnetStopped(pid) {
+  const startedAt = Date.now();
+  while (true) {
+    const groupAlive = isProcessGroupAlive(pid);
+    const portOpen = await isPortOpen();
+    if (!groupAlive && !portOpen) {
+      return;
+    }
+
+    if (Date.now() - startedAt >= shutdownTimeoutMs) {
+      throw new Error(
+        `localnet shutdown timed out: process group ${pid} alive=${groupAlive}, RPC port ${rpcPort} open=${portOpen}`
+      );
+    }
+
+    await sleep(500);
+  }
+}
+
+async function queryCurrentBlock(timeoutMs) {
   const provider = getWsProvider(wsUrl);
   const client = createClient(provider);
+  let timeout;
   try {
     const api = client.getTypedApi(devnet);
-    return Number(await api.query.System.Number.getValue());
+    const blockNumber = await Promise.race([
+      api.query.System.Number.getValue(),
+      new Promise((_, reject) => {
+        timeout = setTimeout(
+          () => reject(new Error(`RPC query timed out after ${timeoutMs}ms`)),
+          timeoutMs,
+        );
+      }),
+    ]);
+    return Number(blockNumber);
   } finally {
+    clearTimeout(timeout);
     client.destroy();
   }
 }
@@ -189,12 +227,16 @@ async function waitForRpcReady() {
 
   while (Date.now() - startedAt < readinessTimeoutMs) {
     try {
-      const blockNumber = await queryCurrentBlock();
+      const remainingMs = readinessTimeoutMs - (Date.now() - startedAt);
+      const blockNumber = await queryCurrentBlock(Math.min(2000, remainingMs));
       console.log(`[localnet-runner] RPC ready at block ${blockNumber}`);
       return;
     } catch (error) {
       lastError = error;
-      await sleep(2000);
+      const remainingMs = readinessTimeoutMs - (Date.now() - startedAt);
+      if (remainingMs > 0) {
+        await sleep(Math.min(2000, remainingMs));
+      }
     }
   }
 
@@ -247,13 +289,12 @@ async function startLocalnet(subtensorDir) {
   child.stderr.on("data", (chunk) => outputTail.add("[localnet] ", chunk, process.stderr));
 
   child.on("exit", (code, signal) => {
-    if (code !== null || signal !== null) {
-      console.log(`[localnet-runner] localnet exited code=${code} signal=${signal}`);
-      if (!verboseLocalnet && code !== 0 && code !== 143) {
-        const tail = outputTail.dump();
-        if (tail.length > 0) {
-          console.error(`[localnet-runner] localnet output tail:\n${tail}`);
-        }
+    console.log(`[localnet-runner] localnet exited code=${code} signal=${signal}`);
+    const graceful = code === 0 || code === 143 || signal === "SIGTERM";
+    if (!verboseLocalnet && !graceful) {
+      const tail = outputTail.dump();
+      if (tail.length > 0) {
+        console.error(`[localnet-runner] localnet output tail:\n${tail}`);
       }
     }
   });
@@ -267,43 +308,47 @@ async function startLocalnet(subtensorDir) {
         console.error(`[localnet-runner] localnet output tail:\n${tail}`);
       }
     }
+    // This function owns the spawned process until it returns it. Reap it here
+    // so readiness failures cannot leave a detached process group behind.
+    try {
+      await stopLocalnet(child);
+    } catch (stopError) {
+      console.error(`[localnet-runner] failed to stop localnet after startup failure: ${stopError}`);
+    }
     throw error;
   }
   return child;
 }
 
+function killProcessGroup(pid, signal) {
+  try {
+    process.kill(-pid, signal);
+  } catch (error) {
+    if (error.code !== "ESRCH") {
+      throw error;
+    }
+  }
+}
+
 async function stopLocalnet(child) {
-  if (!child || child.killed) {
-    await waitForPortClosed();
+  if (!child) {
+    // Startup either failed before spawning or already reaped its own child.
     return;
   }
 
   console.log("[localnet-runner] stopping localnet");
+  const pid = child.pid;
+  killProcessGroup(pid, "SIGTERM");
+
   try {
-    process.kill(-child.pid, "SIGTERM");
-  } catch (error) {
-    if (error.code !== "ESRCH") {
-      throw error;
-    }
+    await waitForLocalnetStopped(pid);
+    return;
+  } catch {
+    console.log("[localnet-runner] SIGTERM timed out, sending SIGKILL");
   }
 
-  const startedAt = Date.now();
-  while (Date.now() - startedAt < shutdownTimeoutMs) {
-    if (!(await isPortOpen())) {
-      return;
-    }
-    await sleep(500);
-  }
-
-  console.log("[localnet-runner] SIGTERM timed out, sending SIGKILL");
-  try {
-    process.kill(-child.pid, "SIGKILL");
-  } catch (error) {
-    if (error.code !== "ESRCH") {
-      throw error;
-    }
-  }
-  await waitForPortClosed();
+  killProcessGroup(pid, "SIGKILL");
+  await waitForLocalnetStopped(pid);
 }
 
 async function runLocalnetTestBatch(files, options) {
@@ -312,6 +357,7 @@ async function runLocalnetTestBatch(files, options) {
   }
 
   let child;
+  let batchSucceeded = false;
   try {
     child = await startLocalnet(options.subtensorDir);
     await runCommand("npx", [
@@ -321,8 +367,17 @@ async function runLocalnetTestBatch(files, options) {
       "--maxWorkers=1",
       ...files,
     ], options);
+    batchSucceeded = true;
   } finally {
-    await stopLocalnet(child);
+    try {
+      await stopLocalnet(child);
+    } catch (stopError) {
+      // A shutdown failure must never replace the batch's own error.
+      if (batchSucceeded) {
+        throw stopError;
+      }
+      console.error(`[localnet-runner] failed to stop localnet after batch failure: ${stopError}`);
+    }
   }
 }
 

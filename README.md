@@ -85,7 +85,7 @@ npm run test:localnet -- src/lockup-listings/create-listing.test.ts
 npm run test:localnet:flaky
 ```
 
-`test:localnet` starts `../subtensor-fork/scripts/localnet.sh`, waits for RPC readiness on `127.0.0.1:9944`, clears deployment caches by default, runs Vitest serially, stops the node, and verifies the RPC port is closed before continuing. By default it restarts localnet per test file so each suite gets a fresh chain, fresh contracts, and isolated subnet economics.
+`test:localnet` starts `../subtensor-fork/scripts/localnet.sh`, waits for RPC readiness on `127.0.0.1:9944`, clears deployment caches by default, runs Vitest serially, stops the node, and verifies both the detached process group has exited and the RPC port is closed before continuing. By default it restarts localnet per test file so each suite gets a fresh chain, fresh contracts, and isolated subnet economics.
 
 Deployment cache reuse is intentionally opt-in via `--reuse-deployments` or `OTC_TEST_REUSE_DEPLOYMENTS=1`. Use `npm run test:localnet:combined -- ...` only as a shared-node coupling diagnostic; later subnets on one long-lived localnet can have different runtime economics, so the confidence gate should remain restart-per-file.
 
