@@ -339,6 +339,15 @@ mod otc_contract {
 
         /// Update the validator hotkey
         /// Can only be called by the contract owner
+        ///
+        /// WARNING: only call this to mirror a chain-level hotkey swap that has already moved
+        /// the contract's stake from the old hotkey to `new_hotkey`. Unlike `lockup_listings`,
+        /// this contract does not record which hotkey backs each listing and has no message to
+        /// move its own stake between hotkeys. After any other rotation, Alpha behind existing
+        /// listings is stranded on the old hotkey, while take/cancel of those listings transfer
+        /// from `new_hotkey` instead. That silently consumes stake backing listings created
+        /// after the rotation (which then fail to settle), and `claim_dividends` only sees
+        /// stake on `new_hotkey`.
         #[ink(message)]
         pub fn update_hotkey(&mut self, new_hotkey: AccountId) -> Result<(), Error> {
             self.ensure_owner()?;

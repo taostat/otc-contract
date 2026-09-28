@@ -208,6 +208,10 @@ mod lockup_listings {
             self.ensure_available_alpha(seller, netuid, amount)?;
 
             let contract_account = self.env().account_id();
+            // Aggregate invariant: the factory's available stake must cover all reserved
+            // Alpha on this netuid, across subnet generations. After deregistration and
+            // re-registration, stale-generation reservations intentionally keep new listings
+            // blocked until they are recovered (see docs/backend-subnet-risk-runbook.md).
             self.ensure_available_alpha(contract_account, netuid, self.reserved_alpha_for(netuid))?;
 
             let contract_stake_before = self
@@ -1204,6 +1208,14 @@ mod lockup_listings {
             Ok(())
         }
 
+        /// Replace the contract code in place (storage is preserved as-is).
+        ///
+        /// WARNING: this version changed the storage layout relative to earlier deployments:
+        /// `LockupListing` gained mid-struct `custody_hotkey` and `subnet_generation` fields,
+        /// and root storage gained `risk_canceller`, `reserved_alpha_by_generation`,
+        /// `stale_listing_recovery_pools`, and `reserved_recovery_tao`. Running `set_code`
+        /// over the old layout would corrupt stored state. Upgrade only between
+        /// layout-compatible versions, or ship an explicit migration.
         #[ink(message)]
         pub fn set_code(&mut self, code_hash: Hash) -> Result<(), Error> {
             self.ensure_owner()?;
@@ -1558,6 +1570,12 @@ mod lockup_listings {
             });
         }
 
+        /// Best-effort custody refresh: consolidation failures are reported via
+        /// `ListingHotkeyConsolidationFailed` instead of aborting the caller.
+        ///
+        /// "Best effort" covers only `Err` returns. If `move_stake` completes but the
+        /// post-move verification fails, `try_consolidate_listing_hotkey` deliberately
+        /// traps so the entire transaction, including that move, is reverted.
         fn refresh_listing_custody_best_effort(&mut self, listing: &mut LockupListing) {
             let seller = listing.seller;
             let netuid = listing.netuid;

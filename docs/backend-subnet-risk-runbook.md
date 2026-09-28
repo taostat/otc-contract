@@ -88,6 +88,10 @@ recover_stale_listing_tao(netuid, seller, listing_id)
 
 The recovery payout always goes to the stored listing seller. Distribution is pro-rata against the pool's remaining TAO and remaining stale Alpha; the final recovered listing receives any rounding dust.
 
+### Re-registered netuids block new listings
+
+While reserved Alpha for a stale subnet generation remains non-zero, `create_lockup_listing` on a re-registered netuid fails with `StakeUnavailable` by design. The availability invariant covers aggregate reservations across every generation, so a new generation cannot consume capacity still owed to stale listings. Complete the stale-recovery flow above to clear those reservations and unblock new listings.
+
 ## Monitoring
 
 Monitor these events:

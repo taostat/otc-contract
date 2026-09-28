@@ -1,6 +1,6 @@
 {
   "source": {
-    "hash": "0x8e9f91d8fabd0416a23a18f4b250965ed3c2ff166f6993d026c3333435b1560e",
+    "hash": "0x10fab67f2c6e6d5808bdfbefda5805b10ee9bb3c6b7dd83c4fc90449bc80d9a9",
     "language": "ink! 5.1.1",
     "compiler": "rustc 1.89.0",
     "build_info": {
@@ -3231,7 +3231,16 @@
           }
         ],
         "default": false,
-        "docs": [],
+        "docs": [
+          " Replace the contract code in place (storage is preserved as-is).",
+          "",
+          " WARNING: this version changed the storage layout relative to earlier deployments:",
+          " `LockupListing` gained mid-struct `custody_hotkey` and `subnet_generation` fields,",
+          " and root storage gained `risk_canceller`, `reserved_alpha_by_generation`,",
+          " `stale_listing_recovery_pools`, and `reserved_recovery_tao`. Running `set_code`",
+          " over the old layout would corrupt stored state. Upgrade only between",
+          " layout-compatible versions, or ship an explicit migration."
+        ],
         "label": "set_code",
         "mutates": true,
         "payable": false,
