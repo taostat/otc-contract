@@ -64,17 +64,32 @@ npm install
 CONTRACTS_NODE_URL=ws://127.0.0.1:9944 npm test -- --run
 ```
 
-The suite deploys or reuses local artifacts from:
+The suite deploys local artifacts from:
 
 - `target/ink/alpha_lockup/alpha_lockup.wasm`
 - `target/ink/lockup_listings/lockup_listings.wasm`
 - `target/ink/otc_contract/otc_contract.wasm`
 
-Local deployment cache files are ignored by Git:
+Each run deploys fresh contracts. To reuse deployments across runs, set `OTC_TEST_REUSE_DEPLOYMENTS=1`; the cached addresses are stored in these files, which Git ignores:
 
 - `integration-tests/.contract-address`
 - `integration-tests/.lockup-listings-address`
 - `integration-tests/.alpha-lockup-code-hash`
+
+### Localnet Runner
+
+`integration-tests` ships a runner that manages the localnet for you:
+
+```bash
+npm run test:localnet -- src/lockup-listings/claim.test.ts
+npm run test:localnet:flaky
+```
+
+`test:localnet` starts `../subtensor-fork/scripts/localnet.sh`, waits for RPC on `127.0.0.1:9944`, clears the deployment cache, and runs Vitest serially. After each batch it stops the node and checks that its process group has exited and the RPC port is closed. By default it restarts localnet for every test file, so each suite gets a fresh chain and fresh contracts.
+
+- `--reuse-deployments` (or `OTC_TEST_REUSE_DEPLOYMENTS=1`) keeps the deployment cache.
+- `npm run test:localnet:combined -- ...` runs all files against one node. Use it only to diagnose coupling between suites: subnets registered later on a long-lived localnet can have different economics.
+- `BUILD_BINARY=0` skips rebuilding the node when it is already built.
 
 ## Deployment Order
 
