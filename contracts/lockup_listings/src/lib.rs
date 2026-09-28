@@ -18,6 +18,7 @@ mod lockup_listings {
     };
     use alpha_lockup::AlphaLockupRef;
     use fixed::types::U64F64;
+    use ink::codegen::TraitCallBuilder;
     use ink::env::call::FromAccountId;
     use ink::prelude::{boxed::Box, vec::Vec};
     use otc_shared::{
@@ -730,8 +731,34 @@ mod lockup_listings {
                 .get((netuid, listing_id, purchase_id))
                 .ok_or(Error::EscrowNotFound)?;
 
+            // Escrows self-terminate on payout, while their mapping entry remains. Avoid a
+            // trapping cross-contract call and clean up the dangling record.
+            if !self.env().is_contract(&escrow_account) {
+                self.prune_closed_escrow(
+                    netuid,
+                    listing_id,
+                    purchase_id,
+                    escrow_account,
+                    initiated_by,
+                );
+                return Ok(());
+            }
+
             let mut escrow = AlphaLockupRef::from_account_id(escrow_account);
-            let old_hotkey = escrow.get_hotkey();
+            let old_hotkey = match escrow.call().get_hotkey().try_invoke() {
+                Ok(Ok(hotkey)) => hotkey,
+                Err(ink::env::Error::ReturnError(ink::env::ReturnErrorCode::NotCallable)) => {
+                    self.prune_closed_escrow(
+                        netuid,
+                        listing_id,
+                        purchase_id,
+                        escrow_account,
+                        initiated_by,
+                    );
+                    return Ok(());
+                }
+                Ok(Err(_)) | Err(_) => return Err(Error::EscrowSyncFailed),
+            };
             let new_hotkey = self.active_hotkey_for_netuid(netuid);
 
             if old_hotkey == new_hotkey {
@@ -1511,6 +1538,24 @@ mod lockup_listings {
 
         fn active_hotkey_for_netuid(&self, netuid: NetUid) -> AccountId {
             self.active_hotkeys.get(netuid).unwrap_or(self.hotkey)
+        }
+
+        fn prune_closed_escrow(
+            &mut self,
+            netuid: NetUid,
+            listing_id: LockupListingId,
+            purchase_id: PurchaseId,
+            escrow: AccountId,
+            initiated_by: AccountId,
+        ) {
+            self.escrows.remove((netuid, listing_id, purchase_id));
+            self.env().emit_event(EscrowClosedPruned {
+                escrow,
+                initiated_by,
+                netuid,
+                listing_id,
+                purchase_id,
+            });
         }
 
         fn refresh_listing_custody_best_effort(&mut self, listing: &mut LockupListing) {
@@ -2354,6 +2399,33 @@ mod lockup_listings {
 
             let result = contract.sync_escrow_hotkey(1, 1, 1);
             assert_eq!(result, Err(Error::EscrowNotFound));
+        }
+
+        #[ink::test]
+        fn sync_escrow_hotkey_prunes_terminated_escrow() {
+            let accounts = default_accounts();
+            let mut contract = create_test_contract();
+            let purchase_id = 1u64;
+
+            // The off-chain engine cannot invoke live contracts, but an account not marked
+            // with `set_contract` accurately models the terminated-callee preflight.
+            contract
+                .escrows
+                .insert((TEST_NETUID, TEST_LISTING_ID, purchase_id), &accounts.eve);
+            test::set_caller::<BittensorEnvironment>(accounts.django);
+
+            assert_eq!(
+                contract.sync_escrow_hotkey(TEST_NETUID, TEST_LISTING_ID, purchase_id),
+                Ok(())
+            );
+            assert_eq!(
+                contract.get_escrow(TEST_NETUID, TEST_LISTING_ID, purchase_id),
+                None
+            );
+            assert_eq!(
+                contract.sync_escrow_hotkey(TEST_NETUID, TEST_LISTING_ID, purchase_id),
+                Err(Error::EscrowNotFound)
+            );
         }
 
         #[ink::test]

@@ -1616,6 +1616,69 @@
         "args": [
           {
             "docs": [],
+            "indexed": true,
+            "label": "escrow",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "initiated_by",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "netuid",
+            "type": {
+              "displayName": [
+                "NetUid"
+              ],
+              "type": 1
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "listing_id",
+            "type": {
+              "displayName": [
+                "LockupListingId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "purchase_id",
+            "type": {
+              "displayName": [
+                "PurchaseId"
+              ],
+              "type": 0
+            }
+          }
+        ],
+        "docs": [],
+        "label": "EscrowClosedPruned",
+        "module_path": "lockup_listings::events",
+        "signature_topic": "0x2be543c332c5c6121eb15c4ee3bd061abf0a81acc6007621f72d31fb5be94bdc"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
             "indexed": false,
             "label": "old_rate",
             "type": {

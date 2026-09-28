@@ -325,6 +325,33 @@ describe("Lockup Listings Contract - Claim", () => {
             const stakeIncrease = buyerStakeAfter - buyerStakeBefore;
             const tolerance = SMALL_ACCOUNTING_TOLERANCE;
             expect(stakeIncrease).toBeGreaterThanOrEqual(BigInt(claimedEvent!.value.amount_claimed) - tolerance);
+
+            const syncClosedEscrowResult = await submitOk(contract.send("sync_escrow_hotkey", withIntegrationGas({
+                origin: accounts.eve.address,
+                data: {
+                    netuid,
+                    listing_id: listingId,
+                    purchase_id: purchaseId,
+                }
+            })), accounts.eve.signer, "prune closed escrow");
+            const closedEvent = contract.filterEvents(syncClosedEscrowResult.events)
+                .find(event => event.type === "EscrowClosedPruned");
+            expect(closedEvent).toBeDefined();
+            expect(closedEvent!.value.escrow).toBe(escrowAddress);
+            expect(closedEvent!.value.initiated_by).toBe(accounts.eve.address);
+            expect(closedEvent!.value.netuid).toBe(netuid);
+            expect(closedEvent!.value.listing_id).toBe(listingId);
+            expect(closedEvent!.value.purchase_id).toBe(purchaseId);
+
+            const escrowAfterPrune = queryOk<string | undefined>(await contract.query("get_escrow", {
+                origin: accounts.eve.address,
+                data: {
+                    netuid,
+                    listing_id: listingId,
+                    purchase_id: purchaseId,
+                }
+            }), "get_escrow after pruning");
+            expect(escrowAfterPrune).toBeUndefined();
         }, 600000); // 10 minute timeout for full lifecycle test
     });
 

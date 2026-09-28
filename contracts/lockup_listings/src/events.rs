@@ -199,6 +199,18 @@ pub struct EscrowHotkeySynced {
 }
 
 #[ink::event]
+pub struct EscrowClosedPruned {
+    #[ink(topic)]
+    pub escrow: AccountId,
+    #[ink(topic)]
+    pub initiated_by: AccountId,
+    #[ink(topic)]
+    pub netuid: NetUid,
+    pub listing_id: LockupListingId,
+    pub purchase_id: PurchaseId,
+}
+
+#[ink::event]
 pub struct FeeRateUpdated {
     pub old_rate: FixedDecimal,
     pub new_rate: FixedDecimal,
