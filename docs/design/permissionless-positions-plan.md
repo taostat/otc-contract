@@ -56,7 +56,7 @@ Branch `pp/01-foundation`, from `main`. Brings the reusable parts of PR #6 onto 
   The constructor stays as on `main`.
 - `integration-tests`:
   - the localnet runner and its npm scripts;
-  - fresh random accounts per run, topped up with sudo;
+  - test accounts topped up with sudo, since pallet-contracts requires the caller to hold the full storage deposit limit;
   - random deployment salts;
   - the deployment cache made opt-in;
   - targeted validator staking;
