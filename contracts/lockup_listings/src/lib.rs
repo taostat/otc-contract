@@ -436,21 +436,7 @@ mod lockup_listings {
             listing.remaining_amount = new_remaining;
 
             if new_remaining == 0 {
-                // Remove listing completely
-                self.lockup_listings.remove((netuid, seller, listing_id));
-
-                let mut user_listings = self
-                    .user_lockup_listings
-                    .get((seller, netuid))
-                    .unwrap_or_default();
-                user_listings.retain(|&id| id != listing_id);
-
-                if user_listings.is_empty() {
-                    self.user_lockup_listings.remove((seller, netuid));
-                } else {
-                    self.user_lockup_listings
-                        .insert((seller, netuid), &user_listings);
-                }
+                self.remove_listing_records(netuid, seller, listing_id);
 
                 // Emit event for indexer tracking
                 self.env().emit_event(LockupListingFullyFilled {
@@ -1807,20 +1793,7 @@ mod lockup_listings {
             self.decrease_reserved_alpha_for_generation(netuid, listing.subnet_generation, amount)?;
 
             // Remove listing only after stake has been returned successfully.
-            self.lockup_listings.remove((netuid, seller, listing_id));
-
-            let mut user_listings = self
-                .user_lockup_listings
-                .get((seller, netuid))
-                .unwrap_or_default();
-            user_listings.retain(|&id| id != listing_id);
-
-            if user_listings.is_empty() {
-                self.user_lockup_listings.remove((seller, netuid));
-            } else {
-                self.user_lockup_listings
-                    .insert((seller, netuid), &user_listings);
-            }
+            self.remove_listing_records(netuid, seller, listing_id);
 
             if forced {
                 self.env().emit_event(LockupListingForceCancelled {
