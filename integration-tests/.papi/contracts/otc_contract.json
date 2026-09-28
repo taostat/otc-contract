@@ -1,12 +1,12 @@
 {
   "source": {
-    "hash": "0x060a985892656b2f98323e48b975c8a622bb86e5cd42811c9b43d0b7ce49d783",
+    "hash": "0xbed8a5195937d6c8057b8d59ab868c69dfea8fdb94069f9da3c283eef5119fb1",
     "language": "ink! 5.1.1",
-    "compiler": "rustc 1.90.0",
+    "compiler": "rustc 1.89.0",
     "build_info": {
       "build_mode": "Release",
       "cargo_contract_version": "5.0.3",
-      "rust_toolchain": "stable-x86_64-unknown-linux-gnu",
+      "rust_toolchain": "stable-aarch64-apple-darwin",
       "wasm_opt_settings": {
         "keep_debug_symbols": false,
         "optimization_passes": "Z"
@@ -1215,7 +1215,16 @@
         "default": false,
         "docs": [
           " Update the validator hotkey",
-          " Can only be called by the contract owner"
+          " Can only be called by the contract owner",
+          "",
+          " WARNING: only call this to mirror a chain-level hotkey swap that has already moved",
+          " the contract's stake from the old hotkey to `new_hotkey`. Unlike `lockup_listings`,",
+          " this contract does not record which hotkey backs each listing and has no message to",
+          " move its own stake between hotkeys. After any other rotation, Alpha behind existing",
+          " listings is stranded on the old hotkey, while take/cancel of those listings transfer",
+          " from `new_hotkey` instead. That silently consumes stake backing listings created",
+          " after the rotation (which then fail to settle), and `claim_dividends` only sees",
+          " stake on `new_hotkey`."
         ],
         "label": "update_hotkey",
         "mutates": true,
@@ -3769,6 +3778,10 @@
               {
                 "index": 28,
                 "name": "InsufficientPayment"
+              },
+              {
+                "index": 29,
+                "name": "StakeUnavailable"
               }
             ]
           }

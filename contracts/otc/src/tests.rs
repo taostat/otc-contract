@@ -3,20 +3,53 @@ use crate::events::*;
 use crate::otc_contract::*;
 use crate::types::*;
 use core::convert::TryFrom;
+use core::panic::AssertUnwindSafe;
 use fixed::types::U64F64;
 use ink::env::Environment;
 use ink::scale::{Decode, Encode};
-use otc_shared::{BittensorEnvironment, FixedDecimal, PauseState, SharedError, StakeInfo};
+use otc_shared::{
+    AlphaAmount, AlphaCurrency, BittensorEnvironment, FixedDecimal, PauseState, SharedError,
+    StakeAvailability, StakeInfo,
+};
+use std::cell::RefCell;
 
 const MAX_LISTINGS_PER_USER_PER_NETUID: usize = 25;
 const MAX_OFFERS_PER_USER_PER_NETUID: usize = 25;
 const SUBTENSOR_EXTENSION_ID: u16 = 0;
 const GET_STAKE_INFO_FN_ID: u16 = 0;
+const TRANSFER_STAKE_FN_ID: u16 = 6;
 const GET_CURRENT_ALPHA_PRICE_FN_ID: u16 = 15;
+const GET_STAKE_AVAILABILITY_FN_ID: u16 = 36;
 type TestAccountId = <BittensorEnvironment as Environment>::AccountId;
 
 // Mock market price: 2 TAO per Alpha (2 * 1e9)
 const MOCK_MARKET_PRICE: u64 = 2_000_000_000;
+
+#[derive(Clone)]
+struct MockState {
+    stake_amount: AlphaAmount,
+    stake_availability: StakeAvailability,
+    transfer_succeeds: bool,
+}
+
+impl Default for MockState {
+    fn default() -> Self {
+        Self {
+            stake_amount: 0,
+            stake_availability: StakeAvailability {
+                netuid: otc_shared::runtime::NetUid::from(1u16),
+                total: u64::MAX,
+                locked: 0,
+                available: u64::MAX,
+            },
+            transfer_succeeds: false,
+        }
+    }
+}
+
+thread_local! {
+    static MOCK_STATE: RefCell<MockState> = RefCell::new(MockState::default());
+}
 
 #[derive(Clone, Copy)]
 struct MockStakeExtension;
@@ -34,9 +67,14 @@ impl ink::env::test::ChainExtension for MockStakeExtension {
                 let coldkey = TestAccountId::decode(&mut input).expect("mock decode coldkey");
                 let netuid = u16::decode(&mut input).expect("mock decode netuid");
 
-                let _ = (hotkey, coldkey, netuid);
-
-                output.extend(Encode::encode(&Option::<StakeInfo>::None));
+                MOCK_STATE.with(|state| {
+                    let stake_amount = state.borrow().stake_amount;
+                    if stake_amount == 0 {
+                        output.extend(Encode::encode(&Option::<StakeInfo>::None));
+                    } else {
+                        encode_some_stake(output, hotkey, coldkey, netuid, stake_amount);
+                    }
+                });
                 0
             }
             GET_CURRENT_ALPHA_PRICE_FN_ID => {
@@ -44,13 +82,83 @@ impl ink::env::test::ChainExtension for MockStakeExtension {
                 output.extend(Encode::encode(&MOCK_MARKET_PRICE));
                 0
             }
+            GET_STAKE_AVAILABILITY_FN_ID => {
+                let mut input = input;
+                let _coldkey = TestAccountId::decode(&mut input).expect("mock decode coldkey");
+                let netuid = u16::decode(&mut input).expect("mock decode netuid");
+
+                MOCK_STATE.with(|state| {
+                    let mut availability = state.borrow().stake_availability.clone();
+                    availability.netuid = otc_shared::runtime::NetUid::from(netuid);
+                    output.extend(Encode::encode(&availability));
+                });
+                0
+            }
+            TRANSFER_STAKE_FN_ID => MOCK_STATE.with(|state| {
+                if state.borrow().transfer_succeeds {
+                    0
+                } else {
+                    1
+                }
+            }),
             _ => 1,
         }
     }
 }
 
 fn register_mock_stake_extension() {
+    MOCK_STATE.with(|state| {
+        *state.borrow_mut() = MockState::default();
+    });
     ink::env::test::register_chain_extension(MockStakeExtension);
+}
+
+fn set_mock_stake_amount(amount: AlphaAmount) {
+    MOCK_STATE.with(|state| {
+        state.borrow_mut().stake_amount = amount;
+    });
+}
+
+fn set_stake_availability(total: AlphaAmount, locked: AlphaAmount, available: AlphaAmount) {
+    MOCK_STATE.with(|state| {
+        state.borrow_mut().stake_availability = StakeAvailability {
+            netuid: otc_shared::runtime::NetUid::from(1u16),
+            total,
+            locked,
+            available,
+        };
+    });
+}
+
+fn set_transfer_succeeds(transfer_succeeds: bool) {
+    MOCK_STATE.with(|state| {
+        state.borrow_mut().transfer_succeeds = transfer_succeeds;
+    });
+}
+
+fn encode_some_stake(
+    output: &mut Vec<u8>,
+    hotkey: TestAccountId,
+    coldkey: TestAccountId,
+    netuid: u16,
+    stake_amount: AlphaAmount,
+) {
+    output.push(1);
+    output.extend(Encode::encode(&hotkey));
+    output.extend(Encode::encode(&coldkey));
+    output.extend(Encode::encode(&ink::scale::Compact(
+        otc_shared::runtime::NetUid::from(netuid),
+    )));
+    output.extend(Encode::encode(&ink::scale::Compact(AlphaCurrency::from(
+        stake_amount,
+    ))));
+    output.extend(Encode::encode(&ink::scale::Compact(0u64)));
+    output.extend(Encode::encode(&ink::scale::Compact(AlphaCurrency::from(0))));
+    output.extend(Encode::encode(&ink::scale::Compact(
+        otc_shared::TaoCurrency::from(0),
+    )));
+    output.extend(Encode::encode(&ink::scale::Compact(0u64)));
+    output.extend(Encode::encode(&true));
 }
 
 /// Helper function to create fee rate bits from percentage
@@ -546,6 +654,202 @@ fn list_alpha_fails_with_invalid_price_offset() {
     // Should fail due to invalid price offset (<= -100%)
     let result = contract.list_alpha(accounts.django, netuid, amount, price_offset_bps);
     assert_eq!(result, Err(Error::InvalidPriceOffset));
+}
+
+#[ink::test]
+fn list_alpha_rejects_unavailable_alpha_before_listing_is_created() {
+    register_mock_stake_extension();
+    let accounts = ink::env::test::default_accounts::<BittensorEnvironment>();
+    let fee_rate = fee_rate_from_percentage(0.0);
+    let amount = 2_000_000_000u64;
+    set_mock_stake_amount(amount);
+    set_stake_availability(amount, 1, amount - 1);
+
+    let mut contract = OtcContract::new(
+        accounts.alice,
+        accounts.bob,
+        fee_rate,
+        1_000_000_000,
+        1_000_000_000,
+        100,
+    );
+
+    ink::env::test::set_caller::<BittensorEnvironment>(accounts.charlie);
+
+    let result = contract.list_alpha(accounts.django, 1, amount, 0);
+
+    assert_eq!(result, Err(Error::StakeUnavailable));
+    assert_eq!(contract.get_listing(1, accounts.charlie, 1), None);
+    assert_eq!(contract.get_reserved_alpha(1), 0);
+}
+
+#[ink::test]
+fn take_alpha_listing_rejects_unavailable_contract_alpha_without_removing_listing() {
+    register_mock_stake_extension();
+    let accounts = ink::env::test::default_accounts::<BittensorEnvironment>();
+    let fee_rate = fee_rate_from_percentage(0.0);
+    let amount = 2_000_000_000u64;
+    set_mock_stake_amount(amount);
+    set_stake_availability(amount, 1, amount - 1);
+
+    let mut contract = OtcContract::new(
+        accounts.alice,
+        accounts.bob,
+        fee_rate,
+        1_000_000_000,
+        1_000_000_000,
+        100,
+    );
+    let listing = AlphaListing {
+        id: 1,
+        netuid: 1,
+        seller: accounts.charlie,
+        amount,
+        price_offset_bps: 0,
+        fee_rate: contract.fee_rate,
+        created_at: 1,
+    };
+    contract
+        .alpha_listings
+        .insert((1, accounts.charlie, 1), &listing);
+    contract
+        .user_listings
+        .insert((accounts.charlie, 1), &vec![1]);
+    contract.increase_reserved_alpha(1, amount).unwrap();
+
+    ink::env::test::set_caller::<BittensorEnvironment>(accounts.django);
+    ink::env::test::set_value_transferred::<ink::env::DefaultEnvironment>((amount * 3).into());
+
+    let result = contract.take_alpha_listing(1, accounts.charlie, 1);
+
+    assert_eq!(result, Err(Error::StakeUnavailable));
+    assert!(contract.get_listing(1, accounts.charlie, 1).is_some());
+    assert_eq!(contract.get_reserved_alpha(1), amount);
+}
+
+#[ink::test]
+fn take_tao_offer_rejects_unavailable_seller_alpha_without_removing_offer() {
+    register_mock_stake_extension();
+    let accounts = ink::env::test::default_accounts::<BittensorEnvironment>();
+    let fee_rate = fee_rate_from_percentage(0.0);
+    let expected_alpha = 1_000_000_000u64;
+    set_mock_stake_amount(expected_alpha);
+    set_stake_availability(expected_alpha, 1, expected_alpha - 1);
+
+    let mut contract = OtcContract::new(
+        accounts.alice,
+        accounts.bob,
+        fee_rate,
+        1_000_000_000,
+        1_000_000_000,
+        100,
+    );
+    let offer = TaoOffer {
+        id: 1,
+        netuid: 1,
+        buyer: accounts.charlie,
+        amount: 2_000_000_000,
+        price_offset_bps: 0,
+        fee_rate: contract.fee_rate,
+        created_at: 1,
+    };
+    contract.tao_offers.insert((1, accounts.charlie, 1), &offer);
+    contract.user_offers.insert((accounts.charlie, 1), &vec![1]);
+
+    ink::env::test::set_caller::<BittensorEnvironment>(accounts.django);
+
+    let result = contract.take_tao_offer(1, accounts.charlie, 1, accounts.eve);
+
+    assert_eq!(result, Err(Error::StakeUnavailable));
+    assert!(contract.get_offer(1, accounts.charlie, 1).is_some());
+}
+
+#[ink::test]
+fn cancel_alpha_listing_rejects_unavailable_contract_alpha_without_removing_listing() {
+    register_mock_stake_extension();
+    let accounts = ink::env::test::default_accounts::<BittensorEnvironment>();
+    let fee_rate = fee_rate_from_percentage(0.0);
+    let amount = 2_000_000_000u64;
+    set_mock_stake_amount(amount);
+    set_stake_availability(amount, 1, amount - 1);
+
+    let mut contract = OtcContract::new(
+        accounts.alice,
+        accounts.bob,
+        fee_rate,
+        1_000_000_000,
+        1_000_000_000,
+        100,
+    );
+    let listing = AlphaListing {
+        id: 1,
+        netuid: 1,
+        seller: accounts.charlie,
+        amount,
+        price_offset_bps: 0,
+        fee_rate: contract.fee_rate,
+        created_at: 1,
+    };
+    contract
+        .alpha_listings
+        .insert((1, accounts.charlie, 1), &listing);
+    contract
+        .user_listings
+        .insert((accounts.charlie, 1), &vec![1]);
+    contract.increase_reserved_alpha(1, amount).unwrap();
+
+    ink::env::test::set_block_number::<BittensorEnvironment>(200);
+    ink::env::test::set_caller::<BittensorEnvironment>(accounts.charlie);
+
+    let result = contract.cancel_alpha_listing(1, 1);
+
+    assert_eq!(result, Err(Error::StakeUnavailable));
+    assert!(contract.get_listing(1, accounts.charlie, 1).is_some());
+    assert_eq!(contract.get_reserved_alpha(1), amount);
+}
+
+#[ink::test]
+fn cancel_alpha_listing_traps_when_post_transfer_verification_fails() {
+    register_mock_stake_extension();
+    let accounts = ink::env::test::default_accounts::<BittensorEnvironment>();
+    let fee_rate = fee_rate_from_percentage(0.0);
+    let amount = 2_000_000_000u64;
+    set_mock_stake_amount(amount);
+    set_transfer_succeeds(true);
+
+    let mut contract = OtcContract::new(
+        accounts.alice,
+        accounts.bob,
+        fee_rate,
+        1_000_000_000,
+        1_000_000_000,
+        100,
+    );
+    let listing = AlphaListing {
+        id: 1,
+        netuid: 1,
+        seller: accounts.charlie,
+        amount,
+        price_offset_bps: 0,
+        fee_rate: contract.fee_rate,
+        created_at: 1,
+    };
+    contract
+        .alpha_listings
+        .insert((1, accounts.charlie, 1), &listing);
+    contract
+        .user_listings
+        .insert((accounts.charlie, 1), &vec![1]);
+    contract.increase_reserved_alpha(1, amount).unwrap();
+
+    ink::env::test::set_block_number::<BittensorEnvironment>(200);
+    ink::env::test::set_caller::<BittensorEnvironment>(accounts.charlie);
+
+    let result = std::panic::catch_unwind(AssertUnwindSafe(|| contract.cancel_alpha_listing(1, 1)));
+
+    assert!(result.is_err());
+    assert!(contract.get_listing(1, accounts.charlie, 1).is_some());
+    assert_eq!(contract.get_reserved_alpha(1), amount);
 }
 
 #[ink::test]

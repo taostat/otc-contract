@@ -3,16 +3,22 @@
 pub mod chain_extension;
 pub mod errors;
 pub mod runtime;
+pub mod stake;
 pub mod types;
 
 // Re-export chain extension types
-pub use chain_extension::{StakeInfo, SubtensorError, SubtensorExtension};
+pub use chain_extension::{
+    StakeAvailability, StakeInfo, SubnetRegistrationState, SubtensorError, SubtensorExtension,
+};
 
 // Re-export shared error types
 pub use errors::SharedError;
 
 // Re-export runtime types (for SCALE encoding)
 pub use runtime::{AlphaCurrency, ProxyCall, ProxyType, RuntimeCall, SubtensorCall, TaoCurrency};
+
+// Re-export stake transfer verification helpers
+pub use stake::{stake_delta_verified, TRANSFER_TOLERANCE};
 
 // Re-export common types (type aliases and FixedDecimal)
 pub use types::{

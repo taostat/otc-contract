@@ -24,11 +24,13 @@ import {
     hasProxyPermission,
     formatStakeAmount,
 } from "../utils/stake-helpers";
-
-type ContractsError = {
-    type: 'Contracts',
-    value: { type: 'ContractReverted', value: undefined }
-}
+import {
+    createTaoOffer,
+    expectEvent,
+    queryOk,
+    submitOk,
+    submitReverted,
+} from "../test-helpers";
 
 describe("TAO Offer Operations", () => {
     let context: TestContext;
@@ -55,7 +57,7 @@ describe("TAO Offer Operations", () => {
             feeRateResult.value.response : percentageToFixedPoint(0.5);
 
         // Create a subnet for testing
-        const aliceHotkey = createHotkey("//Alice");
+        const aliceHotkey = createHotkey();
         await fundAccount(context.api, aliceHotkey.address, taoToRao(10), context.accounts.alice.signer);
         netuid = await registerSubnet(context.api, aliceHotkey.address, context.accounts.alice.signer);
         console.log(`Created test subnet with netuid: ${netuid}`);
@@ -97,10 +99,10 @@ describe("TAO Offer Operations", () => {
         }
 
         // Create hotkeys for validators
-        bobHotkey = createHotkey("//Bob");
-        charlieHotkey = createHotkey("//Charlie");
-        daveHotkey = createHotkey("//Dave");
-        eveHotkey = createHotkey("//Eve");
+        bobHotkey = createHotkey();
+        charlieHotkey = createHotkey();
+        daveHotkey = createHotkey();
+        eveHotkey = createHotkey();
 
         // Fund hotkeys for transaction fees
         await fundAccount(context.api, bobHotkey.address, taoToRao(1), context.accounts.alice.signer);
@@ -114,7 +116,7 @@ describe("TAO Offer Operations", () => {
             netuid,
             bobHotkey.address,
             context.accounts.bob.signer,
-            taoToRao(150) // 150 Alpha initial stake for Bob
+            taoToRao(5000)
         );
         console.log(`✓ Bob's validator registered with 150 Alpha`);
 
@@ -123,7 +125,7 @@ describe("TAO Offer Operations", () => {
             netuid,
             charlieHotkey.address,
             context.accounts.charlie.signer,
-            taoToRao(200) // 200 Alpha initial stake for Charlie
+            taoToRao(5000)
         );
         console.log(`✓ Charlie's validator registered with 200 Alpha`);
 
@@ -132,7 +134,7 @@ describe("TAO Offer Operations", () => {
             netuid,
             daveHotkey.address,
             context.accounts.dave.signer,
-            taoToRao(100) // 100 Alpha initial stake for Dave
+            taoToRao(5000)
         );
         console.log(`✓ Dave's validator registered with 100 Alpha`);
 
@@ -195,20 +197,15 @@ describe("TAO Offer Operations", () => {
             const offerAmount = taoToRao(150); // Total TAO to spend
             const priceOffsetBps = MARKET_PRICE; // 0% offset from market
 
-            const offerTx = contract.send("create_tao_offer", {
-                origin: accounts.charlie.address,
-                value: offerAmount, // TAO sent with transaction
-                data: {
-                    netuid,
-                    price_offset_bps: priceOffsetBps
-                }
-            });
-
-            const result = await offerTx.signAndSubmit(accounts.charlie.signer);
-            expect(result.ok).toBe(true);
-
-            // Wait for transaction to be processed
-            await waitForBlocks(context.api, 2);
+            const { event, offerId } = await createTaoOffer(contract, accounts.charlie.signer, accounts.charlie.address, {
+                netuid,
+                price_offset_bps: priceOffsetBps,
+            }, offerAmount);
+            expect(event.value.buyer).toBe(accounts.charlie.address);
+            expect(event.value.netuid).toBe(netuid);
+            expect(BigInt(event.value.tao_offer_id)).toBe(offerId);
+            expect(BigInt(event.value.amount)).toBe(offerAmount);
+            expect(event.value.price_offset_bps).toBe(priceOffsetBps);
 
             // Get Charlie's balance after creating offer
             const balanceAfter = await getBalance(context.api, accounts.charlie.address);
@@ -226,31 +223,25 @@ describe("TAO Offer Operations", () => {
                 }
             });
 
-            expect(offersResult.success).toBe(true);
-            if (offersResult.success) {
-                expect(offersResult.value.response.length).toBeGreaterThan(0);
+            const userOffers = queryOk<bigint[]>(offersResult, "get_user_offers");
+            expect(userOffers).toContain(offerId);
 
-                // Get the offer details
-                const offerId = offersResult.value.response[0];
-                const offer = await contract.query("get_offer", {
-                    origin: accounts.alice.address,
-                    data: {
-                        netuid,
-                        buyer: accounts.charlie.address,
-                        offer_id: offerId
-                    }
-                });
-
-                expect(offer.success).toBe(true);
-                if (offer.success && offer.value.response) {
-                    expect(offer.value.response.amount).toBe(offerAmount);
-                    expect(offer.value.response.price_offset_bps).toBe(priceOffsetBps);
-                    expect(offer.value.response.buyer).toBe(accounts.charlie.address);
-                    expect(offer.value.response.netuid).toBe(netuid);
-
-                    console.log(`Created offer ${offerId}: ${raoToTao(offerAmount)} TAO at ${bpsToPercentage(priceOffsetBps)}% offset from market`);
+            const offer = queryOk<any>(await contract.query("get_offer", {
+                origin: accounts.alice.address,
+                data: {
+                    netuid,
+                    buyer: accounts.charlie.address,
+                    offer_id: offerId
                 }
-            }
+            }), "get_offer");
+
+            expect(offer).toBeDefined();
+            expect(offer.amount).toBe(offerAmount);
+            expect(offer.price_offset_bps).toBe(priceOffsetBps);
+            expect(offer.buyer).toBe(accounts.charlie.address);
+            expect(offer.netuid).toBe(netuid);
+
+            console.log(`Created offer ${offerId}: ${raoToTao(offerAmount)} TAO at ${bpsToPercentage(priceOffsetBps)}% offset from market`);
         });
 
         it("should create multiple offers from the same buyer", async () => {
@@ -262,23 +253,16 @@ describe("TAO Offer Operations", () => {
                 { amount: taoToRao(75), priceOffsetBps: 500 },              // +5% above market
                 { amount: taoToRao(100), priceOffsetBps: -500 }             // -5% below market
             ];
-
             const offerIds: bigint[] = [];
 
             for (const offer of offers) {
-                const tx = contract.send("create_tao_offer", {
-                    origin: accounts.dave.address,
-                    value: offer.amount,
-                    data: {
-                        netuid,
-                        price_offset_bps: offer.priceOffsetBps
-                    }
-                });
-
-                const result = await tx.signAndSubmit(accounts.dave.signer);
-                expect(result.ok).toBe(true);
-
-                await waitForBlocks(context.api, 1);
+                const { offerId, event } = await createTaoOffer(contract, accounts.dave.signer, accounts.dave.address, {
+                    netuid,
+                    price_offset_bps: offer.priceOffsetBps,
+                }, offer.amount);
+                expect(BigInt(event.value.amount)).toBe(offer.amount);
+                expect(event.value.price_offset_bps).toBe(offer.priceOffsetBps);
+                offerIds.push(offerId);
             }
 
             // Query Dave's offers
@@ -290,28 +274,20 @@ describe("TAO Offer Operations", () => {
                 }
             });
 
-            expect(offersResult.success).toBe(true);
-            if (offersResult.success) {
-                expect(offersResult.value.response.length).toBeGreaterThanOrEqual(offers.length);
-
-                // Verify each offer
-                for (const offerId of offersResult.value.response) {
-                    const offer = await contract.query("get_offer", {
-                        origin: accounts.alice.address,
-                        data: {
-                            netuid,
-                            buyer: accounts.dave.address,
-                            offer_id: offerId
-                        }
-                    });
-
-                    expect(offer.success).toBe(true);
-                    if (offer.success && offer.value.response) {
-                        expect(offer.value.response.buyer).toBe(accounts.dave.address);
-                        expect(offer.value.response.netuid).toBe(netuid);
-                        offerIds.push(offerId);
+            const userOfferIds = queryOk<bigint[]>(offersResult, "get_user_offers");
+            for (const offerId of offerIds) {
+                expect(userOfferIds).toContain(offerId);
+                const offer = queryOk<any>(await contract.query("get_offer", {
+                    origin: accounts.alice.address,
+                    data: {
+                        netuid,
+                        buyer: accounts.dave.address,
+                        offer_id: offerId
                     }
-                }
+                }), "get_offer");
+
+                expect(offer.buyer).toBe(accounts.dave.address);
+                expect(offer.netuid).toBe(netuid);
             }
 
             console.log(`Dave created ${offerIds.length} offers: ${offerIds.join(", ")}`);
@@ -340,13 +316,7 @@ describe("TAO Offer Operations", () => {
                 }
             });
 
-            const result = await offerTx.signAndSubmit(accounts.eve.signer);
-
-            // Should fail with contract error
-            expect(result.ok).toBe(false);
-            const contractsError = result.dispatchError?.value as ContractsError;
-            expect(contractsError.type).toBe("Contracts");
-            expect(contractsError.value.type).toBe("ContractReverted");
+            await submitReverted(offerTx, accounts.eve.signer, "create_tao_offer below minimum");
         });
 
         it("should reject offer with invalid price offset", async () => {
@@ -362,13 +332,7 @@ describe("TAO Offer Operations", () => {
                 }
             });
 
-            const result = await offerTx.signAndSubmit(accounts.eve.signer);
-
-            // Should fail with contract error (InvalidPriceOffset)
-            expect(result.ok).toBe(false);
-            const contractsError = result.dispatchError?.value as ContractsError;
-            expect(contractsError.type).toBe("Contracts");
-            expect(contractsError.value.type).toBe("ContractReverted");
+            await submitReverted(offerTx, accounts.eve.signer, "create_tao_offer invalid price offset");
         });
     });
 
@@ -381,30 +345,11 @@ describe("TAO Offer Operations", () => {
 
             // Create a test offer from Eve
             offerAmount = taoToRao(25);
-            const tx = contract.send("create_tao_offer", {
-                origin: accounts.eve.address,
-                value: offerAmount,
-                data: {
-                    netuid,
-                    price_offset_bps: MARKET_PRICE
-                }
-            });
-
-            await tx.signAndSubmit(accounts.eve.signer);
-            await waitForBlocks(context.api, 2);
-
-            // Get the offer ID
-            const offersResult = await contract.query("get_user_offers", {
-                origin: accounts.alice.address,
-                data: {
-                    buyer: accounts.eve.address,
-                    netuid
-                }
-            });
-
-            if (offersResult.success && offersResult.value.response.length > 0) {
-                testOfferId = offersResult.value.response[offersResult.value.response.length - 1];
-            }
+            const { offerId } = await createTaoOffer(contract, accounts.eve.signer, accounts.eve.address, {
+                netuid,
+                price_offset_bps: MARKET_PRICE,
+            }, offerAmount);
+            testOfferId = offerId;
         });
 
         it("should successfully cancel offer and return TAO", async () => {
@@ -423,11 +368,10 @@ describe("TAO Offer Operations", () => {
                 }
             });
 
-            const result = await cancelTx.signAndSubmit(accounts.eve.signer);
-            expect(result.ok).toBe(true);
-
-            // Wait for TAO to be returned
-            await waitForBlocks(context.api, 2);
+            const result = await submitOk(cancelTx, accounts.eve.signer, "cancel_tao_offer");
+            const event = expectEvent(contract, result, "TaoOfferCancelled");
+            expect(BigInt(event.value.offer_id)).toBe(testOfferId);
+            expect(BigInt(event.value.amount_returned)).toBe(offerAmount);
 
             // Get Eve's balance after cancellation
             const balanceAfter = await getBalance(context.api, accounts.eve.address);
@@ -482,13 +426,7 @@ describe("TAO Offer Operations", () => {
                 }
             });
 
-            const result = await cancelTx.signAndSubmit(accounts.charlie.signer);
-
-            // Should fail because Charlie is not the owner
-            expect(result.ok).toBe(false);
-            const contractsError = result.dispatchError?.value as ContractsError;
-            expect(contractsError.type).toBe("Contracts");
-            expect(contractsError.value.type).toBe("ContractReverted");
+            await submitReverted(cancelTx, accounts.charlie.signer, "cancel_tao_offer non-owner");
 
             // Verify offer still exists
             const offerResult = await contract.query("get_offer", {
@@ -517,13 +455,7 @@ describe("TAO Offer Operations", () => {
                 }
             });
 
-            const result = await cancelTx.signAndSubmit(accounts.charlie.signer);
-
-            // Should fail because offer doesn't exist
-            expect(result.ok).toBe(false);
-            const contractsError = result.dispatchError?.value as ContractsError;
-            expect(contractsError.type).toBe("Contracts");
-            expect(contractsError.value.type).toBe("ContractReverted");
+            await submitReverted(cancelTx, accounts.charlie.signer, "cancel_tao_offer missing offer");
         });
     });
 
@@ -537,22 +469,18 @@ describe("TAO Offer Operations", () => {
                 { account: accounts.dave, amount: taoToRao(20), priceOffsetBps: 200 },    // +2%
                 { account: accounts.eve, amount: taoToRao(15), priceOffsetBps: -300 }     // -3%
             ];
+            const createdOffers: Array<typeof users[number] & { offerId: bigint }> = [];
 
             for (const user of users) {
-                const tx = contract.send("create_tao_offer", {
-                    origin: user.account.address,
-                    value: user.amount,
-                    data: {
-                        netuid,
-                        price_offset_bps: user.priceOffsetBps
-                    }
-                });
-                await tx.signAndSubmit(user.account.signer);
-                await waitForBlocks(context.api, 1);
+                const { offerId } = await createTaoOffer(contract, user.account.signer, user.account.address, {
+                    netuid,
+                    price_offset_bps: user.priceOffsetBps,
+                }, user.amount);
+                createdOffers.push({ ...user, offerId });
             }
 
-            // Query each user's offers
-            for (const user of users) {
+            // Query each user's offers and verify the ID created by this test.
+            for (const user of createdOffers) {
                 const offersResult = await contract.query("get_user_offers", {
                     origin: accounts.alice.address,
                     data: {
@@ -561,30 +489,25 @@ describe("TAO Offer Operations", () => {
                     }
                 });
 
-                expect(offersResult.success).toBe(true);
-                if (offersResult.success) {
-                    expect(offersResult.value.response.length).toBeGreaterThan(0);
-                    console.log(`User ${user.account.address.slice(0, 8)}... has ${offersResult.value.response.length} offers`);
-                }
+                const userOfferIds = queryOk<bigint[]>(offersResult, "get_user_offers");
+                expect(userOfferIds).toContain(user.offerId);
+                console.log(`User ${user.account.address.slice(0, 8)}... includes offer ${user.offerId}`);
             }
         });
 
         it("should return empty array for users with no offers", async () => {
             const { accounts } = context;
 
-            // Bob has created no offers
+            const unusedBuyer = createHotkey().address;
             const offersResult = await contract.query("get_user_offers", {
                 origin: accounts.alice.address,
                 data: {
-                    buyer: accounts.bob.address,
+                    buyer: unusedBuyer,
                     netuid
                 }
             });
 
-            expect(offersResult.success).toBe(true);
-            if (offersResult.success) {
-                expect(offersResult.value.response).toEqual([]);
-            }
+            expect(queryOk<bigint[]>(offersResult, "get_user_offers")).toEqual([]);
         });
 
         it("should correctly retrieve offer details", async () => {
@@ -594,64 +517,38 @@ describe("TAO Offer Operations", () => {
             const offerAmount = taoToRao(42);
             const priceOffsetBps = 1000; // +10% above market
 
-            const tx = contract.send("create_tao_offer", {
-                origin: accounts.charlie.address,
-                value: offerAmount,
-                data: {
-                    netuid,
-                    price_offset_bps: priceOffsetBps
-                }
-            });
+            const { offerId } = await createTaoOffer(contract, accounts.charlie.signer, accounts.charlie.address, {
+                netuid,
+                price_offset_bps: priceOffsetBps,
+            }, offerAmount);
 
-            await tx.signAndSubmit(accounts.charlie.signer);
-            await waitForBlocks(context.api, 2);
-
-            // Get the offer ID
-            const offersResult = await contract.query("get_user_offers", {
+            const offer = queryOk<any>(await contract.query("get_offer", {
                 origin: accounts.alice.address,
                 data: {
+                    netuid,
                     buyer: accounts.charlie.address,
-                    netuid
+                    offer_id: offerId
                 }
+            }), "get_offer");
+
+            expect(offer).toBeDefined();
+            expect(offer.id).toBe(offerId);
+            expect(offer.buyer).toBe(accounts.charlie.address);
+            expect(offer.netuid).toBe(netuid);
+            expect(offer.amount).toBe(offerAmount);
+            expect(offer.price_offset_bps).toBe(priceOffsetBps);
+
+            // Verify fee rate matches contract configuration
+            const feeRateResult = await contract.query("get_fee_rate", {
+                origin: accounts.alice.address,
+                data: {}
             });
 
-            expect(offersResult.success).toBe(true);
-            if (offersResult.success && offersResult.value.response.length > 0) {
-                const offerId = offersResult.value.response[offersResult.value.response.length - 1];
-
-                // Get full offer details
-                const offerResult = await contract.query("get_offer", {
-                    origin: accounts.alice.address,
-                    data: {
-                        netuid,
-                        buyer: accounts.charlie.address,
-                        offer_id: offerId
-                    }
-                });
-
-                expect(offerResult.success).toBe(true);
-                if (offerResult.success && offerResult.value.response) {
-                    const offer = offerResult.value.response;
-
-                    expect(offer.id).toBe(offerId);
-                    expect(offer.buyer).toBe(accounts.charlie.address);
-                    expect(offer.netuid).toBe(netuid);
-                    expect(offer.amount).toBe(offerAmount);
-                    expect(offer.price_offset_bps).toBe(priceOffsetBps);
-
-                    // Verify fee rate matches contract configuration
-                    const feeRateResult = await contract.query("get_fee_rate", {
-                        origin: accounts.alice.address,
-                        data: {}
-                    });
-
-                    if (feeRateResult.success) {
-                        expect(offer.fee_rate).toBe(feeRateResult.value.response);
-                    }
-
-                    console.log(`Offer ${offerId}: ${raoToTao(offer.amount)} TAO at ${bpsToPercentage(offer.price_offset_bps)}% offset from market`);
-                }
+            if (feeRateResult.success) {
+                expect(offer.fee_rate).toBe(feeRateResult.value.response);
             }
+
+            console.log(`Offer ${offerId}: ${raoToTao(offer.amount)} TAO at ${bpsToPercentage(offer.price_offset_bps)}% offset from market`);
         });
     });
 
@@ -663,30 +560,10 @@ describe("TAO Offer Operations", () => {
             const offerTaoAmount = taoToRao(90); // Total TAO to spend
             const priceOffsetBps = MARKET_PRICE; // 0% offset from market
 
-            const offerTx = contract.send("create_tao_offer", {
-                origin: accounts.charlie.address,
-                value: offerTaoAmount,
-                data: {
-                    netuid,
-                    price_offset_bps: priceOffsetBps
-                }
-            });
-
-            await offerTx.signAndSubmit(accounts.charlie.signer);
-            await waitForBlocks(context.api, 2);
-
-            // Get the offer ID
-            const offersResult = await contract.query("get_user_offers", {
-                origin: accounts.alice.address,
-                data: {
-                    buyer: accounts.charlie.address,
-                    netuid
-                }
-            });
-
-            expect(offersResult.success).toBe(true);
-            const offerId = offersResult.success ?
-                offersResult.value.response[offersResult.value.response.length - 1] : 0n;
+            const { offerId } = await createTaoOffer(contract, accounts.charlie.signer, accounts.charlie.address, {
+                netuid,
+                price_offset_bps: priceOffsetBps,
+            }, offerTaoAmount);
 
             // === Fetch market price and calculate actual price with offset ===
             const executedPriceFixed = await getExecutedPriceFixed(context.api, netuid, priceOffsetBps);
@@ -741,21 +618,18 @@ describe("TAO Offer Operations", () => {
                 }
             });
 
-            const result = await takeTx.signAndSubmit(accounts.bob.signer);
+            const result = await submitOk(takeTx, accounts.bob.signer, "take_tao_offer");
 
             console.log("Take TAO offer result:", {
                 ok: result.ok,
                 dispatchError: result.dispatchError,
             });
 
-            expect(result.ok).toBe(true);
-
             // === Verify the TaoOfferTaken event ===
             const events = contract.filterEvents(result.events);
             console.log("Events emitted during transaction:", JSON.stringify(events, bigintReplacer, 2));
 
-            const taoOfferTakenEvent = events.find(e => e.type === 'TaoOfferTaken');
-            expect(taoOfferTakenEvent).toBeDefined();
+            const taoOfferTakenEvent = expectEvent(contract, result, "TaoOfferTaken");
 
             if (taoOfferTakenEvent) {
                 // Verify the event contains expected values
@@ -810,29 +684,10 @@ describe("TAO Offer Operations", () => {
             const { accounts } = context;
 
             // Create an offer from Dave
-            const offerTx = contract.send("create_tao_offer", {
-                origin: accounts.dave.address,
-                value: taoToRao(50),
-                data: {
-                    netuid,
-                    price_offset_bps: MARKET_PRICE
-                }
-            });
-
-            await offerTx.signAndSubmit(accounts.dave.signer);
-            await waitForBlocks(context.api, 2);
-
-            // Get offer ID
-            const offersResult = await contract.query("get_user_offers", {
-                origin: accounts.alice.address,
-                data: {
-                    buyer: accounts.dave.address,
-                    netuid
-                }
-            });
-
-            const offerId = offersResult.success ?
-                offersResult.value.response[offersResult.value.response.length - 1] : 0n;
+            const { offerId } = await createTaoOffer(contract, accounts.dave.signer, accounts.dave.address, {
+                netuid,
+                price_offset_bps: MARKET_PRICE,
+            }, taoToRao(50));
 
             // Charlie tries to take without proxy (check if already has proxy first)
             const hasProxy = await hasProxyPermission(
@@ -852,11 +707,7 @@ describe("TAO Offer Operations", () => {
                     }
                 });
 
-                const result = await takeTx.signAndSubmit(accounts.charlie.signer);
-
-                // Should fail because no proxy is set up
-                expect(result.ok).toBe(false);
-                expect(result.dispatchError?.type).toContain("Module");
+                await submitReverted(takeTx, accounts.charlie.signer, "take_tao_offer without proxy");
             } else {
                 console.log("Charlie already has proxy from previous test run, skipping test");
             }
@@ -867,29 +718,10 @@ describe("TAO Offer Operations", () => {
 
             // Create a large offer that Eve can't fulfill
             const largePriceOffsetBps = MARKET_PRICE;
-            const offerTx = contract.send("create_tao_offer", {
-                origin: accounts.charlie.address,
-                value: taoToRao(100), // Large offer
-                data: {
-                    netuid,
-                    price_offset_bps: largePriceOffsetBps
-                }
-            });
-
-            await offerTx.signAndSubmit(accounts.charlie.signer);
-            await waitForBlocks(context.api, 2);
-
-            // Get offer ID
-            const offersResult = await contract.query("get_user_offers", {
-                origin: accounts.alice.address,
-                data: {
-                    buyer: accounts.charlie.address,
-                    netuid
-                }
-            });
-
-            const offerId = offersResult.success ?
-                offersResult.value.response[offersResult.value.response.length - 1] : 0n;
+            const { offerId } = await createTaoOffer(contract, accounts.charlie.signer, accounts.charlie.address, {
+                netuid,
+                price_offset_bps: largePriceOffsetBps,
+            }, taoToRao(100));
 
             // Calculate required Alpha using executed price
             const executedPriceFixed = await getExecutedPriceFixed(context.api, netuid, largePriceOffsetBps);
@@ -929,13 +761,7 @@ describe("TAO Offer Operations", () => {
                 }
             });
 
-            const result = await takeTx.signAndSubmit(accounts.eve.signer);
-
-            // Should fail with ContractReverted error due to insufficient stake
-            expect(result.ok).toBe(false);
-            const contractsError = result.dispatchError?.value as ContractsError;
-            expect(contractsError.type).toBe("Contracts");
-            expect(contractsError.value.type).toBe("ContractReverted");
+            await submitReverted(takeTx, accounts.eve.signer, "take_tao_offer insufficient stake");
         });
 
         it("should reject taking non-existent offer", async () => {
@@ -963,13 +789,7 @@ describe("TAO Offer Operations", () => {
                 }
             });
 
-            const result = await takeTx.signAndSubmit(accounts.bob.signer);
-
-            // Should fail with ContractReverted because offer doesn't exist
-            expect(result.ok).toBe(false);
-            const contractsError = result.dispatchError?.value as ContractsError;
-            expect(contractsError.type).toBe("Contracts");
-            expect(contractsError.value.type).toBe("ContractReverted");
+            await submitReverted(takeTx, accounts.bob.signer, "take_tao_offer missing offer");
         });
 
         it("should verify stake transfer with tolerance", async () => {
@@ -979,29 +799,10 @@ describe("TAO Offer Operations", () => {
             const offerTaoAmount = taoToRao(75.5); // Intentional decimal for potential rounding
             const priceOffsetBps = 250; // +2.5% above market
 
-            const offerTx = contract.send("create_tao_offer", {
-                origin: accounts.dave.address,
-                value: offerTaoAmount,
-                data: {
-                    netuid,
-                    price_offset_bps: priceOffsetBps
-                }
-            });
-
-            await offerTx.signAndSubmit(accounts.dave.signer);
-            await waitForBlocks(context.api, 2);
-
-            // Get offer ID
-            const offersResult = await contract.query("get_user_offers", {
-                origin: accounts.alice.address,
-                data: {
-                    buyer: accounts.dave.address,
-                    netuid
-                }
-            });
-
-            const offerId = offersResult.success ?
-                offersResult.value.response[offersResult.value.response.length - 1] : 0n;
+            const { offerId } = await createTaoOffer(contract, accounts.dave.signer, accounts.dave.address, {
+                netuid,
+                price_offset_bps: priceOffsetBps,
+            }, offerTaoAmount);
 
             // Calculate expected Alpha amount using executed price
             const executedPriceFixed = await getExecutedPriceFixed(context.api, netuid, priceOffsetBps);
@@ -1037,14 +838,10 @@ describe("TAO Offer Operations", () => {
                 }
             });
 
-            const result = await takeTx.signAndSubmit(accounts.charlie.signer);
-            expect(result.ok).toBe(true);
+            const result = await submitOk(takeTx, accounts.charlie.signer, "take_tao_offer tolerance");
 
             // === Verify the TaoOfferTaken event for tolerance ===
-            const events = contract.filterEvents(result.events);
-            const taoOfferTakenEvent = events.find(e => e.type === 'TaoOfferTaken');
-
-            expect(taoOfferTakenEvent).toBeDefined();
+            const taoOfferTakenEvent = expectEvent(contract, result, "TaoOfferTaken");
 
             if (taoOfferTakenEvent) {
                 const actualAlphaAmount = BigInt(taoOfferTakenEvent.value.alpha_amount);

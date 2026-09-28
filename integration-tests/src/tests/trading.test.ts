@@ -28,6 +28,14 @@ type ContractsError = {
     value: { type: 'ContractReverted', value: undefined }
 }
 
+const PRIMARY_TRADE_ALPHA = taoToRao(0.02);
+const SECONDARY_TRADE_ALPHA = taoToRao(0.015);
+const SMALL_TRADE_ALPHA = taoToRao(0.01);
+const RAPID_TRADE_ALPHA_1 = taoToRao(0.011);
+const RAPID_TRADE_ALPHA_2 = taoToRao(0.012);
+const RAPID_TRADE_ALPHA_3 = taoToRao(0.013);
+const REQUIRED_SELLER_ALPHA = taoToRao(0.05);
+
 describe("Trading Execution", () => {
     let context: TestContext;
     let contract: ReturnType<ContractSdk["getContract"]>;
@@ -51,7 +59,7 @@ describe("Trading Execution", () => {
             feeRateResult.value.response : percentageToFixedPoint(0.5);
 
         // Create a subnet for testing
-        const aliceHotkey = createHotkey("//Alice");
+        const aliceHotkey = createHotkey();
         await fundAccount(context.api, aliceHotkey.address, taoToRao(10), context.accounts.alice.signer);
         netuid = await registerSubnet(context.api, aliceHotkey.address, context.accounts.alice.signer);
         console.log(`Created test subnet with netuid: ${netuid}`);
@@ -91,10 +99,10 @@ describe("Trading Execution", () => {
         }
 
         // Create hotkeys for validators
-        bobHotkey = createHotkey("//Bob");
-        charlieHotkey = createHotkey("//Charlie");
-        daveHotkey = createHotkey("//Dave");
-        eveHotkey = createHotkey("//Eve");
+        bobHotkey = createHotkey();
+        charlieHotkey = createHotkey();
+        daveHotkey = createHotkey();
+        eveHotkey = createHotkey();
 
         // Fund hotkeys for transaction fees
         await fundAccount(context.api, bobHotkey.address, taoToRao(1), context.accounts.alice.signer);
@@ -103,10 +111,10 @@ describe("Trading Execution", () => {
         await fundAccount(context.api, eveHotkey.address, taoToRao(1), context.accounts.alice.signer);
 
         // Register validators with substantial stake for trading
-        await registerValidator(context.api, netuid, bobHotkey.address, context.accounts.bob.signer, taoToRao(200));
-        await registerValidator(context.api, netuid, charlieHotkey.address, context.accounts.charlie.signer, taoToRao(300));
-        await registerValidator(context.api, netuid, daveHotkey.address, context.accounts.dave.signer, taoToRao(150));
-        await registerValidator(context.api, netuid, eveHotkey.address, context.accounts.eve.signer, taoToRao(250));
+        await registerValidator(context.api, netuid, bobHotkey.address, context.accounts.bob.signer, taoToRao(5000), REQUIRED_SELLER_ALPHA);
+        await registerValidator(context.api, netuid, charlieHotkey.address, context.accounts.charlie.signer, taoToRao(5000), REQUIRED_SELLER_ALPHA);
+        await registerValidator(context.api, netuid, eveHotkey.address, context.accounts.eve.signer, taoToRao(5000), REQUIRED_SELLER_ALPHA);
+        await registerValidator(context.api, netuid, daveHotkey.address, context.accounts.dave.signer, taoToRao(5000));
 
         // Fund accounts with TAO for trading
         await fundAccount(context.api, context.accounts.bob.address, taoToRao(500), context.accounts.alice.signer);
@@ -137,8 +145,8 @@ describe("Trading Execution", () => {
         it("should successfully take an Alpha listing with exact TAO payment", async () => {
             const { accounts } = context;
 
-            // === Setup: Bob lists 50 Alpha at market price ===
-            const listAmount = taoToRao(50);
+            // === Setup: Bob lists a small but valid Alpha amount at market price ===
+            const listAmount = PRIMARY_TRADE_ALPHA;
             const priceOffsetBps = MARKET_PRICE; // 0% offset from market
 
             const listTx = contract.send("list_alpha", {
@@ -175,7 +183,7 @@ describe("Trading Execution", () => {
                 contractFeeRate
             );
 
-            console.log(`\nListing: 50 Alpha at ${bpsToPercentage(priceOffsetBps)}% offset from market`);
+            console.log(`\nListing: ${formatStakeAmount(listAmount)} at ${bpsToPercentage(priceOffsetBps)}% offset from market`);
             console.log(`TAO amount: ${raoToTao(taoAmount)} TAO`);
             console.log(`Fee amount: ${raoToTao(feeAmount)} TAO`);
             console.log(`Total required: ${raoToTao(totalRequired)} TAO`);
@@ -273,8 +281,8 @@ describe("Trading Execution", () => {
         it("should successfully take an Alpha listing with non-market price offset", async () => {
             const { accounts } = context;
 
-            // === Setup: Charlie lists 40 Alpha at +5% above market ===
-            const listAmount = taoToRao(40);
+            // === Setup: Charlie lists a small but valid Alpha amount at +5% above market ===
+            const listAmount = SECONDARY_TRADE_ALPHA;
             const priceOffsetBps = 500; // +5% above market
 
             const listTx = contract.send("list_alpha", {
@@ -314,7 +322,7 @@ describe("Trading Execution", () => {
             // Log the price difference vs market price for verification
             const marketPriceFixed = await getExecutedPriceFixed(context.api, netuid, MARKET_PRICE);
 
-            console.log(`\nListing: 40 Alpha at +${bpsToPercentage(priceOffsetBps)}% above market`);
+            console.log(`\nListing: ${formatStakeAmount(listAmount)} at +${bpsToPercentage(priceOffsetBps)}% above market`);
             console.log(`Market price (fixed): ${marketPriceFixed}`);
             console.log(`Executed price (+5%): ${executedPriceFixed}`);
             console.log(`TAO amount: ${raoToTao(taoAmount)} TAO`);
@@ -421,8 +429,8 @@ describe("Trading Execution", () => {
         it("should reject taking listing with incorrect TAO amount", async () => {
             const { accounts } = context;
 
-            // Charlie lists 30 Alpha at market price
-            const listAmount = taoToRao(30);
+            // Charlie lists a small but valid Alpha amount at market price
+            const listAmount = SECONDARY_TRADE_ALPHA;
             const priceOffsetBps = MARKET_PRICE;
 
             const listTx = contract.send("list_alpha", {
@@ -561,9 +569,9 @@ describe("Trading Execution", () => {
 
             // Create multiple listings in succession with different price offsets
             const listings = [
-                { seller: accounts.bob, hotkey: bobHotkey, amount: taoToRao(10), priceOffsetBps: MARKET_PRICE },   // Market price
-                { seller: accounts.charlie, hotkey: charlieHotkey, amount: taoToRao(15), priceOffsetBps: 200 },    // +2%
-                { seller: accounts.eve, hotkey: eveHotkey, amount: taoToRao(20), priceOffsetBps: 500 }             // +5%
+                { seller: accounts.bob, hotkey: bobHotkey, amount: RAPID_TRADE_ALPHA_1, priceOffsetBps: MARKET_PRICE },   // Market price
+                { seller: accounts.charlie, hotkey: charlieHotkey, amount: RAPID_TRADE_ALPHA_2, priceOffsetBps: 200 },    // +2%
+                { seller: accounts.eve, hotkey: eveHotkey, amount: RAPID_TRADE_ALPHA_3, priceOffsetBps: 500 }             // +5%
             ];
 
             const listingIds: bigint[] = [];
@@ -646,7 +654,7 @@ describe("Trading Execution", () => {
             const { accounts } = context;
 
             // Create a second subnet
-            const aliceHotkey2 = createHotkey("//Alice//2");
+            const aliceHotkey2 = createHotkey();
             await fundAccount(context.api, aliceHotkey2.address, taoToRao(10), accounts.alice.signer);
             const netuid2 = await registerSubnet(context.api, aliceHotkey2.address, accounts.alice.signer);
             console.log(`Created second subnet with netuid: ${netuid2}`);
@@ -680,14 +688,14 @@ describe("Trading Execution", () => {
             }
 
             // Register validators on second subnet
-            const bobHotkey2 = createHotkey("//Bob//2");
-            const charlieHotkey2 = createHotkey("//Charlie//2");
+            const bobHotkey2 = createHotkey();
+            const charlieHotkey2 = createHotkey();
 
             await fundAccount(context.api, bobHotkey2.address, taoToRao(1), accounts.alice.signer);
             await fundAccount(context.api, charlieHotkey2.address, taoToRao(1), accounts.alice.signer);
 
-            await registerValidator(context.api, netuid2, bobHotkey2.address, accounts.bob.signer, taoToRao(100));
-            await registerValidator(context.api, netuid2, charlieHotkey2.address, accounts.charlie.signer, taoToRao(100));
+            await registerValidator(context.api, netuid2, bobHotkey2.address, accounts.bob.signer, taoToRao(5000), REQUIRED_SELLER_ALPHA);
+            await registerValidator(context.api, netuid2, charlieHotkey2.address, accounts.charlie.signer, taoToRao(5000));
 
             await waitForBlocks(context.api, 2);
 
@@ -698,7 +706,7 @@ describe("Trading Execution", () => {
                 data: {
                     hotkey: bobHotkey.address,
                     netuid: netuid, // First subnet
-                    amount: taoToRao(20),
+                    amount: PRIMARY_TRADE_ALPHA,
                     price_offset_bps: priceOffsetBps1
                 }
             });
@@ -713,7 +721,7 @@ describe("Trading Execution", () => {
                 data: {
                     hotkey: bobHotkey2.address,
                     netuid: netuid2, // Second subnet
-                    amount: taoToRao(30),
+                    amount: SMALL_TRADE_ALPHA,
                     price_offset_bps: priceOffsetBps2
                 }
             });
@@ -758,7 +766,7 @@ describe("Trading Execution", () => {
                 // Take listing from subnet 1 and verify it doesn't affect subnet 2
                 const executedPriceFixed = await getExecutedPriceFixed(context.api, netuid, priceOffsetBps1);
                 const { totalRequired } = calculateTotalTaoForListing(
-                    taoToRao(20),
+                    PRIMARY_TRADE_ALPHA,
                     executedPriceFixed,
                     contractFeeRate
                 );
@@ -792,6 +800,6 @@ describe("Trading Execution", () => {
                     console.log(`✓ Listing on subnet ${netuid2} still exists after taking listing on subnet ${netuid}`);
                 }
             }
-        });
+        }, 180000);
     });
 });

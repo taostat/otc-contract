@@ -1,6 +1,6 @@
 use crate::types::{LockupListingId, PurchaseId};
 use ink::prelude::vec::Vec;
-use ink::primitives::AccountId;
+use ink::primitives::{AccountId, Hash};
 use otc_shared::{
     AlphaAmount, Balance, BlockAge, BlockNumber, FixedDecimal, NetUid, PauseState, PriceOffsetBps,
     TaoAmount,
@@ -11,12 +11,50 @@ pub struct LockupListingCreated {
     #[ink(topic)]
     pub seller: AccountId,
     pub hotkey: AccountId,
+    pub custody_hotkey: AccountId,
     #[ink(topic)]
     pub netuid: NetUid,
     pub listing_id: LockupListingId,
     pub amount: AlphaAmount,
+    pub subnet_generation: u64,
     pub price_offset_bps: PriceOffsetBps,
     pub lockup_duration: BlockAge,
+}
+
+#[ink::event]
+pub struct ListingHotkeyConsolidated {
+    #[ink(topic)]
+    pub seller: AccountId,
+    #[ink(topic)]
+    pub netuid: NetUid,
+    pub listing_id: LockupListingId,
+    pub old_hotkey: AccountId,
+    pub new_hotkey: AccountId,
+    pub amount: AlphaAmount,
+}
+
+#[ink::event]
+pub struct ListingHotkeyConsolidationFailed {
+    #[ink(topic)]
+    pub seller: AccountId,
+    #[ink(topic)]
+    pub netuid: NetUid,
+    pub listing_id: LockupListingId,
+    pub custody_hotkey: AccountId,
+    pub target_hotkey: AccountId,
+    pub amount: AlphaAmount,
+}
+
+#[ink::event]
+pub struct ListingHotkeySynced {
+    #[ink(topic)]
+    pub seller: AccountId,
+    #[ink(topic)]
+    pub netuid: NetUid,
+    pub listing_id: LockupListingId,
+    pub old_hotkey: AccountId,
+    pub new_hotkey: AccountId,
+    pub amount: AlphaAmount,
 }
 
 #[ink::event]
@@ -30,6 +68,7 @@ pub struct LockupListingTaken {
     pub listing_id: LockupListingId,
     pub purchase_id: PurchaseId,
     pub alpha_amount: AlphaAmount,
+    pub subnet_generation: u64,
     pub tao_amount: TaoAmount,
     pub executed_price: u64,
     pub unlock_block: BlockNumber,
@@ -60,6 +99,56 @@ pub struct LockupListingForceCancelled {
 }
 
 #[ink::event]
+pub struct RiskCancellerUpdated {
+    pub old_canceller: Option<AccountId>,
+    pub new_canceller: Option<AccountId>,
+}
+
+#[ink::event]
+pub struct StaleListingRecoveryPoolOpened {
+    #[ink(topic)]
+    pub netuid: NetUid,
+    pub subnet_generation: u64,
+    pub tao_amount: TaoAmount,
+    pub alpha_amount: AlphaAmount,
+    pub evidence_hash: Hash,
+    pub opened_by: AccountId,
+}
+
+#[ink::event]
+pub struct StaleListingRecoveryPoolIncreased {
+    #[ink(topic)]
+    pub netuid: NetUid,
+    pub subnet_generation: u64,
+    pub additional_tao: TaoAmount,
+    pub tao_remaining: TaoAmount,
+    pub evidence_hash: Hash,
+    pub increased_by: AccountId,
+}
+
+#[ink::event]
+pub struct StaleListingTaoRecovered {
+    #[ink(topic)]
+    pub seller: AccountId,
+    #[ink(topic)]
+    pub initiated_by: AccountId,
+    #[ink(topic)]
+    pub netuid: NetUid,
+    pub listing_id: LockupListingId,
+    pub subnet_generation: u64,
+    pub alpha_amount_closed: AlphaAmount,
+    pub tao_amount: TaoAmount,
+}
+
+#[ink::event]
+pub struct StaleListingRecoveryPoolClosed {
+    #[ink(topic)]
+    pub netuid: NetUid,
+    pub subnet_generation: u64,
+    pub tao_total: TaoAmount,
+}
+
+#[ink::event]
 pub struct LockupListingFullyFilled {
     #[ink(topic)]
     pub seller: AccountId,
@@ -78,6 +167,47 @@ pub struct OwnerUpdated {
 pub struct HotkeyUpdated {
     pub old_hotkey: AccountId,
     pub new_hotkey: AccountId,
+}
+
+#[ink::event]
+pub struct SubnetHotkeyUpdated {
+    #[ink(topic)]
+    pub netuid: NetUid,
+    pub old_hotkey: AccountId,
+    pub new_hotkey: AccountId,
+}
+
+#[ink::event]
+pub struct SubnetGenerationRecorded {
+    #[ink(topic)]
+    pub netuid: NetUid,
+    pub generation: u64,
+}
+
+#[ink::event]
+pub struct EscrowHotkeySynced {
+    #[ink(topic)]
+    pub escrow: AccountId,
+    #[ink(topic)]
+    pub initiated_by: AccountId,
+    #[ink(topic)]
+    pub netuid: NetUid,
+    pub listing_id: LockupListingId,
+    pub purchase_id: PurchaseId,
+    pub old_hotkey: AccountId,
+    pub new_hotkey: AccountId,
+}
+
+#[ink::event]
+pub struct EscrowClosedPruned {
+    #[ink(topic)]
+    pub escrow: AccountId,
+    #[ink(topic)]
+    pub initiated_by: AccountId,
+    #[ink(topic)]
+    pub netuid: NetUid,
+    pub listing_id: LockupListingId,
+    pub purchase_id: PurchaseId,
 }
 
 #[ink::event]

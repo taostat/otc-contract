@@ -1,12 +1,12 @@
 {
   "source": {
-    "hash": "0x87cc54ee5c791f6a53f71051b708db91f03cf88851229aade04ad184d2f79461",
+    "hash": "0x10fab67f2c6e6d5808bdfbefda5805b10ee9bb3c6b7dd83c4fc90449bc80d9a9",
     "language": "ink! 5.1.1",
-    "compiler": "rustc 1.90.0",
+    "compiler": "rustc 1.89.0",
     "build_info": {
       "build_mode": "Release",
       "cargo_contract_version": "5.0.3",
-      "rust_toolchain": "stable-x86_64-unknown-linux-gnu",
+      "rust_toolchain": "stable-aarch64-apple-darwin",
       "wasm_opt_settings": {
         "keep_debug_symbols": false,
         "optimization_passes": "Z"
@@ -49,7 +49,7 @@
               "displayName": [
                 "Hash"
               ],
-              "type": 28
+              "type": 35
             }
           },
           {
@@ -107,7 +107,7 @@
             "ink_primitives",
             "ConstructorResult"
           ],
-          "type": 31
+          "type": 48
         },
         "selector": "0x9bae9d5e"
       }
@@ -136,13 +136,13 @@
         "displayName": [
           "ChainExtension"
         ],
-        "type": 54
+        "type": 76
       },
       "hash": {
         "displayName": [
           "Hash"
         ],
-        "type": 28
+        "type": 35
       },
       "maxEventTopics": 4,
       "staticBufferSize": 16384,
@@ -160,6 +160,17 @@
             "docs": [],
             "indexed": true,
             "label": "buyer",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "initiated_by",
             "type": {
               "displayName": [
                 "AccountId"
@@ -192,6 +203,17 @@
           {
             "docs": [],
             "indexed": false,
+            "label": "subnet_generation",
+            "type": {
+              "displayName": [
+                "u64"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
             "label": "unlock_block",
             "type": {
               "displayName": [
@@ -206,7 +228,244 @@
         ],
         "label": "AlphaClaimed",
         "module_path": "alpha_lockup::alpha_lockup",
-        "signature_topic": "0x44c0ae0ad4da5c6882f76f2cbaf42503102959c574c0aaba20a9b89bb63e443b"
+        "signature_topic": "0x09022ba94c2cb485d33cf778052349244328df54743cad5ea131040b94e6a492"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "current_beneficiary",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "proposed_beneficiary",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          }
+        ],
+        "docs": [
+          "Event emitted when a beneficiary transfer is proposed"
+        ],
+        "label": "BeneficiaryTransferProposed",
+        "module_path": "alpha_lockup::alpha_lockup",
+        "signature_topic": "0xada657f31949bc09094cd7d7a69ee4cb140e5b8aacf1eda51ef4ad42dbf39fb2"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "beneficiary",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "cancelled_beneficiary",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          }
+        ],
+        "docs": [
+          "Event emitted when a beneficiary transfer proposal is cancelled"
+        ],
+        "label": "BeneficiaryTransferCancelled",
+        "module_path": "alpha_lockup::alpha_lockup",
+        "signature_topic": "0x52d7c6a35cd48b128ba09be3e832c882230eb6e2705bff3b73079ac278ea9554"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "old_beneficiary",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "new_beneficiary",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          }
+        ],
+        "docs": [
+          "Event emitted when a beneficiary transfer is accepted"
+        ],
+        "label": "BeneficiaryTransferred",
+        "module_path": "alpha_lockup::alpha_lockup",
+        "signature_topic": "0xa8b0cfcc2435f490ef0ce7be9c36a671cb2f6fc0610e7c89be015b735509db24"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "beneficiary",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "initiated_by",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "netuid",
+            "type": {
+              "displayName": [
+                "NetUid"
+              ],
+              "type": 1
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "amount_recovered",
+            "type": {
+              "displayName": [
+                "Balance"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "subnet_generation",
+            "type": {
+              "displayName": [
+                "u64"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "unlock_block",
+            "type": {
+              "displayName": [
+                "BlockNumber"
+              ],
+              "type": 6
+            }
+          }
+        ],
+        "docs": [
+          "Event emitted when deregistration TAO is recovered"
+        ],
+        "label": "TaoRecovered",
+        "module_path": "alpha_lockup::alpha_lockup",
+        "signature_topic": "0xf54736afab8d8fc1d97fac05869e9de73b3c24e58395e5167494d2f06ff865f9"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "old_hotkey",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "new_hotkey",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "initiated_by",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "netuid",
+            "type": {
+              "displayName": [
+                "NetUid"
+              ],
+              "type": 1
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "new_hotkey_stake",
+            "type": {
+              "displayName": [
+                "AlphaAmount"
+              ],
+              "type": 0
+            }
+          }
+        ],
+        "docs": [
+          "Event emitted when the parent syncs an escrow after a validator hotkey swap"
+        ],
+        "label": "HotkeySynced",
+        "module_path": "alpha_lockup::alpha_lockup",
+        "signature_topic": "0x479ca9676e17f21f7011284f0ac637ed8f56cd62205c6e36f1d087c620815248"
       },
       {
         "args": [
@@ -225,6 +484,17 @@
             "docs": [],
             "indexed": false,
             "label": "hotkey",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "custody_hotkey",
             "type": {
               "displayName": [
                 "AccountId"
@@ -268,6 +538,17 @@
           {
             "docs": [],
             "indexed": false,
+            "label": "subnet_generation",
+            "type": {
+              "displayName": [
+                "u64"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
             "label": "price_offset_bps",
             "type": {
               "displayName": [
@@ -291,7 +572,229 @@
         "docs": [],
         "label": "LockupListingCreated",
         "module_path": "lockup_listings::events",
-        "signature_topic": "0xa6162777f239dd978dcfff259249c00c52463c6fde73a2b4fa9902973d179724"
+        "signature_topic": "0x3576b1382b0833f7e252853c40e569504a8f208d536dc33092a33a42db3ba461"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "seller",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "netuid",
+            "type": {
+              "displayName": [
+                "NetUid"
+              ],
+              "type": 1
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "listing_id",
+            "type": {
+              "displayName": [
+                "LockupListingId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "old_hotkey",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "new_hotkey",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "amount",
+            "type": {
+              "displayName": [
+                "AlphaAmount"
+              ],
+              "type": 0
+            }
+          }
+        ],
+        "docs": [],
+        "label": "ListingHotkeyConsolidated",
+        "module_path": "lockup_listings::events",
+        "signature_topic": "0x8e2a8f5652e866bf08bfe4ec94be81ca6a9dcd62897213d2b670881ddf7e48f0"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "seller",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "netuid",
+            "type": {
+              "displayName": [
+                "NetUid"
+              ],
+              "type": 1
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "listing_id",
+            "type": {
+              "displayName": [
+                "LockupListingId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "custody_hotkey",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "target_hotkey",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "amount",
+            "type": {
+              "displayName": [
+                "AlphaAmount"
+              ],
+              "type": 0
+            }
+          }
+        ],
+        "docs": [],
+        "label": "ListingHotkeyConsolidationFailed",
+        "module_path": "lockup_listings::events",
+        "signature_topic": "0x7f38dbaab37b7bf8741a5824328715ef816b220629e8ba60c0c77739ff866c02"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "seller",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "netuid",
+            "type": {
+              "displayName": [
+                "NetUid"
+              ],
+              "type": 1
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "listing_id",
+            "type": {
+              "displayName": [
+                "LockupListingId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "old_hotkey",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "new_hotkey",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "amount",
+            "type": {
+              "displayName": [
+                "AlphaAmount"
+              ],
+              "type": 0
+            }
+          }
+        ],
+        "docs": [],
+        "label": "ListingHotkeySynced",
+        "module_path": "lockup_listings::events",
+        "signature_topic": "0xc0e40583ae65ade98177c18b3d656cd66476440f43f574c4910ad835609375c9"
       },
       {
         "args": [
@@ -364,6 +867,17 @@
           {
             "docs": [],
             "indexed": false,
+            "label": "subnet_generation",
+            "type": {
+              "displayName": [
+                "u64"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
             "label": "tao_amount",
             "type": {
               "displayName": [
@@ -420,7 +934,7 @@
         "docs": [],
         "label": "LockupListingTaken",
         "module_path": "lockup_listings::events",
-        "signature_topic": "0xd45da49e445afbb29a0aa0b16cc74df4da9b3eaf49589e4ec24372c09dae093e"
+        "signature_topic": "0x0b02b22592392b3b5b25c8677e7dfe450f1f14f4b292ab825cbc1b4a19edba48"
       },
       {
         "args": [
@@ -541,6 +1055,310 @@
         "args": [
           {
             "docs": [],
+            "indexed": false,
+            "label": "old_canceller",
+            "type": {
+              "displayName": [
+                "Option"
+              ],
+              "type": 47
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "new_canceller",
+            "type": {
+              "displayName": [
+                "Option"
+              ],
+              "type": 47
+            }
+          }
+        ],
+        "docs": [],
+        "label": "RiskCancellerUpdated",
+        "module_path": "lockup_listings::events",
+        "signature_topic": "0x1ff8cc76803b621a116926556ec9dbcd4d9ee4e6a00549127f17725bedaa4272"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "netuid",
+            "type": {
+              "displayName": [
+                "NetUid"
+              ],
+              "type": 1
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "subnet_generation",
+            "type": {
+              "displayName": [
+                "u64"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "tao_amount",
+            "type": {
+              "displayName": [
+                "TaoAmount"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "alpha_amount",
+            "type": {
+              "displayName": [
+                "AlphaAmount"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "evidence_hash",
+            "type": {
+              "displayName": [
+                "Hash"
+              ],
+              "type": 35
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "opened_by",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          }
+        ],
+        "docs": [],
+        "label": "StaleListingRecoveryPoolOpened",
+        "module_path": "lockup_listings::events",
+        "signature_topic": "0xf05ad28451ff278d519927c3dcb8ac9fcc5484942114b21c58b57e183b11d4a4"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "netuid",
+            "type": {
+              "displayName": [
+                "NetUid"
+              ],
+              "type": 1
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "subnet_generation",
+            "type": {
+              "displayName": [
+                "u64"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "additional_tao",
+            "type": {
+              "displayName": [
+                "TaoAmount"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "tao_remaining",
+            "type": {
+              "displayName": [
+                "TaoAmount"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "evidence_hash",
+            "type": {
+              "displayName": [
+                "Hash"
+              ],
+              "type": 35
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "increased_by",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          }
+        ],
+        "docs": [],
+        "label": "StaleListingRecoveryPoolIncreased",
+        "module_path": "lockup_listings::events",
+        "signature_topic": "0x907a1e227bb2cc72071609bddefde68c137acc52ffb1958f2e58e27c582fda1f"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "seller",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "initiated_by",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "netuid",
+            "type": {
+              "displayName": [
+                "NetUid"
+              ],
+              "type": 1
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "listing_id",
+            "type": {
+              "displayName": [
+                "LockupListingId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "subnet_generation",
+            "type": {
+              "displayName": [
+                "u64"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "alpha_amount_closed",
+            "type": {
+              "displayName": [
+                "AlphaAmount"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "tao_amount",
+            "type": {
+              "displayName": [
+                "TaoAmount"
+              ],
+              "type": 0
+            }
+          }
+        ],
+        "docs": [],
+        "label": "StaleListingTaoRecovered",
+        "module_path": "lockup_listings::events",
+        "signature_topic": "0x8fa28e973205593b78f7f2a71a7ecef542b52e7593b2de5854ad7e9210da5fe7"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "netuid",
+            "type": {
+              "displayName": [
+                "NetUid"
+              ],
+              "type": 1
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "subnet_generation",
+            "type": {
+              "displayName": [
+                "u64"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "tao_total",
+            "type": {
+              "displayName": [
+                "TaoAmount"
+              ],
+              "type": 0
+            }
+          }
+        ],
+        "docs": [],
+        "label": "StaleListingRecoveryPoolClosed",
+        "module_path": "lockup_listings::events",
+        "signature_topic": "0x9c918636e8ddfb5ee47e9b3f87432049263d869ba37fe65adbe72f0456d4906a"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
             "indexed": true,
             "label": "seller",
             "type": {
@@ -637,6 +1455,225 @@
         "label": "HotkeyUpdated",
         "module_path": "lockup_listings::events",
         "signature_topic": "0xdfc870f986c576e855ae2f9cd8216f0846ee69a5848ff85e77a87a1bf01657a7"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "netuid",
+            "type": {
+              "displayName": [
+                "NetUid"
+              ],
+              "type": 1
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "old_hotkey",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "new_hotkey",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          }
+        ],
+        "docs": [],
+        "label": "SubnetHotkeyUpdated",
+        "module_path": "lockup_listings::events",
+        "signature_topic": "0x4e19df3fe994acaa607dccd6e783e34920fca82ebc48132b2576ce8c7fcc3ee7"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "netuid",
+            "type": {
+              "displayName": [
+                "NetUid"
+              ],
+              "type": 1
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "generation",
+            "type": {
+              "displayName": [
+                "u64"
+              ],
+              "type": 0
+            }
+          }
+        ],
+        "docs": [],
+        "label": "SubnetGenerationRecorded",
+        "module_path": "lockup_listings::events",
+        "signature_topic": "0x4aa7f4728e9c8eaf17659415e1ab0b2644dc715ba040c05588b0612a8240829a"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "escrow",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "initiated_by",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "netuid",
+            "type": {
+              "displayName": [
+                "NetUid"
+              ],
+              "type": 1
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "listing_id",
+            "type": {
+              "displayName": [
+                "LockupListingId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "purchase_id",
+            "type": {
+              "displayName": [
+                "PurchaseId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "old_hotkey",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "new_hotkey",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          }
+        ],
+        "docs": [],
+        "label": "EscrowHotkeySynced",
+        "module_path": "lockup_listings::events",
+        "signature_topic": "0x500fadfee3222a1136e8733322b64e739f864ecbcf3b6d74d8950b3719dd9705"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "escrow",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "initiated_by",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "netuid",
+            "type": {
+              "displayName": [
+                "NetUid"
+              ],
+              "type": 1
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "listing_id",
+            "type": {
+              "displayName": [
+                "LockupListingId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "purchase_id",
+            "type": {
+              "displayName": [
+                "PurchaseId"
+              ],
+              "type": 0
+            }
+          }
+        ],
+        "docs": [],
+        "label": "EscrowClosedPruned",
+        "module_path": "lockup_listings::events",
+        "signature_topic": "0x2be543c332c5c6121eb15c4ee3bd061abf0a81acc6007621f72d31fb5be94bdc"
       },
       {
         "args": [
@@ -816,7 +1853,7 @@
               "displayName": [
                 "PauseState"
               ],
-              "type": 30
+              "type": 46
             }
           },
           {
@@ -827,7 +1864,7 @@
               "displayName": [
                 "Vec"
               ],
-              "type": 53
+              "type": 75
             }
           },
           {
@@ -872,7 +1909,7 @@
         "ink",
         "LangError"
       ],
-      "type": 32
+      "type": 49
     },
     "messages": [
       {
@@ -936,7 +1973,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 33
+          "type": 50
         },
         "selector": "0xb290fc1b"
       },
@@ -992,7 +2029,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 33
+          "type": 50
         },
         "selector": "0x7d7740ce"
       },
@@ -1029,7 +2066,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 36
+          "type": 53
         },
         "selector": "0xb1661137"
       },
@@ -1075,7 +2112,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 36
+          "type": 53
         },
         "selector": "0x1d925930"
       },
@@ -1119,7 +2156,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 38
+          "type": 55
         },
         "selector": "0xfd34226e"
       },
@@ -1154,7 +2191,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 40
+          "type": 57
         },
         "selector": "0x24011d31"
       },
@@ -1198,7 +2235,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 41
+          "type": 58
         },
         "selector": "0x5d715835"
       },
@@ -1224,9 +2261,130 @@
             "ink",
             "MessageResult"
           ],
-          "type": 43
+          "type": 59
         },
         "selector": "0x13e16c4f"
+      },
+      {
+        "args": [
+          {
+            "label": "netuid",
+            "type": {
+              "displayName": [
+                "NetUid"
+              ],
+              "type": 1
+            }
+          },
+          {
+            "label": "hotkey",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          }
+        ],
+        "default": false,
+        "docs": [],
+        "label": "get_reserved_alpha_for_hotkey",
+        "mutates": false,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 59
+        },
+        "selector": "0x15408f08"
+      },
+      {
+        "args": [
+          {
+            "label": "netuid",
+            "type": {
+              "displayName": [
+                "NetUid"
+              ],
+              "type": 1
+            }
+          },
+          {
+            "label": "subnet_generation",
+            "type": {
+              "displayName": [
+                "u64"
+              ],
+              "type": 0
+            }
+          }
+        ],
+        "default": false,
+        "docs": [],
+        "label": "get_reserved_alpha_for_generation",
+        "mutates": false,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 59
+        },
+        "selector": "0x933bd42b"
+      },
+      {
+        "args": [
+          {
+            "label": "netuid",
+            "type": {
+              "displayName": [
+                "NetUid"
+              ],
+              "type": 1
+            }
+          },
+          {
+            "label": "subnet_generation",
+            "type": {
+              "displayName": [
+                "u64"
+              ],
+              "type": 0
+            }
+          }
+        ],
+        "default": false,
+        "docs": [],
+        "label": "get_stale_listing_recovery_pool",
+        "mutates": false,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 60
+        },
+        "selector": "0x2e07cf27"
+      },
+      {
+        "args": [],
+        "default": false,
+        "docs": [],
+        "label": "get_reserved_recovery_tao",
+        "mutates": false,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 59
+        },
+        "selector": "0xa7f5c41b"
       },
       {
         "args": [],
@@ -1240,9 +2398,25 @@
             "ink",
             "MessageResult"
           ],
-          "type": 44
+          "type": 62
         },
         "selector": "0x07fcd0b1"
+      },
+      {
+        "args": [],
+        "default": false,
+        "docs": [],
+        "label": "get_risk_canceller",
+        "mutates": false,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 58
+        },
+        "selector": "0xc0a62fd8"
       },
       {
         "args": [],
@@ -1256,9 +2430,61 @@
             "ink",
             "MessageResult"
           ],
-          "type": 44
+          "type": 62
         },
         "selector": "0xead097fa"
+      },
+      {
+        "args": [
+          {
+            "label": "netuid",
+            "type": {
+              "displayName": [
+                "NetUid"
+              ],
+              "type": 1
+            }
+          }
+        ],
+        "default": false,
+        "docs": [],
+        "label": "get_active_hotkey_for_subnet",
+        "mutates": false,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 62
+        },
+        "selector": "0x48202589"
+      },
+      {
+        "args": [
+          {
+            "label": "netuid",
+            "type": {
+              "displayName": [
+                "NetUid"
+              ],
+              "type": 1
+            }
+          }
+        ],
+        "default": false,
+        "docs": [],
+        "label": "get_current_subnet_registration_state",
+        "mutates": false,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 63
+        },
+        "selector": "0x63dc0d7f"
       },
       {
         "args": [],
@@ -1272,7 +2498,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 45
+          "type": 67
         },
         "selector": "0xcf886b41"
       },
@@ -1288,7 +2514,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 46
+          "type": 68
         },
         "selector": "0xc4a5f3c5"
       },
@@ -1304,7 +2530,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 43
+          "type": 59
         },
         "selector": "0xba57e251"
       },
@@ -1320,7 +2546,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 43
+          "type": 59
         },
         "selector": "0x45499253"
       },
@@ -1336,7 +2562,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 47
+          "type": 69
         },
         "selector": "0x911c1941"
       },
@@ -1352,7 +2578,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 49
+          "type": 71
         },
         "selector": "0x05478dce"
       },
@@ -1408,9 +2634,103 @@
             "ink",
             "MessageResult"
           ],
-          "type": 50
+          "type": 72
         },
         "selector": "0x17c66825"
+      },
+      {
+        "args": [
+          {
+            "label": "netuid",
+            "type": {
+              "displayName": [
+                "NetUid"
+              ],
+              "type": 1
+            }
+          },
+          {
+            "label": "seller",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "label": "listing_id",
+            "type": {
+              "displayName": [
+                "LockupListingId"
+              ],
+              "type": 0
+            }
+          }
+        ],
+        "default": false,
+        "docs": [
+          " Best-effort consolidation of an open listing to the active company hotkey.",
+          " Anyone can trigger this for backend or frontend maintenance."
+        ],
+        "label": "consolidate_listing_hotkey",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 53
+        },
+        "selector": "0x2f82f30f"
+      },
+      {
+        "args": [
+          {
+            "label": "netuid",
+            "type": {
+              "displayName": [
+                "NetUid"
+              ],
+              "type": 1
+            }
+          },
+          {
+            "label": "listing_id",
+            "type": {
+              "displayName": [
+                "LockupListingId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "label": "purchase_id",
+            "type": {
+              "displayName": [
+                "PurchaseId"
+              ],
+              "type": 0
+            }
+          }
+        ],
+        "default": false,
+        "docs": [
+          " Sync a purchased escrow directly to the current active hotkey after an OTC hotkey swap.",
+          " Anyone can trigger this, but the parent controls the active hotkey registry."
+        ],
+        "label": "sync_escrow_hotkey",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 53
+        },
+        "selector": "0x1296701e"
       },
       {
         "args": [
@@ -1434,9 +2754,201 @@
             "ink",
             "MessageResult"
           ],
-          "type": 36
+          "type": 53
         },
         "selector": "0x22a8dc8f"
+      },
+      {
+        "args": [
+          {
+            "label": "account",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          }
+        ],
+        "default": false,
+        "docs": [],
+        "label": "set_risk_canceller",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 53
+        },
+        "selector": "0x97b6609d"
+      },
+      {
+        "args": [],
+        "default": false,
+        "docs": [],
+        "label": "clear_risk_canceller",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 53
+        },
+        "selector": "0xa45e0aee"
+      },
+      {
+        "args": [
+          {
+            "label": "netuid",
+            "type": {
+              "displayName": [
+                "NetUid"
+              ],
+              "type": 1
+            }
+          },
+          {
+            "label": "subnet_generation",
+            "type": {
+              "displayName": [
+                "u64"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "label": "tao_amount",
+            "type": {
+              "displayName": [
+                "TaoAmount"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "label": "evidence_hash",
+            "type": {
+              "displayName": [
+                "Hash"
+              ],
+              "type": 35
+            }
+          }
+        ],
+        "default": false,
+        "docs": [],
+        "label": "open_stale_listing_recovery_pool",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 53
+        },
+        "selector": "0x5dbb2365"
+      },
+      {
+        "args": [
+          {
+            "label": "netuid",
+            "type": {
+              "displayName": [
+                "NetUid"
+              ],
+              "type": 1
+            }
+          },
+          {
+            "label": "subnet_generation",
+            "type": {
+              "displayName": [
+                "u64"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "label": "additional_tao",
+            "type": {
+              "displayName": [
+                "TaoAmount"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "label": "evidence_hash",
+            "type": {
+              "displayName": [
+                "Hash"
+              ],
+              "type": 35
+            }
+          }
+        ],
+        "default": false,
+        "docs": [],
+        "label": "increase_stale_listing_recovery_pool",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 53
+        },
+        "selector": "0x527d5535"
+      },
+      {
+        "args": [
+          {
+            "label": "netuid",
+            "type": {
+              "displayName": [
+                "NetUid"
+              ],
+              "type": 1
+            }
+          },
+          {
+            "label": "seller",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "label": "listing_id",
+            "type": {
+              "displayName": [
+                "LockupListingId"
+              ],
+              "type": 0
+            }
+          }
+        ],
+        "default": false,
+        "docs": [],
+        "label": "recover_stale_listing_tao",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 53
+        },
+        "selector": "0xf145c45c"
       },
       {
         "args": [
@@ -1460,9 +2972,44 @@
             "ink",
             "MessageResult"
           ],
-          "type": 36
+          "type": 53
         },
         "selector": "0x512fb5ad"
+      },
+      {
+        "args": [
+          {
+            "label": "netuid",
+            "type": {
+              "displayName": [
+                "NetUid"
+              ],
+              "type": 1
+            }
+          },
+          {
+            "label": "new_hotkey",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          }
+        ],
+        "default": false,
+        "docs": [],
+        "label": "update_hotkey_for_subnet",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 53
+        },
+        "selector": "0x96274958"
       },
       {
         "args": [
@@ -1486,7 +3033,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 36
+          "type": 53
         },
         "selector": "0x8a268b92"
       },
@@ -1498,7 +3045,7 @@
               "displayName": [
                 "Hash"
               ],
-              "type": 28
+              "type": 35
             }
           }
         ],
@@ -1512,7 +3059,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 36
+          "type": 53
         },
         "selector": "0x8d2a8c76"
       },
@@ -1538,7 +3085,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 36
+          "type": 53
         },
         "selector": "0x2a3d49c5"
       },
@@ -1564,7 +3111,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 36
+          "type": 53
         },
         "selector": "0xe93137fe"
       },
@@ -1599,7 +3146,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 36
+          "type": 53
         },
         "selector": "0x2b605cea"
       },
@@ -1611,7 +3158,7 @@
               "displayName": [
                 "Vec"
               ],
-              "type": 53
+              "type": 75
             }
           }
         ],
@@ -1625,7 +3172,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 36
+          "type": 53
         },
         "selector": "0x2a25fd77"
       },
@@ -1637,7 +3184,7 @@
               "displayName": [
                 "Vec"
               ],
-              "type": 53
+              "type": 75
             }
           }
         ],
@@ -1651,7 +3198,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 36
+          "type": 53
         },
         "selector": "0x114a6b2a"
       },
@@ -1667,7 +3214,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 36
+          "type": 53
         },
         "selector": "0xc3a8f39e"
       },
@@ -1679,12 +3226,21 @@
               "displayName": [
                 "Hash"
               ],
-              "type": 28
+              "type": 35
             }
           }
         ],
         "default": false,
-        "docs": [],
+        "docs": [
+          " Replace the contract code in place (storage is preserved as-is).",
+          "",
+          " WARNING: this version changed the storage layout relative to earlier deployments:",
+          " `LockupListing` gained mid-struct `custody_hotkey` and `subnet_generation` fields,",
+          " and root storage gained `risk_canceller`, `reserved_alpha_by_generation`,",
+          " `stale_listing_recovery_pools`, and `reserved_recovery_tao`. Running `set_code`",
+          " over the old layout would corrupt stored state. Upgrade only between",
+          " layout-compatible versions, or ship an explicit migration."
+        ],
         "label": "set_code",
         "mutates": true,
         "payable": false,
@@ -1693,7 +3249,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 36
+          "type": 53
         },
         "selector": "0x694fb50f"
       }
@@ -1754,6 +3310,24 @@
                             }
                           },
                           "name": "remaining_amount"
+                        },
+                        {
+                          "layout": {
+                            "leaf": {
+                              "key": "0x5774c0bb",
+                              "ty": 2
+                            }
+                          },
+                          "name": "custody_hotkey"
+                        },
+                        {
+                          "layout": {
+                            "leaf": {
+                              "key": "0x5774c0bb",
+                              "ty": 0
+                            }
+                          },
+                          "name": "subnet_generation"
                         },
                         {
                           "layout": {
@@ -1858,6 +3432,36 @@
             },
             {
               "layout": {
+                "root": {
+                  "layout": {
+                    "leaf": {
+                      "key": "0x74170689",
+                      "ty": 0
+                    }
+                  },
+                  "root_key": "0x74170689",
+                  "ty": 28
+                }
+              },
+              "name": "reserved_alpha_by_hotkey"
+            },
+            {
+              "layout": {
+                "root": {
+                  "layout": {
+                    "leaf": {
+                      "key": "0x96329753",
+                      "ty": 2
+                    }
+                  },
+                  "root_key": "0x96329753",
+                  "ty": 32
+                }
+              },
+              "name": "active_hotkeys"
+            },
+            {
+              "layout": {
                 "leaf": {
                   "key": "0x00000000",
                   "ty": 0
@@ -1896,7 +3500,7 @@
               "layout": {
                 "leaf": {
                   "key": "0x00000000",
-                  "ty": 28
+                  "ty": 35
                 }
               },
               "name": "escrow_code_hash"
@@ -1978,13 +3582,172 @@
                 }
               },
               "name": "pause_state"
+            },
+            {
+              "layout": {
+                "enum": {
+                  "dispatchKey": "0x00000000",
+                  "name": "Option",
+                  "variants": {
+                    "0": {
+                      "fields": [],
+                      "name": "None"
+                    },
+                    "1": {
+                      "fields": [
+                        {
+                          "layout": {
+                            "leaf": {
+                              "key": "0x00000000",
+                              "ty": 2
+                            }
+                          },
+                          "name": "0"
+                        }
+                      ],
+                      "name": "Some"
+                    }
+                  }
+                }
+              },
+              "name": "risk_canceller"
+            },
+            {
+              "layout": {
+                "root": {
+                  "layout": {
+                    "leaf": {
+                      "key": "0x6f89dec9",
+                      "ty": 0
+                    }
+                  },
+                  "root_key": "0x6f89dec9",
+                  "ty": 36
+                }
+              },
+              "name": "reserved_alpha_by_generation"
+            },
+            {
+              "layout": {
+                "root": {
+                  "layout": {
+                    "struct": {
+                      "fields": [
+                        {
+                          "layout": {
+                            "leaf": {
+                              "key": "0xdaa57141",
+                              "ty": 1
+                            }
+                          },
+                          "name": "netuid"
+                        },
+                        {
+                          "layout": {
+                            "leaf": {
+                              "key": "0xdaa57141",
+                              "ty": 0
+                            }
+                          },
+                          "name": "subnet_generation"
+                        },
+                        {
+                          "layout": {
+                            "leaf": {
+                              "key": "0xdaa57141",
+                              "ty": 0
+                            }
+                          },
+                          "name": "tao_total"
+                        },
+                        {
+                          "layout": {
+                            "leaf": {
+                              "key": "0xdaa57141",
+                              "ty": 0
+                            }
+                          },
+                          "name": "tao_remaining"
+                        },
+                        {
+                          "layout": {
+                            "leaf": {
+                              "key": "0xdaa57141",
+                              "ty": 0
+                            }
+                          },
+                          "name": "alpha_total"
+                        },
+                        {
+                          "layout": {
+                            "leaf": {
+                              "key": "0xdaa57141",
+                              "ty": 0
+                            }
+                          },
+                          "name": "alpha_remaining"
+                        },
+                        {
+                          "layout": {
+                            "leaf": {
+                              "key": "0xdaa57141",
+                              "ty": 35
+                            }
+                          },
+                          "name": "evidence_hash"
+                        },
+                        {
+                          "layout": {
+                            "leaf": {
+                              "key": "0xdaa57141",
+                              "ty": 2
+                            }
+                          },
+                          "name": "opened_by"
+                        },
+                        {
+                          "layout": {
+                            "leaf": {
+                              "key": "0xdaa57141",
+                              "ty": 6
+                            }
+                          },
+                          "name": "opened_at"
+                        },
+                        {
+                          "layout": {
+                            "leaf": {
+                              "key": "0xdaa57141",
+                              "ty": 40
+                            }
+                          },
+                          "name": "closed"
+                        }
+                      ],
+                      "name": "StaleListingRecoveryPool"
+                    }
+                  },
+                  "root_key": "0xdaa57141",
+                  "ty": 41
+                }
+              },
+              "name": "stale_listing_recovery_pools"
+            },
+            {
+              "layout": {
+                "leaf": {
+                  "key": "0x00000000",
+                  "ty": 0
+                }
+              },
+              "name": "reserved_recovery_tao"
             }
           ],
           "name": "LockupListingsContract"
         }
       },
       "root_key": "0x00000000",
-      "ty": 29
+      "ty": 45
     }
   },
   "types": [
@@ -2137,6 +3900,16 @@
                 "name": "remaining_amount",
                 "type": 0,
                 "typeName": "AlphaAmount"
+              },
+              {
+                "name": "custody_hotkey",
+                "type": 2,
+                "typeName": "AccountId"
+              },
+              {
+                "name": "subnet_generation",
+                "type": 0,
+                "typeName": "u64"
               },
               {
                 "name": "price_offset_bps",
@@ -2499,6 +4272,157 @@
       "id": 28,
       "type": {
         "def": {
+          "composite": {}
+        },
+        "params": [
+          {
+            "name": "K",
+            "type": 29
+          },
+          {
+            "name": "V",
+            "type": 0
+          },
+          {
+            "name": "KeyType",
+            "type": 30
+          }
+        ],
+        "path": [
+          "ink_storage",
+          "lazy",
+          "mapping",
+          "Mapping"
+        ]
+      }
+    },
+    {
+      "id": 29,
+      "type": {
+        "def": {
+          "tuple": [
+            1,
+            2
+          ]
+        }
+      }
+    },
+    {
+      "id": 30,
+      "type": {
+        "def": {
+          "composite": {}
+        },
+        "params": [
+          {
+            "name": "L",
+            "type": 13
+          },
+          {
+            "name": "R",
+            "type": 31
+          }
+        ],
+        "path": [
+          "ink_storage_traits",
+          "impls",
+          "ResolverKey"
+        ]
+      }
+    },
+    {
+      "id": 31,
+      "type": {
+        "def": {
+          "composite": {}
+        },
+        "params": [
+          {
+            "name": "ParentKey",
+            "type": 15
+          }
+        ],
+        "path": [
+          "ink_storage_traits",
+          "impls",
+          "ManualKey"
+        ]
+      }
+    },
+    {
+      "id": 32,
+      "type": {
+        "def": {
+          "composite": {}
+        },
+        "params": [
+          {
+            "name": "K",
+            "type": 1
+          },
+          {
+            "name": "V",
+            "type": 2
+          },
+          {
+            "name": "KeyType",
+            "type": 33
+          }
+        ],
+        "path": [
+          "ink_storage",
+          "lazy",
+          "mapping",
+          "Mapping"
+        ]
+      }
+    },
+    {
+      "id": 33,
+      "type": {
+        "def": {
+          "composite": {}
+        },
+        "params": [
+          {
+            "name": "L",
+            "type": 13
+          },
+          {
+            "name": "R",
+            "type": 34
+          }
+        ],
+        "path": [
+          "ink_storage_traits",
+          "impls",
+          "ResolverKey"
+        ]
+      }
+    },
+    {
+      "id": 34,
+      "type": {
+        "def": {
+          "composite": {}
+        },
+        "params": [
+          {
+            "name": "ParentKey",
+            "type": 15
+          }
+        ],
+        "path": [
+          "ink_storage_traits",
+          "impls",
+          "ManualKey"
+        ]
+      }
+    },
+    {
+      "id": 35,
+      "type": {
+        "def": {
           "composite": {
             "fields": [
               {
@@ -2516,7 +4440,232 @@
       }
     },
     {
-      "id": 29,
+      "id": 36,
+      "type": {
+        "def": {
+          "composite": {}
+        },
+        "params": [
+          {
+            "name": "K",
+            "type": 37
+          },
+          {
+            "name": "V",
+            "type": 0
+          },
+          {
+            "name": "KeyType",
+            "type": 38
+          }
+        ],
+        "path": [
+          "ink_storage",
+          "lazy",
+          "mapping",
+          "Mapping"
+        ]
+      }
+    },
+    {
+      "id": 37,
+      "type": {
+        "def": {
+          "tuple": [
+            1,
+            0
+          ]
+        }
+      }
+    },
+    {
+      "id": 38,
+      "type": {
+        "def": {
+          "composite": {}
+        },
+        "params": [
+          {
+            "name": "L",
+            "type": 13
+          },
+          {
+            "name": "R",
+            "type": 39
+          }
+        ],
+        "path": [
+          "ink_storage_traits",
+          "impls",
+          "ResolverKey"
+        ]
+      }
+    },
+    {
+      "id": 39,
+      "type": {
+        "def": {
+          "composite": {}
+        },
+        "params": [
+          {
+            "name": "ParentKey",
+            "type": 15
+          }
+        ],
+        "path": [
+          "ink_storage_traits",
+          "impls",
+          "ManualKey"
+        ]
+      }
+    },
+    {
+      "id": 40,
+      "type": {
+        "def": {
+          "primitive": "bool"
+        }
+      }
+    },
+    {
+      "id": 41,
+      "type": {
+        "def": {
+          "composite": {}
+        },
+        "params": [
+          {
+            "name": "K",
+            "type": 37
+          },
+          {
+            "name": "V",
+            "type": 42
+          },
+          {
+            "name": "KeyType",
+            "type": 43
+          }
+        ],
+        "path": [
+          "ink_storage",
+          "lazy",
+          "mapping",
+          "Mapping"
+        ]
+      }
+    },
+    {
+      "id": 42,
+      "type": {
+        "def": {
+          "composite": {
+            "fields": [
+              {
+                "name": "netuid",
+                "type": 1,
+                "typeName": "NetUid"
+              },
+              {
+                "name": "subnet_generation",
+                "type": 0,
+                "typeName": "u64"
+              },
+              {
+                "name": "tao_total",
+                "type": 0,
+                "typeName": "TaoAmount"
+              },
+              {
+                "name": "tao_remaining",
+                "type": 0,
+                "typeName": "TaoAmount"
+              },
+              {
+                "name": "alpha_total",
+                "type": 0,
+                "typeName": "AlphaAmount"
+              },
+              {
+                "name": "alpha_remaining",
+                "type": 0,
+                "typeName": "AlphaAmount"
+              },
+              {
+                "name": "evidence_hash",
+                "type": 35,
+                "typeName": "Hash"
+              },
+              {
+                "name": "opened_by",
+                "type": 2,
+                "typeName": "AccountId"
+              },
+              {
+                "name": "opened_at",
+                "type": 6,
+                "typeName": "BlockNumber"
+              },
+              {
+                "name": "closed",
+                "type": 40,
+                "typeName": "bool"
+              }
+            ]
+          }
+        },
+        "path": [
+          "lockup_listings",
+          "types",
+          "StaleListingRecoveryPool"
+        ]
+      }
+    },
+    {
+      "id": 43,
+      "type": {
+        "def": {
+          "composite": {}
+        },
+        "params": [
+          {
+            "name": "L",
+            "type": 13
+          },
+          {
+            "name": "R",
+            "type": 44
+          }
+        ],
+        "path": [
+          "ink_storage_traits",
+          "impls",
+          "ResolverKey"
+        ]
+      }
+    },
+    {
+      "id": 44,
+      "type": {
+        "def": {
+          "composite": {}
+        },
+        "params": [
+          {
+            "name": "ParentKey",
+            "type": 15
+          }
+        ],
+        "path": [
+          "ink_storage_traits",
+          "impls",
+          "ManualKey"
+        ]
+      }
+    },
+    {
+      "id": 45,
       "type": {
         "def": {
           "composite": {
@@ -2542,6 +4691,16 @@
                 "typeName": "<ReservedAlphaMapping as::ink::storage::traits::AutoStorableHint<::\nink::storage::traits::ManualKey<4210811253u32, ()>,>>::Type"
               },
               {
+                "name": "reserved_alpha_by_hotkey",
+                "type": 28,
+                "typeName": "<ReservedAlphaByHotkeyMapping as::ink::storage::traits::\nAutoStorableHint<::ink::storage::traits::ManualKey<2298877812u32,\n()>,>>::Type"
+              },
+              {
+                "name": "active_hotkeys",
+                "type": 32,
+                "typeName": "<ActiveHotkeysMapping as::ink::storage::traits::AutoStorableHint<::\nink::storage::traits::ManualKey<1402417814u32, ()>,>>::Type"
+              },
+              {
                 "name": "next_listing_id",
                 "type": 0,
                 "typeName": "<LockupListingId as::ink::storage::traits::AutoStorableHint<::ink\n::storage::traits::ManualKey<3892111097u32, ()>,>>::Type"
@@ -2563,7 +4722,7 @@
               },
               {
                 "name": "escrow_code_hash",
-                "type": 28,
+                "type": 35,
                 "typeName": "<Hash as::ink::storage::traits::AutoStorableHint<::ink::storage\n::traits::ManualKey<1178659921u32, ()>,>>::Type"
               },
               {
@@ -2593,8 +4752,28 @@
               },
               {
                 "name": "pause_state",
-                "type": 30,
+                "type": 46,
                 "typeName": "<PauseState as::ink::storage::traits::AutoStorableHint<::ink::\nstorage::traits::ManualKey<1127546716u32, ()>,>>::Type"
+              },
+              {
+                "name": "risk_canceller",
+                "type": 47,
+                "typeName": "<Option<AccountId> as::ink::storage::traits::AutoStorableHint<::\nink::storage::traits::ManualKey<1047228304u32, ()>,>>::Type"
+              },
+              {
+                "name": "reserved_alpha_by_generation",
+                "type": 36,
+                "typeName": "<ReservedAlphaByGenerationMapping as::ink::storage::traits::\nAutoStorableHint<::ink::storage::traits::ManualKey<3386804591u32,\n()>,>>::Type"
+              },
+              {
+                "name": "stale_listing_recovery_pools",
+                "type": 41,
+                "typeName": "<StaleListingRecoveryPoolsMapping as::ink::storage::traits::\nAutoStorableHint<::ink::storage::traits::ManualKey<1097967066u32,\n()>,>>::Type"
+              },
+              {
+                "name": "reserved_recovery_tao",
+                "type": 0,
+                "typeName": "<TaoAmount as::ink::storage::traits::AutoStorableHint<::ink::\nstorage::traits::ManualKey<3493097583u32, ()>,>>::Type"
               }
             ]
           }
@@ -2607,7 +4786,7 @@
       }
     },
     {
-      "id": 30,
+      "id": 46,
       "type": {
         "def": {
           "variant": {
@@ -2635,7 +4814,40 @@
       }
     },
     {
-      "id": 31,
+      "id": 47,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "index": 0,
+                "name": "None"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 2
+                  }
+                ],
+                "index": 1,
+                "name": "Some"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 2
+          }
+        ],
+        "path": [
+          "Option"
+        ]
+      }
+    },
+    {
+      "id": 48,
       "type": {
         "def": {
           "variant": {
@@ -2652,7 +4864,7 @@
               {
                 "fields": [
                   {
-                    "type": 32
+                    "type": 49
                   }
                 ],
                 "index": 1,
@@ -2668,7 +4880,7 @@
           },
           {
             "name": "E",
-            "type": 32
+            "type": 49
           }
         ],
         "path": [
@@ -2677,7 +4889,7 @@
       }
     },
     {
-      "id": 32,
+      "id": 49,
       "type": {
         "def": {
           "variant": {
@@ -2696,7 +4908,7 @@
       }
     },
     {
-      "id": 33,
+      "id": 50,
       "type": {
         "def": {
           "variant": {
@@ -2704,7 +4916,7 @@
               {
                 "fields": [
                   {
-                    "type": 34
+                    "type": 51
                   }
                 ],
                 "index": 0,
@@ -2713,7 +4925,7 @@
               {
                 "fields": [
                   {
-                    "type": 32
+                    "type": 49
                   }
                 ],
                 "index": 1,
@@ -2725,11 +4937,11 @@
         "params": [
           {
             "name": "T",
-            "type": 34
+            "type": 51
           },
           {
             "name": "E",
-            "type": 32
+            "type": 49
           }
         ],
         "path": [
@@ -2738,7 +4950,7 @@
       }
     },
     {
-      "id": 34,
+      "id": 51,
       "type": {
         "def": {
           "variant": {
@@ -2755,7 +4967,7 @@
               {
                 "fields": [
                   {
-                    "type": 35
+                    "type": 52
                   }
                 ],
                 "index": 1,
@@ -2771,7 +4983,7 @@
           },
           {
             "name": "E",
-            "type": 35
+            "type": 52
           }
         ],
         "path": [
@@ -2780,7 +4992,7 @@
       }
     },
     {
-      "id": 35,
+      "id": 52,
       "type": {
         "def": {
           "variant": {
@@ -2872,6 +5084,66 @@
               {
                 "index": 21,
                 "name": "AmountBelowMinimumStake"
+              },
+              {
+                "index": 22,
+                "name": "EscrowNotFound"
+              },
+              {
+                "index": 23,
+                "name": "InvalidHotkey"
+              },
+              {
+                "index": 24,
+                "name": "EscrowSyncFailed"
+              },
+              {
+                "index": 25,
+                "name": "SubnetRegistrationQueryFailed"
+              },
+              {
+                "index": 26,
+                "name": "SubnetNotFound"
+              },
+              {
+                "index": 27,
+                "name": "InvalidSubnetGeneration"
+              },
+              {
+                "index": 28,
+                "name": "SubnetGenerationMismatch"
+              },
+              {
+                "index": 29,
+                "name": "StakeUnavailable"
+              },
+              {
+                "index": 30,
+                "name": "RecoveryPoolAlreadyExists"
+              },
+              {
+                "index": 31,
+                "name": "RecoveryPoolNotFound"
+              },
+              {
+                "index": 32,
+                "name": "RecoveryPoolClosed"
+              },
+              {
+                "index": 33,
+                "name": "RecoveryPoolNotStale"
+              },
+              {
+                "index": 34,
+                "name": "NoRecoverableAlpha"
+              },
+              {
+                "index": 35,
+                "name": "InsufficientUnreservedTao"
+              },
+              {
+                "index": 36,
+                "name": "RecoveryPayoutTooSmall"
               }
             ]
           }
@@ -2884,7 +5156,7 @@
       }
     },
     {
-      "id": 36,
+      "id": 53,
       "type": {
         "def": {
           "variant": {
@@ -2892,7 +5164,7 @@
               {
                 "fields": [
                   {
-                    "type": 37
+                    "type": 54
                   }
                 ],
                 "index": 0,
@@ -2901,7 +5173,7 @@
               {
                 "fields": [
                   {
-                    "type": 32
+                    "type": 49
                   }
                 ],
                 "index": 1,
@@ -2913,11 +5185,11 @@
         "params": [
           {
             "name": "T",
-            "type": 37
+            "type": 54
           },
           {
             "name": "E",
-            "type": 32
+            "type": 49
           }
         ],
         "path": [
@@ -2926,7 +5198,7 @@
       }
     },
     {
-      "id": 37,
+      "id": 54,
       "type": {
         "def": {
           "variant": {
@@ -2943,7 +5215,7 @@
               {
                 "fields": [
                   {
-                    "type": 35
+                    "type": 52
                   }
                 ],
                 "index": 1,
@@ -2959,7 +5231,7 @@
           },
           {
             "name": "E",
-            "type": 35
+            "type": 52
           }
         ],
         "path": [
@@ -2968,7 +5240,7 @@
       }
     },
     {
-      "id": 38,
+      "id": 55,
       "type": {
         "def": {
           "variant": {
@@ -2976,7 +5248,7 @@
               {
                 "fields": [
                   {
-                    "type": 39
+                    "type": 56
                   }
                 ],
                 "index": 0,
@@ -2985,7 +5257,7 @@
               {
                 "fields": [
                   {
-                    "type": 32
+                    "type": 49
                   }
                 ],
                 "index": 1,
@@ -2997,11 +5269,11 @@
         "params": [
           {
             "name": "T",
-            "type": 39
+            "type": 56
           },
           {
             "name": "E",
-            "type": 32
+            "type": 49
           }
         ],
         "path": [
@@ -3010,7 +5282,7 @@
       }
     },
     {
-      "id": 39,
+      "id": 56,
       "type": {
         "def": {
           "variant": {
@@ -3043,7 +5315,7 @@
       }
     },
     {
-      "id": 40,
+      "id": 57,
       "type": {
         "def": {
           "variant": {
@@ -3060,7 +5332,7 @@
               {
                 "fields": [
                   {
-                    "type": 32
+                    "type": 49
                   }
                 ],
                 "index": 1,
@@ -3076,7 +5348,7 @@
           },
           {
             "name": "E",
-            "type": 32
+            "type": 49
           }
         ],
         "path": [
@@ -3085,7 +5357,7 @@
       }
     },
     {
-      "id": 41,
+      "id": 58,
       "type": {
         "def": {
           "variant": {
@@ -3093,7 +5365,7 @@
               {
                 "fields": [
                   {
-                    "type": 42
+                    "type": 47
                   }
                 ],
                 "index": 0,
@@ -3102,7 +5374,7 @@
               {
                 "fields": [
                   {
-                    "type": 32
+                    "type": 49
                   }
                 ],
                 "index": 1,
@@ -3114,11 +5386,11 @@
         "params": [
           {
             "name": "T",
-            "type": 42
+            "type": 47
           },
           {
             "name": "E",
-            "type": 32
+            "type": 49
           }
         ],
         "path": [
@@ -3127,40 +5399,7 @@
       }
     },
     {
-      "id": 42,
-      "type": {
-        "def": {
-          "variant": {
-            "variants": [
-              {
-                "index": 0,
-                "name": "None"
-              },
-              {
-                "fields": [
-                  {
-                    "type": 2
-                  }
-                ],
-                "index": 1,
-                "name": "Some"
-              }
-            ]
-          }
-        },
-        "params": [
-          {
-            "name": "T",
-            "type": 2
-          }
-        ],
-        "path": [
-          "Option"
-        ]
-      }
-    },
-    {
-      "id": 43,
+      "id": 59,
       "type": {
         "def": {
           "variant": {
@@ -3177,7 +5416,7 @@
               {
                 "fields": [
                   {
-                    "type": 32
+                    "type": 49
                   }
                 ],
                 "index": 1,
@@ -3193,7 +5432,7 @@
           },
           {
             "name": "E",
-            "type": 32
+            "type": 49
           }
         ],
         "path": [
@@ -3202,7 +5441,82 @@
       }
     },
     {
-      "id": 44,
+      "id": 60,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 61
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 49
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 61
+          },
+          {
+            "name": "E",
+            "type": 49
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 61,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "index": 0,
+                "name": "None"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 42
+                  }
+                ],
+                "index": 1,
+                "name": "Some"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 42
+          }
+        ],
+        "path": [
+          "Option"
+        ]
+      }
+    },
+    {
+      "id": 62,
       "type": {
         "def": {
           "variant": {
@@ -3219,7 +5533,7 @@
               {
                 "fields": [
                   {
-                    "type": 32
+                    "type": 49
                   }
                 ],
                 "index": 1,
@@ -3235,7 +5549,7 @@
           },
           {
             "name": "E",
-            "type": 32
+            "type": 49
           }
         ],
         "path": [
@@ -3244,7 +5558,142 @@
       }
     },
     {
-      "id": 45,
+      "id": 63,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 64
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 49
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 64
+          },
+          {
+            "name": "E",
+            "type": 49
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 64,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 65
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 52
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 65
+          },
+          {
+            "name": "E",
+            "type": 52
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 65,
+      "type": {
+        "def": {
+          "composite": {
+            "fields": [
+              {
+                "name": "netuid",
+                "type": 66,
+                "typeName": "RuntimeNetUid"
+              },
+              {
+                "name": "exists",
+                "type": 40,
+                "typeName": "bool"
+              },
+              {
+                "name": "registered_subnet_counter",
+                "type": 0,
+                "typeName": "u64"
+              }
+            ]
+          }
+        },
+        "path": [
+          "otc_shared",
+          "chain_extension",
+          "SubnetRegistrationState"
+        ]
+      }
+    },
+    {
+      "id": 66,
+      "type": {
+        "def": {
+          "composite": {
+            "fields": [
+              {
+                "type": 1,
+                "typeName": "u16"
+              }
+            ]
+          }
+        },
+        "path": [
+          "otc_shared",
+          "runtime",
+          "NetUid"
+        ]
+      }
+    },
+    {
+      "id": 67,
       "type": {
         "def": {
           "variant": {
@@ -3261,7 +5710,7 @@
               {
                 "fields": [
                   {
-                    "type": 32
+                    "type": 49
                   }
                 ],
                 "index": 1,
@@ -3277,7 +5726,7 @@
           },
           {
             "name": "E",
-            "type": 32
+            "type": 49
           }
         ],
         "path": [
@@ -3286,7 +5735,7 @@
       }
     },
     {
-      "id": 46,
+      "id": 68,
       "type": {
         "def": {
           "variant": {
@@ -3294,7 +5743,7 @@
               {
                 "fields": [
                   {
-                    "type": 28
+                    "type": 35
                   }
                 ],
                 "index": 0,
@@ -3303,7 +5752,7 @@
               {
                 "fields": [
                   {
-                    "type": 32
+                    "type": 49
                   }
                 ],
                 "index": 1,
@@ -3315,11 +5764,11 @@
         "params": [
           {
             "name": "T",
-            "type": 28
+            "type": 35
           },
           {
             "name": "E",
-            "type": 32
+            "type": 49
           }
         ],
         "path": [
@@ -3328,7 +5777,7 @@
       }
     },
     {
-      "id": 47,
+      "id": 69,
       "type": {
         "def": {
           "variant": {
@@ -3336,7 +5785,7 @@
               {
                 "fields": [
                   {
-                    "type": 48
+                    "type": 70
                   }
                 ],
                 "index": 0,
@@ -3345,7 +5794,7 @@
               {
                 "fields": [
                   {
-                    "type": 32
+                    "type": 49
                   }
                 ],
                 "index": 1,
@@ -3357,11 +5806,11 @@
         "params": [
           {
             "name": "T",
-            "type": 48
+            "type": 70
           },
           {
             "name": "E",
-            "type": 32
+            "type": 49
           }
         ],
         "path": [
@@ -3370,7 +5819,7 @@
       }
     },
     {
-      "id": 48,
+      "id": 70,
       "type": {
         "def": {
           "tuple": [
@@ -3381,7 +5830,7 @@
       }
     },
     {
-      "id": 49,
+      "id": 71,
       "type": {
         "def": {
           "variant": {
@@ -3389,7 +5838,7 @@
               {
                 "fields": [
                   {
-                    "type": 30
+                    "type": 46
                   }
                 ],
                 "index": 0,
@@ -3398,7 +5847,7 @@
               {
                 "fields": [
                   {
-                    "type": 32
+                    "type": 49
                   }
                 ],
                 "index": 1,
@@ -3410,11 +5859,11 @@
         "params": [
           {
             "name": "T",
-            "type": 30
+            "type": 46
           },
           {
             "name": "E",
-            "type": 32
+            "type": 49
           }
         ],
         "path": [
@@ -3423,7 +5872,7 @@
       }
     },
     {
-      "id": 50,
+      "id": 72,
       "type": {
         "def": {
           "variant": {
@@ -3431,7 +5880,7 @@
               {
                 "fields": [
                   {
-                    "type": 51
+                    "type": 73
                   }
                 ],
                 "index": 0,
@@ -3440,7 +5889,7 @@
               {
                 "fields": [
                   {
-                    "type": 32
+                    "type": 49
                   }
                 ],
                 "index": 1,
@@ -3452,11 +5901,11 @@
         "params": [
           {
             "name": "T",
-            "type": 51
+            "type": 73
           },
           {
             "name": "E",
-            "type": 32
+            "type": 49
           }
         ],
         "path": [
@@ -3465,26 +5914,26 @@
       }
     },
     {
-      "id": 51,
+      "id": 73,
       "type": {
         "def": {
           "variant": {
             "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 74
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
               {
                 "fields": [
                   {
                     "type": 52
                   }
                 ],
-                "index": 0,
-                "name": "Ok"
-              },
-              {
-                "fields": [
-                  {
-                    "type": 35
-                  }
-                ],
                 "index": 1,
                 "name": "Err"
               }
@@ -3494,11 +5943,11 @@
         "params": [
           {
             "name": "T",
-            "type": 52
+            "type": 74
           },
           {
             "name": "E",
-            "type": 35
+            "type": 52
           }
         ],
         "path": [
@@ -3507,7 +5956,7 @@
       }
     },
     {
-      "id": 52,
+      "id": 74,
       "type": {
         "def": {
           "tuple": [
@@ -3519,7 +5968,7 @@
       }
     },
     {
-      "id": 53,
+      "id": 75,
       "type": {
         "def": {
           "sequence": {
@@ -3529,7 +5978,7 @@
       }
     },
     {
-      "id": 54,
+      "id": 76,
       "type": {
         "def": {
           "variant": {}

@@ -44,7 +44,7 @@ describe("OTC Contract Deployment", () => {
         });
         expect(hotkeyResult.success).toBe(true);
         if (hotkeyResult.success) {
-            expect(hotkeyResult.value.response).toBe(accounts.alice.address);
+            expect(hotkeyResult.value.response).toBe(accounts.eve.address);
         }
 
 
@@ -74,7 +74,7 @@ describe("OTC Contract Deployment", () => {
         expect(minListingAmountResult.success).toBe(true);
 
         if (minListingAmountResult.success) {
-            expect(minListingAmountResult.value.response).toBe(1_000_000_000n); // 1 Alpha in rao
+            expect(minListingAmountResult.value.response).toBe(2_000_000n);
         }
 
         // Test get_min_offer_amount()

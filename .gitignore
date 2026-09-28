@@ -9,5 +9,5 @@
 
 # Integration test cache files
 integration-tests/.contract-address
-integration-tests/.lockup-listings-address
-integration-tests/.alpha-lockup-code-hash
+integration-tests/.lockup-listings-address-runtime-subnet-generation
+integration-tests/.alpha-lockup-code-hash-runtime-subnet-generation

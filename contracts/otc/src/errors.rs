@@ -59,4 +59,6 @@ pub enum Error {
     InvalidPriceOffset,
     /// Insufficient payment (buyer sent less TAO than required)
     InsufficientPayment,
+    /// Alpha is currently unavailable because of conviction locks
+    StakeUnavailable,
 }
