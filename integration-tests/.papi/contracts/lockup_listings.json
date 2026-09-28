@@ -1,12 +1,12 @@
 {
   "source": {
-    "hash": "0x87cc54ee5c791f6a53f71051b708db91f03cf88851229aade04ad184d2f79461",
+    "hash": "0xe56f0c870b3bc0f0bb00025c14775fc2bfd1354a6907b73561e9394c9992b792",
     "language": "ink! 5.1.1",
-    "compiler": "rustc 1.90.0",
+    "compiler": "rustc 1.89.0",
     "build_info": {
       "build_mode": "Release",
       "cargo_contract_version": "5.0.3",
-      "rust_toolchain": "stable-x86_64-unknown-linux-gnu",
+      "rust_toolchain": "stable-aarch64-apple-darwin",
       "wasm_opt_settings": {
         "keep_debug_symbols": false,
         "optimization_passes": "Z"
@@ -170,6 +170,17 @@
           {
             "docs": [],
             "indexed": true,
+            "label": "initiated_by",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
             "label": "netuid",
             "type": {
               "displayName": [
@@ -206,7 +217,103 @@
         ],
         "label": "AlphaClaimed",
         "module_path": "alpha_lockup::alpha_lockup",
-        "signature_topic": "0x44c0ae0ad4da5c6882f76f2cbaf42503102959c574c0aaba20a9b89bb63e443b"
+        "signature_topic": "0x00308cd914543c346285779c8a4ee80bb7ead360ab6f3cf078804769e99b8bcd"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "current_beneficiary",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "proposed_beneficiary",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          }
+        ],
+        "docs": [
+          "Event emitted when a beneficiary transfer is proposed"
+        ],
+        "label": "BeneficiaryTransferProposed",
+        "module_path": "alpha_lockup::alpha_lockup",
+        "signature_topic": "0xada657f31949bc09094cd7d7a69ee4cb140e5b8aacf1eda51ef4ad42dbf39fb2"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "beneficiary",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "cancelled_beneficiary",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          }
+        ],
+        "docs": [
+          "Event emitted when a beneficiary transfer proposal is cancelled"
+        ],
+        "label": "BeneficiaryTransferCancelled",
+        "module_path": "alpha_lockup::alpha_lockup",
+        "signature_topic": "0x52d7c6a35cd48b128ba09be3e832c882230eb6e2705bff3b73079ac278ea9554"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "old_beneficiary",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "new_beneficiary",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          }
+        ],
+        "docs": [
+          "Event emitted when a beneficiary transfer is accepted"
+        ],
+        "label": "BeneficiaryTransferred",
+        "module_path": "alpha_lockup::alpha_lockup",
+        "signature_topic": "0xa8b0cfcc2435f490ef0ce7be9c36a671cb2f6fc0610e7c89be015b735509db24"
       },
       {
         "args": [

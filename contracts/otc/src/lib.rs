@@ -21,14 +21,10 @@ mod otc_contract {
     use fixed::types::U64F64;
     use ink::prelude::{boxed::Box, vec::Vec};
     use otc_shared::{
-        AlphaAmount, AlphaCurrency, BlockAge, FixedDecimal, NetUid, PauseState, PriceOffsetBps,
-        ProxyCall, RuntimeCall, SubtensorCall, TaoAmount,
+        stake_delta_verified, AlphaAmount, AlphaCurrency, BlockAge, FixedDecimal, NetUid,
+        PauseState, PriceOffsetBps, ProxyCall, RuntimeCall, SubtensorCall, TaoAmount,
     };
     use sp_runtime::MultiAddress;
-
-    /// Tolerance for stake transfer verification (in rao)
-    /// Accounts for potential rounding or micro-fees in Subtensor pallet
-    const TRANSFER_TOLERANCE: u64 = 10;
 
     /// Maximum number of active listings a user can maintain per subnet
     const MAX_LISTINGS_PER_USER_PER_NETUID: usize = 25;
@@ -134,6 +130,12 @@ mod otc_contract {
                 Ok(None) => Ok(0),
                 Err(_) => Err(Error::StakeQueryFailed),
             }
+        }
+
+        /// A transfer that completed but moved the wrong amount must revert the whole
+        /// call, including the transfer itself, rather than leave accounting skewed.
+        fn trap_stake_transfer_not_verified() -> ! {
+            panic!("post-transfer stake verification failed")
         }
 
         fn reserved_alpha_for(&self, netuid: NetUid) -> AlphaAmount {
@@ -491,16 +493,10 @@ mod otc_contract {
             let seller_decrease = seller_stake_before.saturating_sub(seller_stake_after);
             let contract_increase = contract_stake_after.saturating_sub(contract_stake_before);
 
-            // Verify transfer with tolerance for rounding/fees
-            // Allow up to TRANSFER_TOLERANCE less than expected
-            let seller_decrease_ok = seller_decrease >= amount.saturating_sub(TRANSFER_TOLERANCE)
-                && seller_decrease <= amount;
-            let contract_increase_ok = contract_increase
-                >= amount.saturating_sub(TRANSFER_TOLERANCE)
-                && contract_increase <= amount;
-
-            if !seller_decrease_ok || !contract_increase_ok {
-                return Err(Error::StakeTransferNotVerified);
+            if !stake_delta_verified(seller_decrease, amount)
+                || !stake_delta_verified(contract_increase, amount)
+            {
+                Self::trap_stake_transfer_not_verified();
             }
 
             self.increase_reserved_alpha(netuid, amount)?;
@@ -874,13 +870,11 @@ mod otc_contract {
             let contract_stake_after =
                 self.get_stake_amount(self.env().account_id(), self.hotkey, netuid)?;
             let contract_decrease = contract_stake_before.saturating_sub(contract_stake_after);
-            let contract_decrease_ok = contract_decrease
-                >= listing.amount.saturating_sub(TRANSFER_TOLERANCE)
-                && contract_decrease <= listing.amount;
-
-            if contract_decrease_ok {
-                self.decrease_reserved_alpha(netuid, listing.amount)?;
+            if !stake_delta_verified(contract_decrease, listing.amount) {
+                Self::trap_stake_transfer_not_verified();
             }
+
+            self.decrease_reserved_alpha(netuid, listing.amount)?;
 
             // Transfer TAO to seller (minus fee)
             self.env()
@@ -943,11 +937,8 @@ mod otc_contract {
                 self.get_stake_amount(contract_coldkey, self.hotkey, netuid)?;
             let contract_decrease = contract_stake_before.saturating_sub(contract_stake_after);
 
-            let decrease_ok = contract_decrease >= claimable.saturating_sub(TRANSFER_TOLERANCE)
-                && contract_decrease <= claimable;
-
-            if !decrease_ok {
-                return Err(Error::StakeTransferNotVerified);
+            if !stake_delta_verified(contract_decrease, claimable) {
+                Self::trap_stake_transfer_not_verified();
             }
 
             self.env().emit_event(DividendsClaimed {
@@ -1036,17 +1027,10 @@ mod otc_contract {
             let seller_decrease = seller_stake_before.saturating_sub(seller_stake_after);
             let buyer_increase = buyer_stake_after.saturating_sub(buyer_stake_before);
 
-            // Verify transfer with tolerance for rounding/fees
-            // Allow up to TRANSFER_TOLERANCE less than expected
-            let seller_decrease_ok = seller_decrease
-                >= alpha_amount.saturating_sub(TRANSFER_TOLERANCE)
-                && seller_decrease <= alpha_amount;
-            let buyer_increase_ok = buyer_increase
-                >= alpha_amount.saturating_sub(TRANSFER_TOLERANCE)
-                && buyer_increase <= alpha_amount;
-
-            if !seller_decrease_ok || !buyer_increase_ok {
-                return Err(Error::StakeTransferNotVerified);
+            if !stake_delta_verified(seller_decrease, alpha_amount)
+                || !stake_delta_verified(buyer_increase, alpha_amount)
+            {
+                Self::trap_stake_transfer_not_verified();
             }
 
             self.tao_offers.remove((netuid, buyer, offer_id));
@@ -1193,13 +1177,11 @@ mod otc_contract {
             let contract_stake_after =
                 self.get_stake_amount(contract_coldkey, self.hotkey, netuid)?;
             let contract_decrease = contract_stake_before.saturating_sub(contract_stake_after);
-            let contract_decrease_ok = contract_decrease
-                >= listing.amount.saturating_sub(TRANSFER_TOLERANCE)
-                && contract_decrease <= listing.amount;
-
-            if contract_decrease_ok {
-                self.decrease_reserved_alpha(netuid, listing.amount)?;
+            if !stake_delta_verified(contract_decrease, listing.amount) {
+                Self::trap_stake_transfer_not_verified();
             }
+
+            self.decrease_reserved_alpha(netuid, listing.amount)?;
 
             if forced {
                 self.env().emit_event(AlphaListingForceCancelled {

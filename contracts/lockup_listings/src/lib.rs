@@ -18,13 +18,10 @@ mod lockup_listings {
     use fixed::types::U64F64;
     use ink::prelude::{boxed::Box, vec::Vec};
     use otc_shared::{
-        AlphaAmount, AlphaCurrency, BlockAge, FixedDecimal, NetUid, PauseState, PriceOffsetBps,
-        ProxyCall, RuntimeCall, SubtensorCall, TaoAmount,
+        stake_delta_verified, AlphaAmount, AlphaCurrency, BlockAge, FixedDecimal, NetUid,
+        PauseState, PriceOffsetBps, ProxyCall, RuntimeCall, SubtensorCall, TaoAmount,
     };
     use sp_runtime::MultiAddress;
-
-    /// Tolerance for stake transfer verification (in rao)
-    const TRANSFER_TOLERANCE: u64 = 10;
 
     /// Maximum number of active lockup listings a user can maintain per subnet
     const MAX_LISTINGS_PER_USER_PER_NETUID: usize = 25;
@@ -194,14 +191,10 @@ mod lockup_listings {
             let seller_decrease = seller_stake_before.saturating_sub(seller_stake_after);
             let contract_increase = contract_stake_after.saturating_sub(contract_stake_before);
 
-            let seller_decrease_ok = seller_decrease >= amount.saturating_sub(TRANSFER_TOLERANCE)
-                && seller_decrease <= amount;
-            let contract_increase_ok = contract_increase
-                >= amount.saturating_sub(TRANSFER_TOLERANCE)
-                && contract_increase <= amount;
-
-            if !seller_decrease_ok || !contract_increase_ok {
-                return Err(Error::StakeTransferNotVerified);
+            if !stake_delta_verified(seller_decrease, amount)
+                || !stake_delta_verified(contract_increase, amount)
+            {
+                Self::trap_stake_transfer_not_verified();
             }
 
             self.increase_reserved_alpha(netuid, amount)?;
@@ -756,6 +749,12 @@ mod lockup_listings {
                 Ok(None) => Ok(0),
                 Err(_) => Err(Error::StakeQueryFailed),
             }
+        }
+
+        /// A transfer that completed but moved the wrong amount must revert the whole
+        /// call, including the transfer itself, rather than leave accounting skewed.
+        fn trap_stake_transfer_not_verified() -> ! {
+            panic!("post-transfer stake verification failed")
         }
 
         fn reserved_alpha_for(&self, netuid: NetUid) -> AlphaAmount {
