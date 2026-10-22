@@ -5,6 +5,7 @@ pub mod errors;
 pub mod runtime;
 pub mod stake;
 pub mod types;
+pub mod upgrade;
 
 // Re-export chain extension types
 pub use chain_extension::{StakeInfo, SubtensorError, SubtensorExtension};
@@ -17,6 +18,9 @@ pub use runtime::{AlphaCurrency, ProxyCall, ProxyType, RuntimeCall, SubtensorCal
 
 // Re-export stake transfer verification helpers
 pub use stake::{stake_delta_verified, TRANSFER_TOLERANCE};
+
+// Re-export code registry kinds and the position upgrade rule
+pub use upgrade::{check_upgrade, CodeKind, UpgradeError, UpgradePolicy};
 
 // Re-export common types (type aliases and FixedDecimal)
 pub use types::{

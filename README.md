@@ -2,13 +2,14 @@
 
 ink! smart contracts for Bittensor Alpha and TAO over-the-counter markets.
 
-The repository currently contains three deployable contracts:
+The repository currently contains four deployable contracts:
 
 | Contract | Purpose |
 | --- | --- |
 | `otc_contract` | Spot Alpha listings and TAO offers with market-relative pricing, fee collection, subnet listing freezes, pause controls, and owner-controlled upgrades. |
 | `lockup_listings` | Alpha listings that sell into per-purchase lockup escrows. Supports partial fills, configurable lockup duration bounds, fee collection, pause controls, and owner-controlled upgrades. |
 | `alpha_lockup` | Per-purchase escrow contract instantiated by `lockup_listings`. It holds purchased Alpha until `unlock_block`, then lets the buyer claim the Alpha plus any staking rewards. |
+| `code_registry` | Timelocked allowlist of the code each contract kind may upgrade to, with a guardian veto. It is never upgraded itself. Not yet used by the other contracts; see the [design](docs/design/permissionless-positions.md). |
 
 Shared Bittensor environment types, runtime calls, chain extensions, and fixed-point helpers live in `shared`.
 
@@ -18,6 +19,7 @@ Shared Bittensor environment types, runtime calls, chain extensions, and fixed-p
 .
 |-- contracts/
 |   |-- alpha_lockup/        # Escrow contract used by lockup listings
+|   |-- code_registry/       # Timelocked allowlist of upgrade code
 |   |-- lockup_listings/     # Lockup listing marketplace
 |   `-- otc/                 # Spot OTC marketplace
 |-- integration-tests/       # TypeScript integration tests for a local contracts node
@@ -247,6 +249,34 @@ account_id() -> AccountId
 Anyone can call `claim` once `unlock_block` is reached; claiming earlier fails. The Alpha always goes to the current beneficiary, never to the caller. A successful claim transfers all current escrow stake, including any staking rewards, emits `AlphaClaimed`, and terminates the escrow contract, sending any TAO balance to the beneficiary.
 
 Beneficiary changes, for example after a coldkey swap, take two steps: the current beneficiary calls `propose_beneficiary`, and the proposed account calls `accept_beneficiary`. The current beneficiary can withdraw a proposal with `cancel_beneficiary_proposal`. While a proposal is pending, `claim` fails with `BeneficiaryTransferPending`, so a payout can't race a handoff away from a key that is being retired.
+
+## Code Registry Interface
+
+```rust
+new(owner, guardian, upgrade_delay, force_delay, initial_codes: Vec<(u16, Hash)>)
+propose(kind, code_hash) -> Result<()>
+veto(kind, code_hash) -> Result<()>
+activate(kind, code_hash) -> Result<()>
+revoke(kind, code_hash) -> Result<()>
+propose_role_change(role, account) -> Result<()>
+veto_role_change() -> Result<()>
+execute_role_change() -> Result<()>
+current(kind) -> Option<CurrentCode>
+is_current(kind, code_hash) -> bool
+force_target(kind) -> Option<Hash>
+proposal(kind, code_hash) -> Option<Proposal>
+is_revoked(kind, code_hash) -> bool
+delays() -> (u32, u32)
+owner() -> AccountId
+guardian() -> AccountId
+pending_role_change() -> Option<RoleChange>
+```
+
+The registry tracks one current code hash per contract kind (`otc-shared` defines the kinds: listing vault, escrow, lockup factory and otc). The owner proposes a code hash. Once `upgrade_delay` blocks have passed, anyone can `activate` it, unless the guardian vetoed it first. Proposals are numbered, and only a proposal newer than the kind's last activated one can be activated, so a stale proposal can never roll the code back; rolling back on purpose means proposing the old code again. Code that has been current for `force_delay` blocks becomes the `force_target`, which anyone may apply to positions that allow forced upgrades. The owner or the guardian can `revoke` a code hash, which clears it if it is current and blocks it from ever being proposed or activated again for that kind.
+
+Owner and guardian changes go through the same delay and guardian veto, and the two roles must always be different accounts. Both delays are fixed at deployment and must be at least `MIN_DELAY` (7,200 blocks, about a day). Build with `--features short-delays` only for localnet tests, which need shorter delays.
+
+Both roles should be multisigs. A compromised key can stall upgrades but cannot move funds: a rogue owner can only propose code that the guardian then has to veto or revoke, and a rogue guardian can veto every proposal, including its own replacement. The registry has no way to recover from either. Recovering means deploying a new registry and new factories, and positions bound to the old registry keep their current code.
 
 ## Owner Controls
 

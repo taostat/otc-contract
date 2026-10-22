@@ -75,11 +75,12 @@ New contract `contracts/code_registry`. It is the only immutable contract and ma
 **Storage**
 
 - `owner`, `guardian`
-- `upgrade_delay`, `force_delay`: set in the constructor, with no setter
-- `proposals: Mapping<(u16, Hash), Proposal { proposed_at, vetoed }>`
+- `upgrade_delay`, `force_delay`: set in the constructor, with no setter, and at least `MIN_DELAY` (7,200 blocks) unless built with the test-only `short-delays` feature
+- `proposals: Mapping<(u16, Hash), Proposal { proposed_at, sequence }>`; a veto removes the proposal, so a vetoed hash can be proposed again with a fresh delay
+- `activated_sequence: Mapping<u16, u64>`: only a proposal newer than the kind's last activated one can activate, so stale proposals cannot roll the code back, even after a revocation
 - `current: Mapping<u16, CurrentCode { hash, since }>`
-- `revoked: Mapping<(u16, Hash), ()>`
-- `pending_role_change: Option<RoleChange { role, account, proposed_at, vetoed }>`
+- `revoked: Mapping<(u16, Hash), bool>`
+- `pending_role_change: Option<RoleChange { role, account, proposed_at }>`; a veto clears it
 
 Kinds are plain `u16` ids defined in `otc-shared` (`LISTING_VAULT = 1`, `ESCROW = 2`, `LOCKUP_FACTORY = 3`, `OTC = 4`), so adding a kind later needs no new registry.
 
@@ -87,12 +88,12 @@ Kinds are plain `u16` ids defined in `otc-shared` (`LISTING_VAULT = 1`, `ESCROW 
 
 | Message | Caller | Rule |
 |---|---|---|
-| `new(owner, guardian, upgrade_delay, force_delay, initial: Vec<(u16, Hash)>)` | deployer | Initial codes become current immediately |
+| `new(owner, guardian, upgrade_delay, force_delay, initial: Vec<(u16, Hash)>)` | deployer | Initial codes become current immediately; owner and guardian must differ; no duplicate kinds |
 | `propose(kind, hash)` | owner | Records `proposed_at`; errors if already proposed or revoked |
 | `veto(kind, hash)` | guardian | Only while pending |
-| `activate(kind, hash)` | anyone | After `upgrade_delay`, if not vetoed or revoked; sets `current = { hash, since: now }` |
+| `activate(kind, hash)` | anyone | After `upgrade_delay`, if not vetoed, revoked or superseded by a newer activation; sets `current = { hash, since: now }` |
 | `revoke(kind, hash)` | owner or guardian | Blocks future adoption; clears `current` if it is that hash |
-| `propose_role_change(role, account)` | owner | Starts `upgrade_delay` |
+| `propose_role_change(role, account)` | owner | Starts `upgrade_delay` and replaces any pending change; the new account must not hold the other role |
 | `veto_role_change()` | guardian | While pending |
 | `execute_role_change()` | anyone | After the delay, if not vetoed |
 
@@ -112,7 +113,7 @@ Kinds are plain `u16` ids defined in `otc-shared` (`LISTING_VAULT = 1`, `ESCROW 
   ) -> Result<(), UpgradeError>
   ```
   The position owner may adopt `current`. Anyone may apply `force_target` when the policy is `Auto`.
-- The storage-version helper pattern.
+- The storage-version pattern lands in PR 3, with the first upgradeable contract, where a real migration can test it.
 
 **Tests:** unit tests for every registry transition, both delays, veto, revoke and role changes; table tests for `check_upgrade`.
 
