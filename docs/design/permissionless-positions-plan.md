@@ -177,7 +177,7 @@ Kinds are plain `u16` ids defined in `otc-shared` (`LISTING_VAULT = 1`, `ESCROW 
 | `take(amount, recipient)` payable | anyone | Open; factory not paused; `min_purchase <= amount <= remaining`; the remainder is 0 or at least `BITTENSOR_MIN_STAKE`; price = spot × (10000 + offset) / 10000, rejected below `min_price`; value must cover price × amount plus the fee. Spot listings transfer to `recipient`. Lockup listings instantiate an escrow from the registry's current `ESCROW` code (salt = vault address + purchase counter) and transfer into it. Pays the seller and the fee recipient and refunds the excess. On the final fill, status becomes Closed. Never terminates. |
 | `cancel()` | seller | Not Closed; `now >= cancellable_after`. Status becomes Closed. Tries to transfer all stake to the seller; if that fails the listing still closes. Never terminates. |
 | `sweep_stake()` | anyone | Sends stake above `remaining` to the seller (all of it once Closed). Never terminates. |
-| `close()` | seller | Closed; no stake on `hotkey`. Terminates, sending the TAO balance and the storage deposit to the seller. |
+| `close()` | seller | Closed. Sends any stake left on `hotkey` to the seller, leaving only dust below Subtensor's minimum transfer, then terminates, sending the TAO balance and the storage deposit to the seller. |
 | `sweep_tao()` | anyone | Sends the whole balance to the seller. Never terminates. |
 | `resync_hotkey(hk)` | anyone | Same rule as the escrow. |
 | `consolidate()` | anyone | Open; `validator_hotkey(netuid) != hotkey`; moves all stake there with verified deltas. |
@@ -204,6 +204,19 @@ Kinds are plain `u16` ids defined in `otc-shared` (`LISTING_VAULT = 1`, `ESCROW 
 - Views.
 
 All of `main`'s pooled code goes: `reserved_alpha`, and take, cancel and escrow creation inside the factory.
+
+**As built**
+
+- `otc-shared` gains the pieces both factories and the vault share: listing pricing (`quote`, `apply_price_offset`, `BITTENSOR_MIN_STAKE`), `move_stake_verified`, the `VaultFactory` trait, and the position events (`TaoSwept`, `HotkeyResynced`, `Upgraded`, `UpgradePolicyChanged`), which escrows now use too. ink! puts every linked contract's events in a contract's metadata, and two events with the same name and fields collide.
+- `listing_closed()` takes no argument: the factory looks the caller up in a reverse index (`vault_listings`), so only a listing's own vault can close it. The vault calls it with bounded ref_time and proof size, so a hostile factory can't make a cancel or the final take run out of gas.
+- Takes, sweeps and consolidation set `remaining` to the lower of what is left and what the vault measures, since rounding can take a rao more than was sent.
+- `close` sends any remaining stake, such as rewards that accrued after the final take, to the seller before terminating. Only dust Subtensor refuses with `AmountTooLow` (its minimum transfer, measured in TAO) is left behind.
+- The factory's `prune_listing` lets anyone drop a listing whose vault is closed or gone, in case the vault's best-effort report failed, so a stale entry can't hold one of the seller's 25 slots.
+- `create_listing` returns `(listing_id, vault)`. Vault addresses are salted with the seller and a per-seller nonce (`get_seller_nonce`). The vault's constructor arguments are part of its address, so they carry nothing the seller can't predict: the vault has no listing id (the factory's index maps vaults to listings), and lockup listings pass `cancellable_after = 0` rather than the current block. A test of address prediction stays in PR 6.
+- The factory constructor returns a `Result`, rejecting a fee above `MAX_FEE_RATE` (5%) or inverted lockup limits. `MAX_PAUSE` is 50,400 blocks. Ownership moves in two steps: `transfer_ownership`, then `accept_ownership`.
+- `transfer_stake_verified` returns the sender's stake after the transfer, so callers don't query it again.
+- Integration tests: the lockup factory only creates lockup listings, so "a spot-style take with a recipient" is covered as a lockup take for another recipient; spot vaults get their factory with `otc` v2 in PR 5. The pooled-era lockup suites are replaced by `factory.test.ts` and `listing.test.ts`.
+- Vaults create escrows from the registry's current escrow code, so the escrow suite now deploys a `short-delays` registry and runs the upgrade through it: propose, activate, the beneficiary's upgrade, and a forced upgrade after `force_delay` that `ConsentOnly` blocks. The forced path no longer waits for PR 6.
 
 **Tests**
 
@@ -236,7 +249,7 @@ All of `main`'s pooled code goes: `reserved_alpha`, and take, cancel and escrow 
   - `sweep_tao` pays the owners;
   - dust sent during cleanup doesn't lose TAO;
   - a re-registered netuid doesn't affect new listings.
-- A full upgrade drill: propose, veto, activate, consent upgrade, forced upgrade after `force_delay`, and `ConsentOnly` blocking a forced upgrade. It includes a test-only vault v2 that adds a storage field and migrates.
+- A full upgrade drill. The escrow suite already covers propose, activate, a consent upgrade, a forced upgrade after `force_delay` and `ConsentOnly` blocking it (PR 4). PR 6 adds a veto, and a test-only vault v2 that adds a storage field and migrates.
 - A deployment script: the registry first with the initial codes, then the factories.
 - A README rewrite covering the frontend batching for vault funding and TAO-offer fills.
 - Delete `docs/backend-subnet-risk-runbook.md`.

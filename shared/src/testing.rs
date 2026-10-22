@@ -24,6 +24,7 @@ const GET_ALPHA_PRICE: u16 = 15;
 const STATUS_OK: u32 = 0;
 const STATUS_RUNTIME_ERROR: u32 = 1;
 const STATUS_NOT_ENOUGH_STAKE: u32 = 6;
+const STATUS_AMOUNT_TOO_LOW: u32 = 13;
 
 /// One transfer or move the mock executed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -42,6 +43,7 @@ struct State {
     stakes: BTreeMap<(AccountId, AccountId, NetUid), AlphaAmount>,
     transfer_loss: AlphaAmount,
     transfer_gain: AlphaAmount,
+    min_transfer: AlphaAmount,
     reject_transfers: bool,
     alpha_price: u64,
     movements: Vec<StakeMovement>,
@@ -103,6 +105,12 @@ pub fn set_transfer_gain(rao: AlphaAmount) {
     STATE.with(|state| state.borrow_mut().transfer_gain = rao);
 }
 
+/// Refuse transfers and moves below `amount` with `AmountTooLow`, like Subtensor's
+/// minimum transfer (which it measures in TAO, at the current price).
+pub fn set_min_transfer(amount: AlphaAmount) {
+    STATE.with(|state| state.borrow_mut().min_transfer = amount);
+}
+
 /// Make every transfer and move fail with a runtime error.
 pub fn set_reject_transfers(reject: bool) {
     STATE.with(|state| state.borrow_mut().reject_transfers = reject);
@@ -152,6 +160,9 @@ fn move_stake(movement: StakeMovement) -> u32 {
         let mut state = state.borrow_mut();
         if state.reject_transfers {
             return STATUS_RUNTIME_ERROR;
+        }
+        if movement.amount < state.min_transfer {
+            return STATUS_AMOUNT_TOO_LOW;
         }
 
         let origin_key = (

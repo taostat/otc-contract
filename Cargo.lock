@@ -3683,6 +3683,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32a66949e030da00e8c7d4434b251670a91556f4144941d37452769c25d58a53"
 
 [[package]]
+name = "listing-vault"
+version = "0.1.0"
+dependencies = [
+ "alpha-lockup",
+ "code-registry",
+ "fixed",
+ "ink",
+ "otc-shared",
+]
+
+[[package]]
 name = "litemap"
 version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3701,12 +3712,10 @@ dependencies = [
 name = "lockup-listings"
 version = "0.1.0"
 dependencies = [
- "alpha-lockup",
- "fixed",
+ "code-registry",
  "ink",
- "ink_e2e",
+ "listing-vault",
  "otc-shared",
- "sp-runtime 41.1.0",
 ]
 
 [[package]]

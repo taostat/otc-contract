@@ -1,0 +1,3205 @@
+{
+  "source": {
+    "hash": "0x07202522a38cbcc5321a3bf1a627f3da41ad4f343fdd4596238e89af5a1cd20d",
+    "language": "ink! 5.1.1",
+    "compiler": "rustc 1.89.0",
+    "build_info": {
+      "build_mode": "Release",
+      "cargo_contract_version": "5.0.3",
+      "rust_toolchain": "stable-aarch64-apple-darwin",
+      "wasm_opt_settings": {
+        "keep_debug_symbols": false,
+        "optimization_passes": "Z"
+      }
+    }
+  },
+  "contract": {
+    "name": "listing-vault",
+    "version": "0.1.0",
+    "authors": [
+      "taostats <dev@taostats.io>"
+    ]
+  },
+  "image": null,
+  "spec": {
+    "constructors": [
+      {
+        "args": [
+          {
+            "label": "seller",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "label": "netuid",
+            "type": {
+              "displayName": [
+                "NetUid"
+              ],
+              "type": 3
+            }
+          },
+          {
+            "label": "hotkey",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "label": "amount",
+            "type": {
+              "displayName": [
+                "AlphaAmount"
+              ],
+              "type": 4
+            }
+          },
+          {
+            "label": "price_offset_bps",
+            "type": {
+              "displayName": [
+                "PriceOffsetBps"
+              ],
+              "type": 5
+            }
+          },
+          {
+            "label": "min_price",
+            "type": {
+              "displayName": [
+                "u64"
+              ],
+              "type": 4
+            }
+          },
+          {
+            "label": "fee_rate",
+            "type": {
+              "displayName": [
+                "FixedDecimal"
+              ],
+              "type": 9
+            }
+          },
+          {
+            "label": "min_purchase",
+            "type": {
+              "displayName": [
+                "AlphaAmount"
+              ],
+              "type": 4
+            }
+          },
+          {
+            "label": "lockup_duration",
+            "type": {
+              "displayName": [
+                "Option"
+              ],
+              "type": 10
+            }
+          },
+          {
+            "label": "cancellable_after",
+            "type": {
+              "displayName": [
+                "BlockNumber"
+              ],
+              "type": 7
+            }
+          },
+          {
+            "label": "registry",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          }
+        ],
+        "default": false,
+        "docs": [
+          "Created by a factory, which becomes the vault's `factory`. The factory",
+          "validates the listing terms and keeps the listing's id.",
+          "",
+          "The arguments are part of what the vault's address is derived from, so",
+          "they hold only what the seller can know in advance: their terms and the",
+          "factory's current settings."
+        ],
+        "label": "new",
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink_primitives",
+            "ConstructorResult"
+          ],
+          "type": 13
+        },
+        "selector": "0x9bae9d5e"
+      }
+    ],
+    "docs": [
+      " One listing's Alpha, held on the vault's own coldkey.",
+      "",
+      " The seller funds the vault without a proxy: one batch transfers the stake to",
+      " the vault and calls `activate`. Buyers take from the vault directly. Spot",
+      " listings send the Alpha to the buyer's chosen recipient, and lockup listings",
+      " create an escrow for the recipient. Alpha and TAO only ever leave a vault for",
+      " its seller, a buyer who paid in the same call, or an escrow created in the",
+      " same call.",
+      "",
+      " The vault reads its factory only on takes (the trading pause and the fee",
+      " recipient) and to learn the validator hotkey. Cancelling, sweeping and closing",
+      " never depend on the factory. Upgrades work as for escrows, against the code",
+      " registry's `LISTING_VAULT` code, with the seller as the owner."
+    ],
+    "environment": {
+      "accountId": {
+        "displayName": [
+          "AccountId"
+        ],
+        "type": 0
+      },
+      "balance": {
+        "displayName": [
+          "Balance"
+        ],
+        "type": 4
+      },
+      "blockNumber": {
+        "displayName": [
+          "BlockNumber"
+        ],
+        "type": 7
+      },
+      "chainExtension": {
+        "displayName": [
+          "ChainExtension"
+        ],
+        "type": 37
+      },
+      "hash": {
+        "displayName": [
+          "Hash"
+        ],
+        "type": 22
+      },
+      "maxEventTopics": 4,
+      "staticBufferSize": 16384,
+      "timestamp": {
+        "displayName": [
+          "Timestamp"
+        ],
+        "type": 4
+      }
+    },
+    "events": [
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "buyer",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "initiated_by",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "netuid",
+            "type": {
+              "displayName": [
+                "NetUid"
+              ],
+              "type": 3
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "amount_claimed",
+            "type": {
+              "displayName": [
+                "AlphaAmount"
+              ],
+              "type": 4
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "unlock_block",
+            "type": {
+              "displayName": [
+                "BlockNumber"
+              ],
+              "type": 7
+            }
+          }
+        ],
+        "docs": [
+          "Event emitted when Alpha is claimed"
+        ],
+        "label": "AlphaClaimed",
+        "module_path": "alpha_lockup::alpha_lockup",
+        "signature_topic": "0x00308cd914543c346285779c8a4ee80bb7ead360ab6f3cf078804769e99b8bcd"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "current_beneficiary",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "proposed_beneficiary",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          }
+        ],
+        "docs": [
+          "Event emitted when a beneficiary transfer is proposed"
+        ],
+        "label": "BeneficiaryTransferProposed",
+        "module_path": "alpha_lockup::alpha_lockup",
+        "signature_topic": "0xada657f31949bc09094cd7d7a69ee4cb140e5b8aacf1eda51ef4ad42dbf39fb2"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "beneficiary",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "cancelled_beneficiary",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          }
+        ],
+        "docs": [
+          "Event emitted when a beneficiary transfer proposal is cancelled"
+        ],
+        "label": "BeneficiaryTransferCancelled",
+        "module_path": "alpha_lockup::alpha_lockup",
+        "signature_topic": "0x52d7c6a35cd48b128ba09be3e832c882230eb6e2705bff3b73079ac278ea9554"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "old_beneficiary",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "new_beneficiary",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          }
+        ],
+        "docs": [
+          "Event emitted when a beneficiary transfer is accepted"
+        ],
+        "label": "BeneficiaryTransferred",
+        "module_path": "alpha_lockup::alpha_lockup",
+        "signature_topic": "0xa8b0cfcc2435f490ef0ce7be9c36a671cb2f6fc0610e7c89be015b735509db24"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "beneficiary",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "tao_balance",
+            "type": {
+              "displayName": [
+                "Balance"
+              ],
+              "type": 4
+            }
+          }
+        ],
+        "docs": [
+          "Event emitted when the beneficiary closes the escrow"
+        ],
+        "label": "EscrowClosed",
+        "module_path": "alpha_lockup::alpha_lockup",
+        "signature_topic": "0xd89cad1e3758e604f130db0a81079a5041711ee7e348b817860735477e5c4517"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "kind",
+            "type": {
+              "displayName": [
+                "CodeKind"
+              ],
+              "type": 3
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "code_hash",
+            "type": {
+              "displayName": [
+                "Hash"
+              ],
+              "type": 22
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "activates_at",
+            "type": {
+              "displayName": [
+                "BlockNumber"
+              ],
+              "type": 7
+            }
+          }
+        ],
+        "docs": [],
+        "label": "CodeProposed",
+        "module_path": "code_registry::code_registry",
+        "signature_topic": "0xaf5d48c20412e9396c5f015a47f95fabb89ef1b58ce2477ce14f787d6f0f68eb"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "kind",
+            "type": {
+              "displayName": [
+                "CodeKind"
+              ],
+              "type": 3
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "code_hash",
+            "type": {
+              "displayName": [
+                "Hash"
+              ],
+              "type": 22
+            }
+          }
+        ],
+        "docs": [],
+        "label": "CodeVetoed",
+        "module_path": "code_registry::code_registry",
+        "signature_topic": "0x6a035b30f2dd1c3f5b9c79b36954b91f33f35f647486120f2bc1a880f574ea9e"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "kind",
+            "type": {
+              "displayName": [
+                "CodeKind"
+              ],
+              "type": 3
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "code_hash",
+            "type": {
+              "displayName": [
+                "Hash"
+              ],
+              "type": 22
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "previous",
+            "type": {
+              "displayName": [
+                "Option"
+              ],
+              "type": 34
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "activated_by",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          }
+        ],
+        "docs": [],
+        "label": "CodeActivated",
+        "module_path": "code_registry::code_registry",
+        "signature_topic": "0xf12a377c5c944ef14c6e22ee515657efe78f273649dc3a9843808e6e53e4ede2"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "kind",
+            "type": {
+              "displayName": [
+                "CodeKind"
+              ],
+              "type": 3
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "code_hash",
+            "type": {
+              "displayName": [
+                "Hash"
+              ],
+              "type": 22
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "revoked_by",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "was_current",
+            "type": {
+              "displayName": [
+                "bool"
+              ],
+              "type": 35
+            }
+          }
+        ],
+        "docs": [],
+        "label": "CodeRevoked",
+        "module_path": "code_registry::code_registry",
+        "signature_topic": "0x44bc476a161a1e96e625187859cca03b7a154835f04b117230871ccb432bf025"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "role",
+            "type": {
+              "displayName": [
+                "Role"
+              ],
+              "type": 36
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "account",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "executable_at",
+            "type": {
+              "displayName": [
+                "BlockNumber"
+              ],
+              "type": 7
+            }
+          }
+        ],
+        "docs": [],
+        "label": "RoleChangeProposed",
+        "module_path": "code_registry::code_registry",
+        "signature_topic": "0xd67c860be027cabda996d3450f58fb1c384010d8ac2042a5bffce6cd584f6d94"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "role",
+            "type": {
+              "displayName": [
+                "Role"
+              ],
+              "type": 36
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "account",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          }
+        ],
+        "docs": [],
+        "label": "RoleChangeVetoed",
+        "module_path": "code_registry::code_registry",
+        "signature_topic": "0xc9899c72e7b1c4e873e6d59943adb6018c09feed9e117ce2d20a078ac4f89e8b"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "role",
+            "type": {
+              "displayName": [
+                "Role"
+              ],
+              "type": 36
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "old_account",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "new_account",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          }
+        ],
+        "docs": [],
+        "label": "RoleChanged",
+        "module_path": "code_registry::code_registry",
+        "signature_topic": "0xb00d0c5d20113a679ea27014ce78036c7e92b7207ff9ecd9a3fb333254ddd143"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "seller",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "hotkey",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "amount",
+            "type": {
+              "displayName": [
+                "AlphaAmount"
+              ],
+              "type": 4
+            }
+          }
+        ],
+        "docs": [
+          "Event emitted when the seller activates the funded vault"
+        ],
+        "label": "Activated",
+        "module_path": "listing_vault::listing_vault",
+        "signature_topic": "0x29d7802eadc9f370dcd1418ff3c77447af377f5b1875b2f54c7fdb7614c936fa"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "buyer",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "recipient",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "amount",
+            "type": {
+              "displayName": [
+                "AlphaAmount"
+              ],
+              "type": 4
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "price",
+            "type": {
+              "displayName": [
+                "u64"
+              ],
+              "type": 4
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "tao",
+            "type": {
+              "displayName": [
+                "TaoAmount"
+              ],
+              "type": 4
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "fee",
+            "type": {
+              "displayName": [
+                "TaoAmount"
+              ],
+              "type": 4
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "escrow",
+            "type": {
+              "displayName": [
+                "Option"
+              ],
+              "type": 21
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "remaining",
+            "type": {
+              "displayName": [
+                "AlphaAmount"
+              ],
+              "type": 4
+            }
+          }
+        ],
+        "docs": [
+          "Event emitted when a buyer takes Alpha from the listing"
+        ],
+        "label": "Taken",
+        "module_path": "listing_vault::listing_vault",
+        "signature_topic": "0xe0f3dde78be9ab0eeaac7aa69099890dd469c9ad9bc9497d618d54305363ee4c"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "seller",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          }
+        ],
+        "docs": [
+          "Event emitted when the last of the listing is taken"
+        ],
+        "label": "Filled",
+        "module_path": "listing_vault::listing_vault",
+        "signature_topic": "0x75ed339eec3934b50b2d298c465fc58554c82682df6aaf6160e9526a0d9770d6"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "seller",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "returned",
+            "type": {
+              "displayName": [
+                "AlphaAmount"
+              ],
+              "type": 4
+            }
+          }
+        ],
+        "docs": [
+          "Event emitted when the seller cancels the listing"
+        ],
+        "label": "Cancelled",
+        "module_path": "listing_vault::listing_vault",
+        "signature_topic": "0x7a1aeea9e3527faa5376075b2dd737082c37d1240549bc9cb5b4854f30c7f0de"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "seller",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "initiated_by",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "amount",
+            "type": {
+              "displayName": [
+                "AlphaAmount"
+              ],
+              "type": 4
+            }
+          }
+        ],
+        "docs": [
+          "Event emitted when stake beyond the listing is sent to the seller"
+        ],
+        "label": "StakeSwept",
+        "module_path": "listing_vault::listing_vault",
+        "signature_topic": "0x7dc6697ad0b5e6321a9232c05390676d35fc37bd78a8955a71eb0d9f2fc51ea7"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "old_hotkey",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "new_hotkey",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "initiated_by",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "amount",
+            "type": {
+              "displayName": [
+                "AlphaAmount"
+              ],
+              "type": 4
+            }
+          }
+        ],
+        "docs": [
+          "Event emitted when the vault moves its stake to the factory's validator"
+        ],
+        "label": "Consolidated",
+        "module_path": "listing_vault::listing_vault",
+        "signature_topic": "0x322c4fe12c9aa830bb375d3aa229960a1076edeb926b1151206859f27bf57e30"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "seller",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "stake_returned",
+            "type": {
+              "displayName": [
+                "AlphaAmount"
+              ],
+              "type": 4
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "tao_balance",
+            "type": {
+              "displayName": [
+                "Balance"
+              ],
+              "type": 4
+            }
+          }
+        ],
+        "docs": [
+          "Event emitted when the seller closes the vault"
+        ],
+        "label": "VaultClosed",
+        "module_path": "listing_vault::listing_vault",
+        "signature_topic": "0xac1a667d8917f3d78f6717ba9239ebbce7aef980f7633c75f8c00cabea4eb7d5"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "owner",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "initiated_by",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "amount",
+            "type": {
+              "displayName": [
+                "Balance"
+              ],
+              "type": 4
+            }
+          }
+        ],
+        "docs": [
+          "The position's TAO balance was sent to its owner"
+        ],
+        "label": "TaoSwept",
+        "module_path": "otc_shared::events",
+        "signature_topic": "0xffc83658b8556616ae18d6071f1e37c10fce38e2c3cca12fb3e96d171cdedb5b"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "old_hotkey",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "new_hotkey",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "initiated_by",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "new_hotkey_stake",
+            "type": {
+              "displayName": [
+                "AlphaAmount"
+              ],
+              "type": 4
+            }
+          }
+        ],
+        "docs": [
+          "The position now points at the hotkey its stake moved to"
+        ],
+        "label": "HotkeyResynced",
+        "module_path": "otc_shared::events",
+        "signature_topic": "0x1f6a05115faf2230ea59c7e181eb3704d16bd8f9a3c35263c0253c25b3ecb792"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "code_hash",
+            "type": {
+              "displayName": [
+                "Hash"
+              ],
+              "type": 22
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "initiated_by",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          }
+        ],
+        "docs": [
+          "The position installed new code"
+        ],
+        "label": "Upgraded",
+        "module_path": "otc_shared::events",
+        "signature_topic": "0xf948c495403d7387e6f1f54500e0e501588d596b53989c6fc8859c2c6f58fbf0"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "owner",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "policy",
+            "type": {
+              "displayName": [
+                "UpgradePolicy"
+              ],
+              "type": 12
+            }
+          }
+        ],
+        "docs": [
+          "The owner changed who may upgrade the position"
+        ],
+        "label": "UpgradePolicyChanged",
+        "module_path": "otc_shared::events",
+        "signature_topic": "0xcdc998b3b364356a7bf35e0b542fc5c04520623c33a9e8e92c18289dde90ba93"
+      }
+    ],
+    "lang_error": {
+      "displayName": [
+        "ink",
+        "LangError"
+      ],
+      "type": 15
+    },
+    "messages": [
+      {
+        "args": [],
+        "default": false,
+        "docs": [
+          " Open the listing once the seller has transferred the stake here, usually",
+          " in the same batch. The vault must hold the listed amount within the",
+          " transfer tolerance, and lists what it actually holds. It then moves the",
+          " stake to the factory's validator hotkey if Subtensor allows; otherwise",
+          " the listing stays on the seller's hotkey."
+        ],
+        "label": "activate",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 16
+        },
+        "selector": "0x5ccbfb51"
+      },
+      {
+        "args": [
+          {
+            "label": "amount",
+            "type": {
+              "displayName": [
+                "AlphaAmount"
+              ],
+              "type": 4
+            }
+          },
+          {
+            "label": "recipient",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          }
+        ],
+        "default": false,
+        "docs": [
+          " Buy `amount` Alpha at the market price moved by the listing's offset,",
+          " paying the price plus the fee; any excess TAO is refunded. Spot listings",
+          " send the Alpha to `recipient`. Lockup listings create an escrow that",
+          " locks it for `recipient` and return the escrow's account."
+        ],
+        "label": "take",
+        "mutates": true,
+        "payable": true,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 19
+        },
+        "selector": "0xebfed036"
+      },
+      {
+        "args": [],
+        "default": false,
+        "docs": [
+          " Close the listing and return its stake to the seller. If Subtensor",
+          " refuses the transfer, for example while the subnet is being dissolved,",
+          " the listing still closes; the sweeps return whatever is left later.",
+          " Never pausable, and never depends on the factory."
+        ],
+        "label": "cancel",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 16
+        },
+        "selector": "0x9796e9a7"
+      },
+      {
+        "args": [],
+        "default": false,
+        "docs": [
+          " Send the stake the vault holds beyond what is listed, such as staking",
+          " rewards, to the seller; once the listing is closed, that is all of it.",
+          " Anyone can call this."
+        ],
+        "label": "sweep_stake",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 16
+        },
+        "selector": "0x27d48e48"
+      },
+      {
+        "args": [],
+        "default": false,
+        "docs": [
+          " Send the vault's whole TAO balance to the seller.",
+          "",
+          " TAO reaches a vault when its subnet is dissolved and Subtensor liquidates",
+          " the stake, or when someone sends it. Anyone can sweep at any time.",
+          " Sweeping never terminates the vault, because liquidation can credit TAO",
+          " in several steps, and credits to a terminated vault would be lost."
+        ],
+        "label": "sweep_tao",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 16
+        },
+        "selector": "0x05592c08"
+      },
+      {
+        "args": [],
+        "default": false,
+        "docs": [
+          " Terminate the vault, sending its remaining stake, its TAO balance and",
+          " the storage deposit to the seller.",
+          "",
+          " Only the seller can close, because only they can judge that nothing else",
+          " is on its way: a terminated vault loses anything that arrives later, such",
+          " as stake on another hotkey after a hotkey swap. It requires a closed",
+          " listing. Stake still on the vault's hotkey, such as rewards that accrued",
+          " after the final take, goes to the seller first; only dust worth less",
+          " than Subtensor's minimum transfer, which it refuses to move, is left",
+          " behind."
+        ],
+        "label": "close",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 16
+        },
+        "selector": "0x3c922166"
+      },
+      {
+        "args": [
+          {
+            "label": "new_hotkey",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          }
+        ],
+        "default": false,
+        "docs": [
+          " Point the vault at `new_hotkey` after its stake moved there, for example",
+          " through a validator hotkey swap. Moves nothing.",
+          "",
+          " Anyone can call this. It is accepted only when the vault holds more stake",
+          " on `new_hotkey` than on its current hotkey, so pointing it elsewhere",
+          " would take a donation larger than the vault's own stake, and that",
+          " donation belongs to the seller."
+        ],
+        "label": "resync_hotkey",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 16
+        },
+        "selector": "0x94e8c496"
+      },
+      {
+        "args": [],
+        "default": false,
+        "docs": [
+          " Move the open listing's stake to the factory's current validator hotkey,",
+          " so listings follow a validator change. Anyone can call this."
+        ],
+        "label": "consolidate",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 16
+        },
+        "selector": "0x97c0e96f"
+      },
+      {
+        "args": [
+          {
+            "label": "code_hash",
+            "type": {
+              "displayName": [
+                "Hash"
+              ],
+              "type": 22
+            }
+          }
+        ],
+        "default": false,
+        "docs": [
+          " Install `code_hash`, which must be the registry's current vault code.",
+          "",
+          " The seller can upgrade at any time. Anyone else can upgrade once the code",
+          " has been current for the registry's force delay, unless the seller set",
+          " the policy to `ConsentOnly`. The new code takes effect from the next",
+          " call, and migrates storage then if it needs to."
+        ],
+        "label": "upgrade",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 16
+        },
+        "selector": "0x9852f7b0"
+      },
+      {
+        "args": [
+          {
+            "label": "policy",
+            "type": {
+              "displayName": [
+                "UpgradePolicy"
+              ],
+              "type": 12
+            }
+          }
+        ],
+        "default": false,
+        "docs": [
+          " Choose whether anyone may force the registry's current code onto this",
+          " vault after the force delay (`Auto`), or only the seller may upgrade it",
+          " (`ConsentOnly`)."
+        ],
+        "label": "set_upgrade_policy",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 16
+        },
+        "selector": "0xfb5ead6c"
+      },
+      {
+        "args": [],
+        "default": false,
+        "docs": [
+          " Bring storage up to this code's `STORAGE_VERSION`. Every state-changing",
+          " message does this first; anyone can also call it directly after an",
+          " upgrade."
+        ],
+        "label": "migrate",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 13
+        },
+        "selector": "0x060d3f50"
+      },
+      {
+        "args": [],
+        "default": false,
+        "docs": [
+          " Everything about the vault"
+        ],
+        "label": "get_info",
+        "mutates": false,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 23
+        },
+        "selector": "0x67889d2b"
+      },
+      {
+        "args": [
+          {
+            "label": "amount",
+            "type": {
+              "displayName": [
+                "AlphaAmount"
+              ],
+              "type": 4
+            }
+          }
+        ],
+        "default": false,
+        "docs": [
+          " What taking `amount` costs at the current market price. Buyers should",
+          " send a little more than `total`, since the price can move before the",
+          " take lands; the excess is refunded."
+        ],
+        "label": "quote",
+        "mutates": false,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 26
+        },
+        "selector": "0xff7b33a5"
+      },
+      {
+        "args": [],
+        "default": false,
+        "docs": [],
+        "label": "get_status",
+        "mutates": false,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 29
+        },
+        "selector": "0x07e3b8df"
+      },
+      {
+        "args": [],
+        "default": false,
+        "docs": [],
+        "label": "get_seller",
+        "mutates": false,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 30
+        },
+        "selector": "0x23fee32c"
+      },
+      {
+        "args": [],
+        "default": false,
+        "docs": [],
+        "label": "get_factory",
+        "mutates": false,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 30
+        },
+        "selector": "0x26b12316"
+      },
+      {
+        "args": [],
+        "default": false,
+        "docs": [],
+        "label": "get_registry",
+        "mutates": false,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 30
+        },
+        "selector": "0x15a5d20a"
+      },
+      {
+        "args": [],
+        "default": false,
+        "docs": [],
+        "label": "get_hotkey",
+        "mutates": false,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 30
+        },
+        "selector": "0xead097fa"
+      },
+      {
+        "args": [],
+        "default": false,
+        "docs": [],
+        "label": "get_remaining",
+        "mutates": false,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 31
+        },
+        "selector": "0x84539e3b"
+      },
+      {
+        "args": [],
+        "default": false,
+        "docs": [],
+        "label": "get_upgrade_policy",
+        "mutates": false,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 32
+        },
+        "selector": "0x4ee14a9e"
+      },
+      {
+        "args": [],
+        "default": false,
+        "docs": [],
+        "label": "get_version",
+        "mutates": false,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 33
+        },
+        "selector": "0x0c1a1d77"
+      }
+    ]
+  },
+  "storage": {
+    "root": {
+      "layout": {
+        "struct": {
+          "fields": [
+            {
+              "layout": {
+                "leaf": {
+                  "key": "0x00000000",
+                  "ty": 0
+                }
+              },
+              "name": "factory"
+            },
+            {
+              "layout": {
+                "leaf": {
+                  "key": "0x00000000",
+                  "ty": 0
+                }
+              },
+              "name": "registry"
+            },
+            {
+              "layout": {
+                "leaf": {
+                  "key": "0x00000000",
+                  "ty": 0
+                }
+              },
+              "name": "seller"
+            },
+            {
+              "layout": {
+                "leaf": {
+                  "key": "0x00000000",
+                  "ty": 3
+                }
+              },
+              "name": "netuid"
+            },
+            {
+              "layout": {
+                "leaf": {
+                  "key": "0x00000000",
+                  "ty": 0
+                }
+              },
+              "name": "hotkey"
+            },
+            {
+              "layout": {
+                "leaf": {
+                  "key": "0x00000000",
+                  "ty": 4
+                }
+              },
+              "name": "total"
+            },
+            {
+              "layout": {
+                "leaf": {
+                  "key": "0x00000000",
+                  "ty": 4
+                }
+              },
+              "name": "remaining"
+            },
+            {
+              "layout": {
+                "leaf": {
+                  "key": "0x00000000",
+                  "ty": 5
+                }
+              },
+              "name": "price_offset_bps"
+            },
+            {
+              "layout": {
+                "leaf": {
+                  "key": "0x00000000",
+                  "ty": 4
+                }
+              },
+              "name": "min_price"
+            },
+            {
+              "layout": {
+                "struct": {
+                  "fields": [
+                    {
+                      "layout": {
+                        "leaf": {
+                          "key": "0x00000000",
+                          "ty": 6
+                        }
+                      },
+                      "name": "value"
+                    }
+                  ],
+                  "name": "FixedDecimal"
+                }
+              },
+              "name": "fee_rate"
+            },
+            {
+              "layout": {
+                "leaf": {
+                  "key": "0x00000000",
+                  "ty": 4
+                }
+              },
+              "name": "min_purchase"
+            },
+            {
+              "layout": {
+                "enum": {
+                  "dispatchKey": "0x00000000",
+                  "name": "Option",
+                  "variants": {
+                    "0": {
+                      "fields": [],
+                      "name": "None"
+                    },
+                    "1": {
+                      "fields": [
+                        {
+                          "layout": {
+                            "leaf": {
+                              "key": "0x00000000",
+                              "ty": 7
+                            }
+                          },
+                          "name": "0"
+                        }
+                      ],
+                      "name": "Some"
+                    }
+                  }
+                }
+              },
+              "name": "lockup_duration"
+            },
+            {
+              "layout": {
+                "leaf": {
+                  "key": "0x00000000",
+                  "ty": 7
+                }
+              },
+              "name": "cancellable_after"
+            },
+            {
+              "layout": {
+                "enum": {
+                  "dispatchKey": "0x00000000",
+                  "name": "Status",
+                  "variants": {
+                    "0": {
+                      "fields": [],
+                      "name": "Pending"
+                    },
+                    "1": {
+                      "fields": [],
+                      "name": "Open"
+                    },
+                    "2": {
+                      "fields": [],
+                      "name": "Closed"
+                    }
+                  }
+                }
+              },
+              "name": "status"
+            },
+            {
+              "layout": {
+                "leaf": {
+                  "key": "0x00000000",
+                  "ty": 4
+                }
+              },
+              "name": "next_purchase_id"
+            },
+            {
+              "layout": {
+                "enum": {
+                  "dispatchKey": "0x00000000",
+                  "name": "UpgradePolicy",
+                  "variants": {
+                    "0": {
+                      "fields": [],
+                      "name": "Auto"
+                    },
+                    "1": {
+                      "fields": [],
+                      "name": "ConsentOnly"
+                    }
+                  }
+                }
+              },
+              "name": "upgrade_policy"
+            },
+            {
+              "layout": {
+                "leaf": {
+                  "key": "0x00000000",
+                  "ty": 3
+                }
+              },
+              "name": "version"
+            }
+          ],
+          "name": "ListingVault"
+        }
+      },
+      "root_key": "0x00000000",
+      "ty": 8
+    }
+  },
+  "types": [
+    {
+      "id": 0,
+      "type": {
+        "def": {
+          "composite": {
+            "fields": [
+              {
+                "type": 1,
+                "typeName": "[u8; 32]"
+              }
+            ]
+          }
+        },
+        "path": [
+          "ink_primitives",
+          "types",
+          "AccountId"
+        ]
+      }
+    },
+    {
+      "id": 1,
+      "type": {
+        "def": {
+          "array": {
+            "len": 32,
+            "type": 2
+          }
+        }
+      }
+    },
+    {
+      "id": 2,
+      "type": {
+        "def": {
+          "primitive": "u8"
+        }
+      }
+    },
+    {
+      "id": 3,
+      "type": {
+        "def": {
+          "primitive": "u16"
+        }
+      }
+    },
+    {
+      "id": 4,
+      "type": {
+        "def": {
+          "primitive": "u64"
+        }
+      }
+    },
+    {
+      "id": 5,
+      "type": {
+        "def": {
+          "primitive": "i32"
+        }
+      }
+    },
+    {
+      "id": 6,
+      "type": {
+        "def": {
+          "primitive": "u128"
+        }
+      }
+    },
+    {
+      "id": 7,
+      "type": {
+        "def": {
+          "primitive": "u32"
+        }
+      }
+    },
+    {
+      "id": 8,
+      "type": {
+        "def": {
+          "composite": {
+            "fields": [
+              {
+                "name": "factory",
+                "type": 0,
+                "typeName": "<AccountId as::ink::storage::traits::AutoStorableHint<::ink::\nstorage::traits::ManualKey<203477414u32, ()>,>>::Type"
+              },
+              {
+                "name": "registry",
+                "type": 0,
+                "typeName": "<AccountId as::ink::storage::traits::AutoStorableHint<::ink::\nstorage::traits::ManualKey<3080228827u32, ()>,>>::Type"
+              },
+              {
+                "name": "seller",
+                "type": 0,
+                "typeName": "<AccountId as::ink::storage::traits::AutoStorableHint<::ink::\nstorage::traits::ManualKey<4026142953u32, ()>,>>::Type"
+              },
+              {
+                "name": "netuid",
+                "type": 3,
+                "typeName": "<NetUid as::ink::storage::traits::AutoStorableHint<::ink::\nstorage::traits::ManualKey<119275373u32, ()>,>>::Type"
+              },
+              {
+                "name": "hotkey",
+                "type": 0,
+                "typeName": "<AccountId as::ink::storage::traits::AutoStorableHint<::ink::\nstorage::traits::ManualKey<1238595135u32, ()>,>>::Type"
+              },
+              {
+                "name": "total",
+                "type": 4,
+                "typeName": "<AlphaAmount as::ink::storage::traits::AutoStorableHint<::ink::\nstorage::traits::ManualKey<2841433495u32, ()>,>>::Type"
+              },
+              {
+                "name": "remaining",
+                "type": 4,
+                "typeName": "<AlphaAmount as::ink::storage::traits::AutoStorableHint<::ink::\nstorage::traits::ManualKey<1272423784u32, ()>,>>::Type"
+              },
+              {
+                "name": "price_offset_bps",
+                "type": 5,
+                "typeName": "<PriceOffsetBps as::ink::storage::traits::AutoStorableHint<::ink\n::storage::traits::ManualKey<1858437578u32, ()>,>>::Type"
+              },
+              {
+                "name": "min_price",
+                "type": 4,
+                "typeName": "<u64 as::ink::storage::traits::AutoStorableHint<::ink::storage\n::traits::ManualKey<3361654379u32, ()>,>>::Type"
+              },
+              {
+                "name": "fee_rate",
+                "type": 9,
+                "typeName": "<FixedDecimal as::ink::storage::traits::AutoStorableHint<::ink::\nstorage::traits::ManualKey<1773086791u32, ()>,>>::Type"
+              },
+              {
+                "name": "min_purchase",
+                "type": 4,
+                "typeName": "<AlphaAmount as::ink::storage::traits::AutoStorableHint<::ink::\nstorage::traits::ManualKey<1414367196u32, ()>,>>::Type"
+              },
+              {
+                "name": "lockup_duration",
+                "type": 10,
+                "typeName": "<Option<BlockAge> as::ink::storage::traits::AutoStorableHint<::\nink::storage::traits::ManualKey<1958330609u32, ()>,>>::Type"
+              },
+              {
+                "name": "cancellable_after",
+                "type": 7,
+                "typeName": "<BlockNumber as::ink::storage::traits::AutoStorableHint<::ink::\nstorage::traits::ManualKey<2819968634u32, ()>,>>::Type"
+              },
+              {
+                "name": "status",
+                "type": 11,
+                "typeName": "<Status as::ink::storage::traits::AutoStorableHint<::ink::\nstorage::traits::ManualKey<4017875513u32, ()>,>>::Type"
+              },
+              {
+                "name": "next_purchase_id",
+                "type": 4,
+                "typeName": "<PurchaseId as::ink::storage::traits::AutoStorableHint<::ink::\nstorage::traits::ManualKey<2532449789u32, ()>,>>::Type"
+              },
+              {
+                "name": "upgrade_policy",
+                "type": 12,
+                "typeName": "<UpgradePolicy as::ink::storage::traits::AutoStorableHint<::ink::\nstorage::traits::ManualKey<2912822981u32, ()>,>>::Type"
+              },
+              {
+                "name": "version",
+                "type": 3,
+                "typeName": "<u16 as::ink::storage::traits::AutoStorableHint<::ink::storage\n::traits::ManualKey<336003207u32, ()>,>>::Type"
+              }
+            ]
+          }
+        },
+        "path": [
+          "listing_vault",
+          "listing_vault",
+          "ListingVault"
+        ]
+      }
+    },
+    {
+      "id": 9,
+      "type": {
+        "def": {
+          "composite": {
+            "fields": [
+              {
+                "name": "value",
+                "type": 6,
+                "typeName": "u128"
+              }
+            ]
+          }
+        },
+        "path": [
+          "otc_shared",
+          "types",
+          "FixedDecimal"
+        ]
+      }
+    },
+    {
+      "id": 10,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "index": 0,
+                "name": "None"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 7
+                  }
+                ],
+                "index": 1,
+                "name": "Some"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 7
+          }
+        ],
+        "path": [
+          "Option"
+        ]
+      }
+    },
+    {
+      "id": 11,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "index": 0,
+                "name": "Pending"
+              },
+              {
+                "index": 1,
+                "name": "Open"
+              },
+              {
+                "index": 2,
+                "name": "Closed"
+              }
+            ]
+          }
+        },
+        "path": [
+          "listing_vault",
+          "listing_vault",
+          "Status"
+        ]
+      }
+    },
+    {
+      "id": 12,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "index": 0,
+                "name": "Auto"
+              },
+              {
+                "index": 1,
+                "name": "ConsentOnly"
+              }
+            ]
+          }
+        },
+        "path": [
+          "otc_shared",
+          "upgrade",
+          "UpgradePolicy"
+        ]
+      }
+    },
+    {
+      "id": 13,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 14
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 15
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 14
+          },
+          {
+            "name": "E",
+            "type": 15
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 14,
+      "type": {
+        "def": {
+          "tuple": []
+        }
+      }
+    },
+    {
+      "id": 15,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "index": 1,
+                "name": "CouldNotReadInput"
+              }
+            ]
+          }
+        },
+        "path": [
+          "ink_primitives",
+          "LangError"
+        ]
+      }
+    },
+    {
+      "id": 16,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 17
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 15
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 17
+          },
+          {
+            "name": "E",
+            "type": 15
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 17,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 14
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 18
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 14
+          },
+          {
+            "name": "E",
+            "type": 18
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 18,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "index": 0,
+                "name": "Unauthorized"
+              },
+              {
+                "index": 1,
+                "name": "NotPending"
+              },
+              {
+                "index": 2,
+                "name": "StillPending"
+              },
+              {
+                "index": 3,
+                "name": "NotOpen"
+              },
+              {
+                "index": 4,
+                "name": "AlreadyClosed"
+              },
+              {
+                "index": 5,
+                "name": "NotClosed"
+              },
+              {
+                "index": 6,
+                "name": "FundingMismatch"
+              },
+              {
+                "index": 7,
+                "name": "CancelTooEarly"
+              },
+              {
+                "index": 8,
+                "name": "TradingPaused"
+              },
+              {
+                "index": 9,
+                "name": "AmountTooSmall"
+              },
+              {
+                "index": 10,
+                "name": "AmountExceedsRemaining"
+              },
+              {
+                "index": 11,
+                "name": "AmountBelowMinimumStake"
+              },
+              {
+                "index": 12,
+                "name": "PriceBelowMinimum"
+              },
+              {
+                "index": 13,
+                "name": "InsufficientPayment"
+              },
+              {
+                "index": 14,
+                "name": "MarketPriceFetchFailed"
+              },
+              {
+                "index": 15,
+                "name": "InvalidPriceOffset"
+              },
+              {
+                "index": 16,
+                "name": "Overflow"
+              },
+              {
+                "index": 17,
+                "name": "StakeQueryFailed"
+              },
+              {
+                "index": 18,
+                "name": "StakeTransferFailed"
+              },
+              {
+                "index": 19,
+                "name": "TaoTransferFailed"
+              },
+              {
+                "index": 20,
+                "name": "NothingToSweep"
+              },
+              {
+                "index": 21,
+                "name": "NoTaoToSweep"
+              },
+              {
+                "index": 22,
+                "name": "StakeRemaining"
+              },
+              {
+                "index": 23,
+                "name": "InvalidHotkey"
+              },
+              {
+                "index": 24,
+                "name": "InsufficientStakeOnHotkey"
+              },
+              {
+                "index": 25,
+                "name": "AlreadyConsolidated"
+              },
+              {
+                "index": 26,
+                "name": "FactoryQueryFailed"
+              },
+              {
+                "index": 27,
+                "name": "EscrowInstantiationFailed"
+              },
+              {
+                "index": 28,
+                "name": "NoCurrentCode"
+              },
+              {
+                "index": 29,
+                "name": "NotCurrentCode"
+              },
+              {
+                "index": 30,
+                "name": "ConsentRequired"
+              },
+              {
+                "index": 31,
+                "name": "ForceDelayNotElapsed"
+              },
+              {
+                "index": 32,
+                "name": "RegistryQueryFailed"
+              },
+              {
+                "index": 33,
+                "name": "CodeUpgradeFailed"
+              }
+            ]
+          }
+        },
+        "path": [
+          "listing_vault",
+          "listing_vault",
+          "Error"
+        ]
+      }
+    },
+    {
+      "id": 19,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 20
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 15
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 20
+          },
+          {
+            "name": "E",
+            "type": 15
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 20,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 21
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 18
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 21
+          },
+          {
+            "name": "E",
+            "type": 18
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 21,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "index": 0,
+                "name": "None"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 0
+                  }
+                ],
+                "index": 1,
+                "name": "Some"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 0
+          }
+        ],
+        "path": [
+          "Option"
+        ]
+      }
+    },
+    {
+      "id": 22,
+      "type": {
+        "def": {
+          "composite": {
+            "fields": [
+              {
+                "type": 1,
+                "typeName": "[u8; 32]"
+              }
+            ]
+          }
+        },
+        "path": [
+          "ink_primitives",
+          "types",
+          "Hash"
+        ]
+      }
+    },
+    {
+      "id": 23,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 24
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 15
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 24
+          },
+          {
+            "name": "E",
+            "type": 15
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 24,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 25
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 18
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 25
+          },
+          {
+            "name": "E",
+            "type": 18
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 25,
+      "type": {
+        "def": {
+          "composite": {
+            "fields": [
+              {
+                "name": "factory",
+                "type": 0,
+                "typeName": "AccountId"
+              },
+              {
+                "name": "registry",
+                "type": 0,
+                "typeName": "AccountId"
+              },
+              {
+                "name": "seller",
+                "type": 0,
+                "typeName": "AccountId"
+              },
+              {
+                "name": "netuid",
+                "type": 3,
+                "typeName": "NetUid"
+              },
+              {
+                "name": "hotkey",
+                "type": 0,
+                "typeName": "AccountId"
+              },
+              {
+                "name": "total",
+                "type": 4,
+                "typeName": "AlphaAmount"
+              },
+              {
+                "name": "remaining",
+                "type": 4,
+                "typeName": "AlphaAmount"
+              },
+              {
+                "name": "price_offset_bps",
+                "type": 5,
+                "typeName": "PriceOffsetBps"
+              },
+              {
+                "name": "min_price",
+                "type": 4,
+                "typeName": "u64"
+              },
+              {
+                "name": "fee_rate",
+                "type": 9,
+                "typeName": "FixedDecimal"
+              },
+              {
+                "name": "min_purchase",
+                "type": 4,
+                "typeName": "AlphaAmount"
+              },
+              {
+                "name": "lockup_duration",
+                "type": 10,
+                "typeName": "Option<BlockAge>"
+              },
+              {
+                "name": "cancellable_after",
+                "type": 7,
+                "typeName": "BlockNumber"
+              },
+              {
+                "name": "status",
+                "type": 11,
+                "typeName": "Status"
+              },
+              {
+                "name": "stake",
+                "type": 4,
+                "typeName": "AlphaAmount"
+              },
+              {
+                "name": "tao_balance",
+                "type": 4,
+                "typeName": "Balance"
+              },
+              {
+                "name": "upgrade_policy",
+                "type": 12,
+                "typeName": "UpgradePolicy"
+              },
+              {
+                "name": "version",
+                "type": 3,
+                "typeName": "u16"
+              }
+            ]
+          }
+        },
+        "path": [
+          "listing_vault",
+          "listing_vault",
+          "VaultInfo"
+        ]
+      }
+    },
+    {
+      "id": 26,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 27
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 15
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 27
+          },
+          {
+            "name": "E",
+            "type": 15
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 27,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 28
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 18
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 28
+          },
+          {
+            "name": "E",
+            "type": 18
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 28,
+      "type": {
+        "def": {
+          "composite": {
+            "fields": [
+              {
+                "name": "price",
+                "type": 4,
+                "typeName": "u64"
+              },
+              {
+                "name": "tao",
+                "type": 4,
+                "typeName": "TaoAmount"
+              },
+              {
+                "name": "fee",
+                "type": 4,
+                "typeName": "TaoAmount"
+              },
+              {
+                "name": "total",
+                "type": 4,
+                "typeName": "TaoAmount"
+              }
+            ]
+          }
+        },
+        "path": [
+          "otc_shared",
+          "pricing",
+          "Quote"
+        ]
+      }
+    },
+    {
+      "id": 29,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 11
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 15
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 11
+          },
+          {
+            "name": "E",
+            "type": 15
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 30,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 0
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 15
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 0
+          },
+          {
+            "name": "E",
+            "type": 15
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 31,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 4
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 15
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 4
+          },
+          {
+            "name": "E",
+            "type": 15
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 32,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 12
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 15
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 12
+          },
+          {
+            "name": "E",
+            "type": 15
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 33,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 3
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 15
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 3
+          },
+          {
+            "name": "E",
+            "type": 15
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 34,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "index": 0,
+                "name": "None"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 22
+                  }
+                ],
+                "index": 1,
+                "name": "Some"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 22
+          }
+        ],
+        "path": [
+          "Option"
+        ]
+      }
+    },
+    {
+      "id": 35,
+      "type": {
+        "def": {
+          "primitive": "bool"
+        }
+      }
+    },
+    {
+      "id": 36,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "index": 0,
+                "name": "Owner"
+              },
+              {
+                "index": 1,
+                "name": "Guardian"
+              }
+            ]
+          }
+        },
+        "path": [
+          "code_registry",
+          "code_registry",
+          "Role"
+        ]
+      }
+    },
+    {
+      "id": 37,
+      "type": {
+        "def": {
+          "variant": {}
+        },
+        "path": [
+          "otc_shared",
+          "chain_extension",
+          "SubtensorExtension"
+        ]
+      }
+    }
+  ],
+  "version": 5
+}

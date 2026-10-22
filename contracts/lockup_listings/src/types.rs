@@ -1,30 +1,29 @@
 use ink::prelude::vec::Vec;
 use ink::primitives::AccountId;
 use ink::storage::Mapping;
-use otc_shared::{AlphaAmount, BlockAge, BlockNumber, FixedDecimal, NetUid, PriceOffsetBps};
+use otc_shared::{AlphaAmount, BlockAge, BlockNumber, FixedDecimal, NetUid};
 
-// ID types
-pub type LockupListingId = u64;
-pub type PurchaseId = u64;
+pub type ListingId = u64;
 
-// Mapping types
-pub type LockupListingsMapping = Mapping<(NetUid, AccountId, LockupListingId), LockupListing>;
-pub type UserLockupListingsMapping = Mapping<(AccountId, NetUid), Vec<LockupListingId>>;
-pub type EscrowsMapping = Mapping<(NetUid, LockupListingId, PurchaseId), AccountId>;
-pub type ReservedAlphaMapping = Mapping<NetUid, AlphaAmount>;
+/// Where a listing sits in the index: `(netuid, seller, listing_id)`.
+pub type ListingKey = (NetUid, AccountId, ListingId);
 
-/// Lockup listing structure
+/// A seller's open listings per subnet: `(seller, netuid) -> listing ids`.
+pub type UserListings = Mapping<(AccountId, NetUid), Vec<ListingId>>;
+
+/// The factory's settings. Vaults copy the fee rate and minimum purchase at
+/// creation; they read the fee recipient, validator hotkeys and the pause live.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[ink::scale_derive(Encode, Decode, TypeInfo)]
-#[cfg_attr(feature = "std", derive(ink::storage::traits::StorageLayout))]
-pub struct LockupListing {
-    pub id: LockupListingId,
-    pub netuid: NetUid,
-    pub seller: AccountId,
-    pub total_amount: AlphaAmount,     // Original total amount
-    pub remaining_amount: AlphaAmount, // Amount not yet purchased
-    pub price_offset_bps: PriceOffsetBps,
-    pub lockup_duration: BlockAge, // Duration in blocks
-    pub fee_rate: FixedDecimal,    // Fee rate at listing time
-    pub created_at: BlockNumber,
+pub struct Config {
+    pub owner: AccountId,
+    pub registry: AccountId,
+    pub default_hotkey: AccountId,
+    pub fee_rate: FixedDecimal,
+    pub fee_recipient: AccountId,
+    pub min_listing_amount: AlphaAmount,
+    pub min_purchase_amount: AlphaAmount,
+    pub min_lockup_duration: BlockAge,
+    pub max_lockup_duration: BlockAge,
+    pub paused_until: BlockNumber,
 }

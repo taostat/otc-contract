@@ -9,11 +9,11 @@
         "test:run": "vitest run --no-file-parallelism --maxWorkers=1",
         "test:localnet": "node scripts/run-localnet-tests.mjs",
         "test:localnet:combined": "node scripts/run-localnet-tests.mjs --restart all",
-        "test:localnet:flaky": "node scripts/run-localnet-tests.mjs --restart file --repeat 3 src/tests/alpha-listing.test.ts src/tests/trading.test.ts src/tests/claim-dividends.test.ts src/tests/subnet-risk.test.ts src/lockup-listings/create-listing.test.ts src/lockup-listings/take-listing.test.ts src/lockup-listings/cancel-listing.test.ts src/lockup-listings/claim.test.ts",
+        "test:localnet:flaky": "node scripts/run-localnet-tests.mjs --restart file --repeat 3 src/tests/alpha-listing.test.ts src/tests/trading.test.ts src/tests/claim-dividends.test.ts src/tests/subnet-risk.test.ts src/lockup-listings/listing.test.ts",
         "test:watch": "vitest watch",
         "build:contracts": "bash scripts/build-contracts.sh",
         "generate-api-types": "papi add devnet -w ws://localhost:9944",
-        "generate-contract-types": "papi ink add ../target/ink/otc_contract/otc_contract.contract --key otc_contract && papi ink add ../target/ink/alpha_lockup/alpha_lockup.contract --key alpha_lockup && papi ink add ../target/ink/lockup_listings/lockup_listings.contract --key lockup_listings && papi ink add ../target/ink/code_registry/code_registry.contract --key code_registry",
+        "generate-contract-types": "papi ink add ../target/ink/otc_contract/otc_contract.contract --key otc_contract && papi ink add ../target/ink/alpha_lockup/alpha_lockup.contract --key alpha_lockup && papi ink add ../target/ink/listing_vault/listing_vault.contract --key listing_vault && papi ink add ../target/ink/lockup_listings/lockup_listings.contract --key lockup_listings && papi ink add ../target/ink/code_registry/code_registry.contract --key code_registry",
         "postinstall": "papi && patch-package"
     },
     "dependencies": {

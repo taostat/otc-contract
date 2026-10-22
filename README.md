@@ -2,14 +2,15 @@
 
 ink! smart contracts for Bittensor Alpha and TAO over-the-counter markets.
 
-The repository currently contains four deployable contracts:
+The repository currently contains five deployable contracts:
 
 | Contract | Purpose |
 | --- | --- |
 | `otc_contract` | Spot Alpha listings and TAO offers with market-relative pricing, fee collection, subnet listing freezes, pause controls, and owner-controlled upgrades. |
-| `lockup_listings` | Alpha listings that sell into per-purchase lockup escrows. Supports partial fills, configurable lockup duration bounds, fee collection, pause controls, and owner-controlled upgrades. |
-| `alpha_lockup` | Per-purchase escrow contract instantiated by `lockup_listings`. It holds purchased Alpha until `unlock_block`, then lets anyone claim the Alpha plus any staking rewards for the beneficiary. It upgrades only to the code the registry allows. |
-| `code_registry` | Timelocked allowlist of the code each contract kind may upgrade to, with a guardian veto. It is never upgraded itself. Escrows use it today; the other contracts move to it next, see the [design](docs/design/permissionless-positions.md). |
+| `lockup_listings` | Factory for lockup listings. Each listing is its own `listing_vault`; the factory holds no Alpha. It keeps the listing index and the settings vaults read (validator hotkey per subnet, fee recipient, trading pause), and upgrades through the registry. |
+| `listing_vault` | One listing's Alpha, on the vault's own coldkey. Sellers fund it without a proxy, buyers take from it directly, and lockup takes create an escrow. Anyone can sweep its TAO and staking rewards to the seller. It upgrades only to the code the registry allows. |
+| `alpha_lockup` | Per-purchase escrow created by a listing vault. It holds purchased Alpha until `unlock_block`, then lets anyone claim the Alpha plus any staking rewards for the beneficiary. It upgrades only to the code the registry allows. |
+| `code_registry` | Timelocked allowlist of the code each contract kind may upgrade to, with a guardian veto. It is never upgraded itself. Vaults, escrows and the lockup factory use it; `otc_contract` moves to it next, see the [design](docs/design/permissionless-positions.md). |
 
 Shared Bittensor environment types, runtime calls, chain extensions, and fixed-point helpers live in `shared`.
 
@@ -18,9 +19,10 @@ Shared Bittensor environment types, runtime calls, chain extensions, and fixed-p
 ```text
 .
 |-- contracts/
-|   |-- alpha_lockup/        # Escrow contract used by lockup listings
+|   |-- alpha_lockup/        # Escrow contract created by lockup takes
 |   |-- code_registry/       # Timelocked allowlist of upgrade code
-|   |-- lockup_listings/     # Lockup listing marketplace
+|   |-- listing_vault/       # One contract per listing, holding its Alpha
+|   |-- lockup_listings/     # Lockup listing factory
 |   `-- otc/                 # Spot OTC marketplace
 |-- integration-tests/       # TypeScript integration tests for a local contracts node
 |-- shared/                  # Shared ink! environment, runtime types, and helpers
@@ -49,11 +51,12 @@ cargo test
 
 cargo contract build --release --manifest-path contracts/code_registry/Cargo.toml
 cargo contract build --release --manifest-path contracts/alpha_lockup/Cargo.toml
+cargo contract build --release --manifest-path contracts/listing_vault/Cargo.toml
 cargo contract build --release --manifest-path contracts/otc/Cargo.toml
 cargo contract build --release --manifest-path contracts/lockup_listings/Cargo.toml
 ```
 
-Contract artifacts are written under `target/ink/<contract_name>/`. `npm run build:contracts` in `integration-tests` builds all of them, plus the test-only escrow upgrade target described below.
+Contract artifacts are written under `target/ink/<contract_name>/`. `npm run build:contracts` in `integration-tests` builds all of them, plus the test-only builds described below.
 
 The workspace keeps `Cargo.lock` tracked on purpose. These are deployable smart contracts, so reproducible dependency resolution is more important than treating the workspace like a reusable library crate.
 
@@ -72,9 +75,11 @@ The suite deploys local artifacts from:
 
 - `target/ink/code_registry/code_registry.wasm`
 - `target/ink/alpha_lockup/alpha_lockup.wasm`
+- `target/ink/listing_vault/listing_vault.wasm`
 - `target/ink/lockup_listings/lockup_listings.wasm`
 - `target/ink/otc_contract/otc_contract.wasm`
-- `target/upgrade-test/ink/alpha_lockup/alpha_lockup.wasm`: the escrow built with `--features upgrade-test`, which only bumps its storage version. The escrow tests offer it as the registry's current code to exercise upgrades and migration.
+- `target/upgrade-test/ink/alpha_lockup/alpha_lockup.wasm`: the escrow built with `--features upgrade-test`, which only bumps its storage version, for the escrow tests to upgrade to.
+- `target/upgrade-test/ink/code_registry/code_registry.wasm`: the registry built with `--features short-delays`, so the escrow tests can activate and force an upgrade within a few blocks.
 
 Each run deploys fresh contracts. To reuse deployments across runs, set `OTC_TEST_REUSE_DEPLOYMENTS=1`; the cached addresses are stored in these files, which Git ignores:
 
@@ -98,11 +103,11 @@ npm run test:localnet:flaky
 
 ## Deployment Order
 
-1. Build and upload `alpha_lockup`; keep its code hash.
-2. Instantiate `code_registry` with the `alpha_lockup` code hash as the initial escrow code (kind `2`).
-3. Instantiate `lockup_listings` with the `alpha_lockup` code hash and the registry address.
+1. Build all contracts, and upload the `alpha_lockup` and `listing_vault` code; keep their code hashes.
+2. Instantiate `code_registry` with the initial codes: `listing_vault` (kind `1`), `alpha_lockup` (kind `2`) and the `lockup_listings` code hash (kind `3`).
+3. Instantiate `lockup_listings` with the registry address.
 4. Instantiate `otc_contract` for spot listings and offers.
-5. Before using listing or selling flows that move stake from a user, that user must authorize the marketplace contract as a proxy on the chain.
+5. Before using `otc_contract` flows that move stake from a user, that user must authorize the contract as a proxy on the chain. Lockup listings need no proxy.
 
 ### `otc_contract` Constructor
 
@@ -122,16 +127,38 @@ new(
 ```rust
 new(
     owner: AccountId,
-    hotkey: AccountId,
-    escrow_code_hash: Hash,
     registry: AccountId,
+    default_hotkey: AccountId,
     fee_rate: u128,
+    fee_recipient: AccountId,
     min_listing_amount: u64,
     min_purchase_amount: u64,
     min_lockup_duration: u32,
     max_lockup_duration: u32,
+) -> Result<Self>
+```
+
+It fails if `fee_rate` exceeds `MAX_FEE_RATE` (5%) or the minimum lockup exceeds the maximum. `default_hotkey` is the validator hotkey vaults delegate to on subnets without an override.
+
+### `listing_vault` Constructor
+
+```rust
+new(
+    seller: AccountId,
+    netuid: u16,
+    hotkey: AccountId,
+    amount: u64,
+    price_offset_bps: i32,
+    min_price: u64,
+    fee_rate: FixedDecimal,
+    min_purchase: u64,
+    lockup_duration: Option<u32>,
+    cancellable_after: u32,
+    registry: AccountId,
 )
 ```
+
+Vaults are created by a factory, which becomes the vault's `factory` and keeps the listing's id. `lockup_duration` is `None` for spot listings. Lockup listings pass `cancellable_after = 0`: the seller can cancel at any time.
 
 ### `alpha_lockup` Constructor
 
@@ -146,7 +173,7 @@ new(
 )
 ```
 
-`alpha_lockup` is normally instantiated by `lockup_listings` when a buyer takes a lockup listing, and binds to the lockup contract's registry for life.
+A listing vault creates an `alpha_lockup` escrow when a buyer takes a lockup listing. The escrow binds to the vault's registry for life.
 
 ## Units And Pricing
 
@@ -205,34 +232,80 @@ Users are limited to 25 active Alpha listings and 25 active TAO offers per subne
 
 ## Lockup Listings Interface
 
-### Trading
+Each lockup listing is its own `listing_vault`, holding the seller's Alpha on the vault's own coldkey. The `lockup_listings` factory creates vaults and keeps the index; it never holds Alpha.
+
+### Selling
+
+1. The seller calls `create_listing(netuid, hotkey, amount, price_offset_bps, min_price, lockup_duration)` on the factory. It creates a Pending vault and returns the listing id and the vault's address; the seller pays the vault's storage deposit.
+2. The seller funds and opens the vault in one batch, with no proxy:
+
+   ```text
+   utility.batch_all([
+     subtensorModule.transfer_stake(vault, hotkey, netuid, netuid, amount),
+     contracts.call(vault.activate()),
+   ])
+   ```
+
+   `activate` requires the vault to hold `amount` within the transfer tolerance and lists what it actually holds. It then moves the stake to the factory's validator hotkey for the subnet, when Subtensor allows. If activation fails, the batch reverts the transfer too.
+
+`min_price` is the seller's floor, in TAO per Alpha scaled by 1e9 (0 for none). Takes below it fail, so a buyer can't push the spot price down earlier in the same batch and buy cheap.
+
+Vault addresses are predictable. pallet-contracts derives an address from the deployer (the factory), the code hash, the constructor arguments and the salt. The factory salts each vault with the seller and `get_seller_nonce(seller)`, and the constructor arguments hold only the seller's terms and the factory's current fee rate, minimum purchase and registry, so a frontend can create and fund a listing in one batch. If the factory's settings or the registry's vault code change in between, the batch reverts as a whole.
+
+### Vault
 
 ```rust
-create_lockup_listing(hotkey, netuid, amount, price_offset_bps, lockup_duration) -> Result<u64>
-#[payable] take_lockup_listing(netuid, seller, listing_id, amount) -> Result<u64>
-cancel_lockup_listing(netuid, listing_id) -> Result<()>
-force_cancel_lockup_listing(netuid, seller, listing_id) -> Result<()>
-```
-
-`create_lockup_listing` moves Alpha from the seller through the Bittensor proxy flow. The seller must have authorized the contract as a proxy first.
-
-`take_lockup_listing` can partially fill a listing. Each purchase instantiates a new `alpha_lockup` escrow and returns its purchase id. If a partial fill leaves a nonzero remainder below Bittensor's minimum stake amount of `2_000_000` rao, the purchase is rejected. Purchases below `min_purchase_amount` are rejected too, except a purchase of the entire remainder: stake transfers can round down by a rao, so a listing can hold slightly less than it was created with.
-
-### Queries
-
-```rust
-get_listing(netuid, seller, listing_id) -> Option<LockupListing>
-get_user_listings(seller, netuid) -> Vec<u64>
-get_escrow(netuid, listing_id, purchase_id) -> Option<AccountId>
-estimate_lockup_price(netuid, seller, listing_id, amount) -> Result<u64>
-get_reserved_alpha(netuid) -> u64
-get_escrow_code_hash() -> Hash
+activate() -> Result<()>
+#[payable] take(amount, recipient) -> Result<Option<AccountId>>
+quote(amount) -> Result<Quote>
+cancel() -> Result<()>
+close() -> Result<()>
+sweep_stake() -> Result<()>
+sweep_tao() -> Result<()>
+resync_hotkey(new_hotkey) -> Result<()>
+consolidate() -> Result<()>
+upgrade(code_hash) -> Result<()>
+set_upgrade_policy(policy) -> Result<()>
+migrate()
+get_info() -> Result<VaultInfo>
+get_status() -> Status
+get_seller() -> AccountId
+get_factory() -> AccountId
 get_registry() -> AccountId
-get_lockup_duration_limits() -> (u32, u32)
-get_pause_state() -> PauseState
+get_hotkey() -> AccountId
+get_remaining() -> u64
+get_upgrade_policy() -> UpgradePolicy
+get_version() -> u16
 ```
 
-Users are limited to 25 active lockup listings per subnet.
+- `take` buys `amount` at the market price moved by the listing's offset, plus the fee. `quote` shows the cost, and any excess TAO is refunded. A lockup take creates an `alpha_lockup` escrow for `recipient` from the registry's current escrow code, and returns it. A partial take must leave nothing or at least Bittensor's minimum stake of `2_000_000` rao. Takes below the minimum purchase fail, except for the whole remainder: stake transfers can round down by a rao, so a vault can hold slightly less than was listed. Takes fail while the factory is paused. The seller receives the price, and the factory's fee recipient the fee.
+- The seller can `cancel` at any time, and the stake returns to them, rewards included. If Subtensor refuses the transfer, for example while the subnet is being dissolved, the listing still closes and the sweeps return what is left later. Cancelling never consults the factory and is never paused.
+- Anyone can call `sweep_stake`, which sends stake beyond the listing, such as rewards, to the seller (all of it once the listing is closed), and `sweep_tao`, which sends the vault's TAO, for example from a subnet liquidation, to the seller. Neither terminates the vault.
+- Anyone can call `resync_hotkey` after a validator hotkey swap, by the same rule as escrows, and `consolidate` to move an open listing to the factory's current validator hotkey.
+- `close` lets the seller terminate a closed vault, recovering its TAO and storage deposit. Remaining stake goes to the seller first; only dust worth less than Subtensor's minimum transfer is left behind. Anything sent to a terminated vault is lost.
+- Upgrades work as for escrows, against the registry's vault code, with the seller as the owner.
+
+### Factory
+
+```rust
+create_listing(netuid, hotkey, amount, price_offset_bps, min_price, lockup_duration) -> Result<(u64, AccountId)>
+prune_listing(netuid, seller, listing_id) -> Result<()>
+get_listing(netuid, seller, listing_id) -> Option<AccountId>
+get_vault_listing(vault) -> Option<(u16, AccountId, u64)>
+get_user_listings(seller, netuid) -> Vec<u64>
+get_seller_nonce(seller) -> u64
+get_config() -> Config
+get_owner() -> AccountId
+get_pending_owner() -> Option<AccountId>
+get_registry() -> AccountId
+get_version() -> u16
+VaultFactory::trading_paused() -> bool
+VaultFactory::fee_recipient() -> AccountId
+VaultFactory::validator_hotkey(netuid) -> AccountId
+VaultFactory::listing_closed()
+```
+
+The index holds open listings; a vault removes its listing when it fills or is cancelled. That report is best effort, so if it ever fails, anyone can `prune_listing` once the vault is closed or gone. Users are limited to 25 open listings per subnet. Vaults copy the fee rate and minimum purchase when they are created, and read the fee recipient, validator hotkey and pause from the factory.
 
 ## Alpha Lockup Interface
 
@@ -303,21 +376,17 @@ Both roles should be multisigs. A compromised key can stall upgrades but cannot 
 
 ## Owner Controls
 
-Both marketplace contracts have owner-only controls for:
+`otc_contract` has owner-only controls for:
 
 - owner transfer
 - hotkey updates
 - fee rate updates
-- minimum listing, offer, or purchase amount updates
+- minimum listing and offer amount updates
 - pause and resume
+- `set_subnet_listing_status(netuid, frozen)`, which prevents new Alpha listings on a subnet while preserving cancellation and other allowed maintenance flows
 - `set_code` upgrades
 
-Additional owner controls:
-
-- `otc_contract`: `set_subnet_listing_status(netuid, frozen)` prevents new Alpha listings on a subnet while preserving cancellation and other allowed maintenance flows.
-- `lockup_listings`: `update_escrow_code_hash` and `update_lockup_duration_limits`.
-
-Pause states are shared:
+Its pause states:
 
 | State | Effect |
 | --- | --- |
@@ -325,12 +394,23 @@ Pause states are shared:
 | `TradingPaused` | New trading actions are blocked while maintenance and cancellation flows remain available where implemented. |
 | `FullyPaused` | Trading and most state-changing flows are blocked except owner recovery actions such as `resume`. |
 
+The `lockup_listings` owner's controls only shape future listings and takes; none can reach a seller's Alpha:
+
+- `transfer_ownership(new_owner)`, which the new owner completes with `accept_ownership()`; `None` withdraws a proposal
+- `set_default_hotkey` and `set_validator_hotkey(netuid, hotkey)`, where `None` removes a subnet's override
+- `set_fee_rate`, for new listings only and at most `MAX_FEE_RATE` (5%), and `set_fee_recipient`
+- `set_min_listing_amount`, `set_min_purchase_amount` (new listings only) and `set_lockup_duration_limits`
+- `pause(blocks)` for at most `MAX_PAUSE` (50,400 blocks, about a week), renewable, and `resume()`. A pause blocks new listings and takes, never cancels, sweeps or claims.
+- `upgrade(code_hash)` to the registry's current factory code; the new code migrates on its next call, or through `migrate()`.
+
 ## Security Notes
 
 - These contracts are not presented here as externally audited.
 - The contracts depend on Bittensor runtime calls and chain extension behavior for stake movement, stake queries, and live Alpha pricing.
-- Stake-moving seller flows require proxy authorization from the user before they can succeed.
+- `otc_contract`'s stake-moving seller flows require proxy authorization from the user before they can succeed. Lockup listings are funded without a proxy.
 - Market-relative prices are evaluated at execution time, not listing creation time.
+- A listing vault or escrow only ever sends Alpha or TAO to its owner, a buyer who paid in the same call, or an escrow it creates in the same call; fees go to the factory's fee recipient out of the buyer's payment.
+- Anyone can deploy the vault code with themselves as the "factory" and a registry of their own, which would let them charge any fee and create escrows from code they control. Before a buyer pays a vault, frontends must check that `get_factory()` is the official factory, that the factory's `get_vault_listing(vault)` returns the listing, that `get_registry()` is the official registry, and that the vault runs the registry's vault code.
 - Trade flows update listing state before paying out. Escrow claims mark the escrow claimed only after the stake transfer is verified. Any failure reverts the whole call, so no partial state is kept.
 - Every stake transfer is verified against the stake actually moved, within 10 rao either way: stake is a share of a hotkey's pool, and Subtensor's rounding can shave a rao off a transfer or add one to a recipient that already stakes on the hotkey. A transfer that fails verification traps, reverting the whole call. Listings record the stake that actually arrived, so later moves never ask for stake the contract does not hold.
 - Keep owner keys and upgrade authority operationally separate from test keys and development accounts.

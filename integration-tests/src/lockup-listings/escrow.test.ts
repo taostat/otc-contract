@@ -8,18 +8,13 @@ import {
     UPGRADE_TEST_ARTIFACTS,
     type LockupListingsContext,
     type TestAccount,
-    LockupListingsSdk,
 } from "../setup";
 import {
     taoToRao,
     waitForBlocks,
     fundAccount,
     getBalance,
-    registerSubnet,
-    registerValidator,
-    addContractAsProxy,
     createHotkey,
-    elevateRegistrationLimits,
     MARKET_PRICE,
     SHORT_LOCKUP_DURATION,
     LONG_LOCKUP_DURATION,
@@ -32,6 +27,8 @@ import {
     expectContractError,
     expectEvent,
     queryOk,
+    quoteVault,
+    setupLockupSubnet,
     submitOk,
     takeLockupListing,
     withIntegrationGas,
@@ -39,7 +36,7 @@ import {
 import { getStakeBalance } from "../utils/stake-helpers";
 
 const LISTING_AMOUNT = BITTENSOR_MIN_STAKE + 500_000n;
-const REQUIRED_ALPHA = LISTING_AMOUNT * 10n;
+const SELLER_ALPHA = LISTING_AMOUNT * 10n;
 const PURCHASE_PAYMENT_DRIFT_BUFFER = taoToRao(10);
 const TRANSFER_TOLERANCE = 10n;
 
@@ -50,13 +47,15 @@ const CONSENT_REQUIRED = 14;
 const FORCE_DELAY_NOT_ELAPSED = 15;
 const STAKE_REMAINING = 18;
 
+// The test registry's delays, in blocks.
+const UPGRADE_DELAY = 5;
+const FORCE_DELAY = 30;
+
 describe("Alpha Lockup Escrow - sweep, resync and upgrade", () => {
     let context: LockupListingsContext;
-    let contract: ReturnType<LockupListingsSdk["getContract"]>;
     let netuid: number;
     let bobHotkey: Wallet;
-    // Escrow code built with a newer storage version, offered by the registry as
-    // the current escrow code, while new escrows still run the released code.
+    // Escrow code built with a newer storage version, for the registry to adopt.
     let upgradeCodeHash: string;
 
     beforeAll(async () => {
@@ -67,66 +66,35 @@ describe("Alpha Lockup Escrow - sweep, resync and upgrade", () => {
             UPGRADE_TEST_ARTIFACTS,
             "alpha_lockup",
         );
-        context = await setupLockupListingsEnvironment({ registryEscrowCode: upgradeCodeHash });
+        context = await setupLockupListingsEnvironment({
+            registry: { artifactsDir: UPGRADE_TEST_ARTIFACTS, upgradeDelay: UPGRADE_DELAY, forceDelay: FORCE_DELAY },
+        });
         expect(upgradeCodeHash).not.toBe(context.escrowCodeHash);
-        contract = context.contractSdk.getContract(context.contractAddress!);
-        const { accounts } = context;
-
-        await submitOk(contract.send("update_min_listing_amount", {
-            origin: accounts.alice.address,
-            data: { new_amount: BITTENSOR_MIN_STAKE },
-        }), accounts.alice.signer, "update_min_listing_amount");
-        await submitOk(contract.send("update_min_purchase_amount", {
-            origin: accounts.alice.address,
-            data: { new_amount: BITTENSOR_MIN_STAKE },
-        }), accounts.alice.signer, "update_min_purchase_amount");
-
-        const subnetOwnerHotkey = createHotkey("//Alice/escrow");
-        await fundAccount(context.api, subnetOwnerHotkey.address, taoToRao(10), accounts.alice.signer);
-        netuid = await registerSubnet(context.api, subnetOwnerHotkey.address, accounts.alice.signer);
-        await elevateRegistrationLimits(context.api, netuid, 20, 20, accounts.alice.signer);
-        await waitForBlocks(context.api, 1);
-
-        // The lockup contract's hotkey is alice; escrows hold stake on it.
-        await fundAccount(context.api, context.contractAddress!, taoToRao(10), accounts.alice.signer);
-        await registerValidator(context.api, netuid, accounts.alice.address, accounts.alice.signer, taoToRao(100));
-
-        bobHotkey = createHotkey("//Bob/escrow");
-        await fundAccount(context.api, bobHotkey.address, taoToRao(1), accounts.alice.signer);
-        await registerValidator(context.api, netuid, bobHotkey.address, accounts.bob.signer, taoToRao(5000), REQUIRED_ALPHA);
-        await waitForBlocks(context.api, 2);
-        await addContractAsProxy(context.api, context.contractAddress!, accounts.bob.signer);
-        await waitForBlocks(context.api, 2);
-
-        // Fund the buyer and the third parties that sweep, upgrade and claim.
-        await fundAccount(context.api, accounts.charlie.address, taoToRao(200), accounts.alice.signer);
-        await fundAccount(context.api, accounts.dave.address, taoToRao(100), accounts.alice.signer);
-        await fundAccount(context.api, accounts.eve.address, taoToRao(20), accounts.alice.signer);
+        ({ netuid, sellerHotkey: bobHotkey } = await setupLockupSubnet(context, "escrow", SELLER_ALPHA));
     }, 300000);
 
     afterAll(async () => {
         await cleanupTestEnvironment();
     });
 
+    /**
+     * Bob lists, and `buyer` takes the whole listing into an escrow. Vaults create
+     * escrows from the registry's current escrow code.
+     */
     async function purchaseEscrow(buyer: TestAccount, lockupDuration: number) {
-        const { listingId, listedAmount } = await createLockupListing(contract, context.accounts.bob.signer, context.accounts.bob.address, {
+        const { vault, listedAmount } = await createLockupListing(context, context.accounts.bob, {
             hotkey: bobHotkey.address,
             netuid,
             amount: LISTING_AMOUNT,
             price_offset_bps: MARKET_PRICE,
             lockup_duration: lockupDuration,
         });
-        const [, , totalRequired] = queryOk<[bigint, bigint, bigint]>(await contract.query("estimate_lockup_price", {
-            origin: context.accounts.alice.address,
-            data: { netuid, seller: context.accounts.bob.address, listing_id: listingId, amount: listedAmount },
-        }), "estimate_lockup_price");
-        const { escrowAccount } = await takeLockupListing(contract, buyer.signer, buyer.address, {
-            netuid,
-            seller: context.accounts.bob.address,
-            listing_id: listingId,
+        const quote = await quoteVault(vault, buyer.address, listedAmount);
+        const { escrowAccount } = await takeLockupListing(vault, buyer, {
             amount: listedAmount,
-        }, totalRequired + PURCHASE_PAYMENT_DRIFT_BUFFER);
-        return { escrow: context.alphaLockupSdk.getContract(escrowAccount), escrowAccount };
+            recipient: buyer.address,
+        }, quote.total + PURCHASE_PAYMENT_DRIFT_BUFFER);
+        return { escrow: context.alphaLockupSdk.getContract(escrowAccount!), escrowAccount: escrowAccount! };
     }
 
     async function waitForUnlock(escrow: Awaited<ReturnType<typeof purchaseEscrow>>["escrow"]) {
@@ -150,7 +118,7 @@ describe("Alpha Lockup Escrow - sweep, resync and upgrade", () => {
             data: {},
         })), accounts.eve.signer, "sweep_tao");
         const swept = expectEvent(escrow, result, "TaoSwept");
-        expect(swept.value.beneficiary).toBe(accounts.charlie.address);
+        expect(swept.value.owner).toBe(accounts.charlie.address);
         expect(swept.value.initiated_by).toBe(accounts.eve.address);
         const sweptAmount = BigInt(swept.value.amount);
         expect(sweptAmount).toBeGreaterThanOrEqual(taoToRao(3));
@@ -167,86 +135,100 @@ describe("Alpha Lockup Escrow - sweep, resync and upgrade", () => {
         expect(BigInt(info.tao_balance)).toBe(0n);
     }, 600000);
 
-    it("refuses a third-party upgrade before the force delay, and under ConsentOnly", async () => {
-        const { accounts } = context;
-        const { escrow } = await purchaseEscrow(accounts.charlie, LONG_LOCKUP_DURATION);
-        const upgradeArgs = { code_hash: Binary.fromHex(upgradeCodeHash) };
+    it("upgrades escrows through the registry: the beneficiary at once, anyone after the force delay, unless ConsentOnly", async () => {
+        const { accounts, api } = context;
+        const registry = context.registrySdk.getContract(context.registryAddress);
+        const version = async (escrow: any) => queryOk<number>(await escrow.query("get_version", {
+            origin: accounts.alice.address,
+            data: {},
+        }), "get_version");
+        const upgradeTo = (codeHash: string) => ({ code_hash: Binary.fromHex(codeHash) });
 
-        expectContractError(await escrow.query("upgrade", {
-            origin: accounts.dave.address,
-            data: upgradeArgs,
-        }), FORCE_DELAY_NOT_ELAPSED, "third-party upgrade");
-
-        await submitOk(escrow.send("set_upgrade_policy", {
+        // Escrows bought now run the released code, from the factory's registry.
+        const adopter = await purchaseEscrow(accounts.charlie, SHORT_LOCKUP_DURATION);
+        const forced = await purchaseEscrow(accounts.charlie, LONG_LOCKUP_DURATION);
+        const optedOut = await purchaseEscrow(accounts.charlie, LONG_LOCKUP_DURATION);
+        expect(await version(adopter.escrow)).toBe(1);
+        expect(queryOk<string>(await adopter.escrow.query("get_registry", {
+            origin: accounts.alice.address,
+            data: {},
+        }), "get_registry")).toBe(context.registryAddress);
+        await submitOk(optedOut.escrow.send("set_upgrade_policy", {
             origin: accounts.charlie.address,
             data: { policy: { type: "ConsentOnly", value: undefined } },
         }), accounts.charlie.signer, "set_upgrade_policy");
 
-        expectContractError(await escrow.query("upgrade", {
+        // The registry owner proposes the new code; after the delay anyone activates it.
+        await submitOk(registry.send("propose", {
+            origin: accounts.alice.address,
+            data: { kind: ESCROW_CODE_KIND, ...upgradeTo(upgradeCodeHash) },
+        }), accounts.alice.signer, "propose");
+        await waitForBlocks(api, UPGRADE_DELAY + 1);
+        await submitOk(registry.send("activate", {
             origin: accounts.dave.address,
-            data: upgradeArgs,
-        }), CONSENT_REQUIRED, "third-party upgrade under ConsentOnly");
-    }, 600000);
-
-    it("lets the beneficiary upgrade to the registry's current code, and the escrow keeps working", async () => {
-        const { accounts } = context;
-        const { escrow } = await purchaseEscrow(accounts.charlie, SHORT_LOCKUP_DURATION);
-
-        expect(queryOk<number>(await escrow.query("get_version", {
-            origin: accounts.alice.address,
-            data: {},
-        }), "get_version")).toBe(1);
-
-        // The escrow answers to the lockup's registry, which offers the upgrade code.
-        expect(queryOk<string>(await escrow.query("get_registry", {
-            origin: accounts.alice.address,
-            data: {},
-        }), "get_registry")).toBe(context.registryAddress);
-        const registry = context.registrySdk.getContract(context.registryAddress);
+            data: { kind: ESCROW_CODE_KIND, ...upgradeTo(upgradeCodeHash) },
+        }), accounts.dave.signer, "activate");
         const current = queryOk<any>(await registry.query("current", {
             origin: accounts.alice.address,
             data: { kind: ESCROW_CODE_KIND },
         }), "current");
         expect(current.code_hash.asHex()).toBe(upgradeCodeHash);
 
-        // Only the registry's current code can be installed.
-        expectContractError(await escrow.query("upgrade", {
+        // Only the current code can be installed, and others wait for the force delay.
+        expectContractError(await adopter.escrow.query("upgrade", {
             origin: accounts.charlie.address,
-            data: { code_hash: Binary.fromHex(context.escrowCodeHash!) },
+            data: upgradeTo(context.escrowCodeHash!),
         }), NOT_CURRENT_CODE, "upgrade to the released code");
+        expectContractError(await forced.escrow.query("upgrade", {
+            origin: accounts.dave.address,
+            data: upgradeTo(upgradeCodeHash),
+        }), FORCE_DELAY_NOT_ELAPSED, "third-party upgrade before the force delay");
 
-        const upgradeResult = await submitOk(escrow.send("upgrade", withIntegrationGas({
+        // The beneficiary adopts it at once; the new code migrates storage.
+        const upgradeResult = await submitOk(adopter.escrow.send("upgrade", withIntegrationGas({
             origin: accounts.charlie.address,
-            data: { code_hash: Binary.fromHex(upgradeCodeHash) },
+            data: upgradeTo(upgradeCodeHash),
         })), accounts.charlie.signer, "beneficiary upgrade");
-        const upgraded = expectEvent(escrow, upgradeResult, "Upgraded");
-        expect(upgraded.value.code_hash.asHex()).toBe(upgradeCodeHash);
-
-        // The new code migrates storage to its version on the next call.
-        await submitOk(escrow.send("migrate", withIntegrationGas({
+        expect(expectEvent(adopter.escrow, upgradeResult, "Upgraded").value.code_hash.asHex()).toBe(upgradeCodeHash);
+        await submitOk(adopter.escrow.send("migrate", withIntegrationGas({
             origin: accounts.dave.address,
             data: {},
         })), accounts.dave.signer, "migrate");
-        expect(queryOk<number>(await escrow.query("get_version", {
-            origin: accounts.alice.address,
-            data: {},
-        }), "get_version after upgrade")).toBe(2);
+        expect(await version(adopter.escrow)).toBe(2);
 
         // The upgraded escrow still pays out to the beneficiary.
-        await waitForUnlock(escrow);
-        const charlieStakeBefore = await getStakeBalance(context.api, accounts.alice.address, netuid, accounts.charlie.address);
-        const claimResult = await submitOk(escrow.send("claim", withIntegrationGas({
+        await waitForUnlock(adopter.escrow);
+        const charlieStakeBefore = await getStakeBalance(api, accounts.alice.address, netuid, accounts.charlie.address);
+        const claimResult = await submitOk(adopter.escrow.send("claim", withIntegrationGas({
             origin: accounts.dave.address,
             data: {},
         })), accounts.dave.signer, "claim after upgrade");
-        const claimed = expectEvent(escrow, claimResult, "AlphaClaimed");
+        const claimed = expectEvent(adopter.escrow, claimResult, "AlphaClaimed");
         expect(claimed.value.buyer).toBe(accounts.charlie.address);
-        const charlieStakeAfter = await getStakeBalance(context.api, accounts.alice.address, netuid, accounts.charlie.address);
+        const charlieStakeAfter = await getStakeBalance(api, accounts.alice.address, netuid, accounts.charlie.address);
         expect(charlieStakeAfter - charlieStakeBefore).toBeGreaterThanOrEqual(BigInt(claimed.value.amount_claimed) - TRANSFER_TOLERANCE);
-    }, 600000);
+
+        // Once the code has been current for the force delay, anyone applies it,
+        // except to escrows whose beneficiary chose ConsentOnly.
+        await waitUntilBlock(api, Number(current.since) + FORCE_DELAY);
+        await submitOk(forced.escrow.send("upgrade", withIntegrationGas({
+            origin: accounts.dave.address,
+            data: upgradeTo(upgradeCodeHash),
+        })), accounts.dave.signer, "forced upgrade");
+        await submitOk(forced.escrow.send("migrate", withIntegrationGas({
+            origin: accounts.dave.address,
+            data: {},
+        })), accounts.dave.signer, "migrate after forced upgrade");
+        expect(await version(forced.escrow)).toBe(2);
+        expectContractError(await optedOut.escrow.query("upgrade", {
+            origin: accounts.dave.address,
+            data: upgradeTo(upgradeCodeHash),
+        }), CONSENT_REQUIRED, "forced upgrade under ConsentOnly");
+        expect(await version(optedOut.escrow)).toBe(1);
+    }, 900000);
 
     // Runs last: the swap moves every stake on alice's hotkey in this subnet,
-    // including the lockup contract's own.
+    // including the open listings' vaults.
     it("lets anyone resync an escrow after a validator hotkey swap, and claim follows", async () => {
         const { accounts } = context;
         const { escrow, escrowAccount } = await purchaseEscrow(accounts.charlie, SHORT_LOCKUP_DURATION);

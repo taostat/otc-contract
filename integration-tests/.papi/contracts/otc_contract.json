@@ -118,7 +118,7 @@
         "displayName": [
           "ChainExtension"
         ],
-        "type": 61
+        "type": 62
       },
       "hash": {
         "displayName": [
@@ -997,6 +997,167 @@
         "label": "SubnetListingStatusChanged",
         "module_path": "otc_contract::events",
         "signature_topic": "0xcc84d517a37eb68d44811145a57f8b0dfaba507aed385ae1bb943e681b29c353"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "owner",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "initiated_by",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "amount",
+            "type": {
+              "displayName": [
+                "Balance"
+              ],
+              "type": 0
+            }
+          }
+        ],
+        "docs": [
+          "The position's TAO balance was sent to its owner"
+        ],
+        "label": "TaoSwept",
+        "module_path": "otc_shared::events",
+        "signature_topic": "0xffc83658b8556616ae18d6071f1e37c10fce38e2c3cca12fb3e96d171cdedb5b"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "old_hotkey",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "new_hotkey",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "initiated_by",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "new_hotkey_stake",
+            "type": {
+              "displayName": [
+                "AlphaAmount"
+              ],
+              "type": 0
+            }
+          }
+        ],
+        "docs": [
+          "The position now points at the hotkey its stake moved to"
+        ],
+        "label": "HotkeyResynced",
+        "module_path": "otc_shared::events",
+        "signature_topic": "0x1f6a05115faf2230ea59c7e181eb3704d16bd8f9a3c35263c0253c25b3ecb792"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "code_hash",
+            "type": {
+              "displayName": [
+                "Hash"
+              ],
+              "type": 58
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "initiated_by",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          }
+        ],
+        "docs": [
+          "The position installed new code"
+        ],
+        "label": "Upgraded",
+        "module_path": "otc_shared::events",
+        "signature_topic": "0xf948c495403d7387e6f1f54500e0e501588d596b53989c6fc8859c2c6f58fbf0"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "owner",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "policy",
+            "type": {
+              "displayName": [
+                "UpgradePolicy"
+              ],
+              "type": 61
+            }
+          }
+        ],
+        "docs": [
+          "The owner changed who may upgrade the position"
+        ],
+        "label": "UpgradePolicyChanged",
+        "module_path": "otc_shared::events",
+        "signature_topic": "0xcdc998b3b364356a7bf35e0b542fc5c04520623c33a9e8e92c18289dde90ba93"
       }
     ],
     "lang_error": {
@@ -4255,6 +4416,30 @@
     },
     {
       "id": 61,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "index": 0,
+                "name": "Auto"
+              },
+              {
+                "index": 1,
+                "name": "ConsentOnly"
+              }
+            ]
+          }
+        },
+        "path": [
+          "otc_shared",
+          "upgrade",
+          "UpgradePolicy"
+        ]
+      }
+    },
+    {
+      "id": 62,
       "type": {
         "def": {
           "variant": {}

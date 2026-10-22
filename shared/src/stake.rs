@@ -42,13 +42,14 @@ pub fn stake_of(
 
 /// Transfer `amount` of the calling contract's stake on `hotkey` to `destination`
 /// in the same subnet, then check that the contract's stake fell by `amount` and
-/// the destination's rose by `amount`, both within `TRANSFER_TOLERANCE`.
+/// the destination's rose by `amount`, both within `TRANSFER_TOLERANCE`. Returns
+/// the stake the contract still holds on `hotkey`.
 pub fn transfer_stake_verified(
     destination: AccountId,
     hotkey: AccountId,
     netuid: NetUid,
     amount: AlphaAmount,
-) -> Result<(), TransferError> {
+) -> Result<AlphaAmount, TransferError> {
     let own_account = ink::env::account_id::<BittensorEnvironment>();
     let query = |coldkey| stake_of(hotkey, coldkey, netuid).map_err(|_| TransferError::QueryFailed);
 
@@ -66,7 +67,8 @@ pub fn transfer_stake_verified(
         )
         .map_err(TransferError::Rejected)?;
 
-    let own_decrease = own_before.saturating_sub(query(own_account)?);
+    let own_after = query(own_account)?;
+    let own_decrease = own_before.saturating_sub(own_after);
     let destination_increase = query(destination)?.saturating_sub(destination_before);
     if !stake_delta_verified(own_decrease, amount)
         || !stake_delta_verified(destination_increase, amount)
@@ -74,7 +76,46 @@ pub fn transfer_stake_verified(
         return Err(TransferError::NotVerified);
     }
 
-    Ok(())
+    Ok(own_after)
+}
+
+/// Move `amount` of the calling contract's stake from `origin_hotkey` to
+/// `destination_hotkey` in the same subnet, then check that each side moved by
+/// `amount`, within `TRANSFER_TOLERANCE`. Returns the stake that arrived on
+/// `destination_hotkey`; callers record that rather than `amount`.
+pub fn move_stake_verified(
+    origin_hotkey: AccountId,
+    destination_hotkey: AccountId,
+    netuid: NetUid,
+    amount: AlphaAmount,
+) -> Result<AlphaAmount, TransferError> {
+    let own_account = ink::env::account_id::<BittensorEnvironment>();
+    let query =
+        |hotkey| stake_of(hotkey, own_account, netuid).map_err(|_| TransferError::QueryFailed);
+
+    let origin_before = query(origin_hotkey)?;
+    let destination_before = query(destination_hotkey)?;
+
+    let extension = <SubtensorExtension as ChainExtensionInstance>::instantiate();
+    extension
+        .move_stake(
+            origin_hotkey,
+            destination_hotkey,
+            netuid,
+            netuid,
+            AlphaCurrency::from(amount),
+        )
+        .map_err(TransferError::Rejected)?;
+
+    let origin_decrease = origin_before.saturating_sub(query(origin_hotkey)?);
+    let destination_increase = query(destination_hotkey)?.saturating_sub(destination_before);
+    if !stake_delta_verified(origin_decrease, amount)
+        || !stake_delta_verified(destination_increase, amount)
+    {
+        return Err(TransferError::NotVerified);
+    }
+
+    Ok(destination_increase)
 }
 
 #[cfg(test)]
@@ -122,7 +163,7 @@ mod tests {
 
         assert_eq!(
             transfer_stake_verified(accounts.charlie, accounts.bob, 1, 400),
-            Ok(())
+            Ok(600)
         );
         assert_eq!(testing::stake(accounts.bob, accounts.alice, 1), 600);
         assert_eq!(testing::stake(accounts.bob, accounts.charlie, 1), 400);
@@ -138,7 +179,7 @@ mod tests {
 
         assert_eq!(
             transfer_stake_verified(accounts.charlie, accounts.bob, 1, 1_000),
-            Ok(())
+            Ok(0)
         );
         assert_eq!(testing::stake(accounts.bob, accounts.charlie, 1), 999);
     }
@@ -154,7 +195,7 @@ mod tests {
 
         assert_eq!(
             transfer_stake_verified(accounts.charlie, accounts.bob, 1, 1_000),
-            Ok(())
+            Ok(0)
         );
         assert_eq!(testing::stake(accounts.bob, accounts.charlie, 1), 2_001);
     }
@@ -185,6 +226,43 @@ mod tests {
 
         assert_eq!(
             transfer_stake_verified(accounts.charlie, accounts.bob, 1, 1_000),
+            Err(TransferError::NotVerified)
+        );
+    }
+
+    #[ink::test]
+    fn verified_move_returns_the_stake_that_arrived() {
+        let accounts = accounts();
+        MockSubtensor::install(accounts.alice);
+        test::set_callee::<BittensorEnvironment>(accounts.alice);
+        testing::set_stake(accounts.bob, accounts.alice, 1, 1_000);
+        testing::set_transfer_loss(1);
+
+        assert_eq!(
+            move_stake_verified(accounts.bob, accounts.charlie, 1, 1_000),
+            Ok(999)
+        );
+        assert_eq!(testing::stake(accounts.bob, accounts.alice, 1), 0);
+        assert_eq!(testing::stake(accounts.charlie, accounts.alice, 1), 999);
+    }
+
+    #[ink::test]
+    fn verified_move_reports_rejections_and_wrong_amounts() {
+        let accounts = accounts();
+        MockSubtensor::install(accounts.alice);
+        test::set_callee::<BittensorEnvironment>(accounts.alice);
+        testing::set_stake(accounts.bob, accounts.alice, 1, 1_000);
+
+        testing::set_reject_transfers(true);
+        assert_eq!(
+            move_stake_verified(accounts.bob, accounts.charlie, 1, 1_000),
+            Err(TransferError::Rejected(SubtensorError::RuntimeError))
+        );
+
+        testing::set_reject_transfers(false);
+        testing::set_transfer_loss(TRANSFER_TOLERANCE + 1);
+        assert_eq!(
+            move_stake_verified(accounts.bob, accounts.charlie, 1, 1_000),
             Err(TransferError::NotVerified)
         );
     }
