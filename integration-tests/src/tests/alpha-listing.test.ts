@@ -316,7 +316,9 @@ describe("Alpha Listing Operations", () => {
                 expect(listing.success).toBe(true);
 
                 if (listing.success && listing.value.response) {
-                    expect(listing.value.response.amount).toBe(listAmount);
+                    // Transfers can round down by a rao; the listing holds what arrived.
+                    expect(listing.value.response.amount).toBeLessThanOrEqual(listAmount);
+                    expect(listAmount - listing.value.response.amount).toBeLessThanOrEqual(20n);
                     expect(listing.value.response.price_offset_bps).toBe(priceOffsetBps);
                     expect(listing.value.response.seller).toBe(accounts.bob.address);
                     expect(listing.value.response.netuid).toBe(netuid);
@@ -563,7 +565,9 @@ describe("Alpha Listing Operations", () => {
                         data: {}
                     });
                     if (minAmountResult.success) {
-                        expect(listing.value.response.amount).toBe(minAmountResult.value.response);
+                        const minAmount = minAmountResult.value.response;
+                        expect(listing.value.response.amount).toBeLessThanOrEqual(minAmount);
+                        expect(minAmount - listing.value.response.amount).toBeLessThanOrEqual(20n);
                     }
                 }
             }

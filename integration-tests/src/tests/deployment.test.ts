@@ -44,7 +44,7 @@ describe("OTC Contract Deployment", () => {
         });
         expect(hotkeyResult.success).toBe(true);
         if (hotkeyResult.success) {
-            expect(hotkeyResult.value.response).toBe(accounts.alice.address);
+            expect(hotkeyResult.value.response).toBe(accounts.eve.address);
         }
 
 

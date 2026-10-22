@@ -3,20 +3,38 @@ use crate::events::*;
 use crate::otc_contract::*;
 use crate::types::*;
 use core::convert::TryFrom;
+use core::panic::AssertUnwindSafe;
 use fixed::types::U64F64;
 use ink::env::Environment;
-use ink::scale::{Decode, Encode};
-use otc_shared::{BittensorEnvironment, FixedDecimal, PauseState, SharedError, StakeInfo};
+use ink::scale::{Compact, Decode, Encode};
+use otc_shared::{
+    AlphaAmount, AlphaCurrency, BittensorEnvironment, FixedDecimal, PauseState, SharedError,
+    StakeInfo, TaoCurrency,
+};
+use std::cell::RefCell;
 
 const MAX_LISTINGS_PER_USER_PER_NETUID: usize = 25;
 const MAX_OFFERS_PER_USER_PER_NETUID: usize = 25;
 const SUBTENSOR_EXTENSION_ID: u16 = 0;
 const GET_STAKE_INFO_FN_ID: u16 = 0;
+const TRANSFER_STAKE_FN_ID: u16 = 6;
 const GET_CURRENT_ALPHA_PRICE_FN_ID: u16 = 15;
 type TestAccountId = <BittensorEnvironment as Environment>::AccountId;
 
 // Mock market price: 2 TAO per Alpha (2 * 1e9)
 const MOCK_MARKET_PRICE: u64 = 2_000_000_000;
+
+/// Stake reported for every (hotkey, coldkey) pair, and whether transfers succeed.
+/// Defaults keep the original behavior: no stake and failing transfers.
+#[derive(Clone, Default)]
+struct MockState {
+    stake_amount: AlphaAmount,
+    transfer_succeeds: bool,
+}
+
+thread_local! {
+    static MOCK_STATE: RefCell<MockState> = RefCell::new(MockState::default());
+}
 
 #[derive(Clone, Copy)]
 struct MockStakeExtension;
@@ -29,16 +47,30 @@ impl ink::env::test::ChainExtension for MockStakeExtension {
     fn call(&mut self, func_id: u16, input: &[u8], output: &mut Vec<u8>) -> u32 {
         match func_id {
             GET_STAKE_INFO_FN_ID => {
-                let mut input = input;
+                // The off-chain engine passes arguments as a length-prefixed byte vector.
+                let payload = Vec::<u8>::decode(&mut &input[..]).expect("mock decode input");
+                let mut input = &payload[..];
                 let hotkey = TestAccountId::decode(&mut input).expect("mock decode hotkey");
                 let coldkey = TestAccountId::decode(&mut input).expect("mock decode coldkey");
                 let netuid = u16::decode(&mut input).expect("mock decode netuid");
 
-                let _ = (hotkey, coldkey, netuid);
-
-                output.extend(Encode::encode(&Option::<StakeInfo>::None));
+                MOCK_STATE.with(|state| {
+                    let stake_amount = state.borrow().stake_amount;
+                    if stake_amount == 0 {
+                        output.extend(Encode::encode(&Option::<StakeInfo>::None));
+                    } else {
+                        encode_some_stake(output, hotkey, coldkey, netuid, stake_amount);
+                    }
+                });
                 0
             }
+            TRANSFER_STAKE_FN_ID => MOCK_STATE.with(|state| {
+                if state.borrow().transfer_succeeds {
+                    0
+                } else {
+                    1
+                }
+            }),
             GET_CURRENT_ALPHA_PRICE_FN_ID => {
                 // Return mock market price: 2 TAO per Alpha
                 output.extend(Encode::encode(&MOCK_MARKET_PRICE));
@@ -50,7 +82,43 @@ impl ink::env::test::ChainExtension for MockStakeExtension {
 }
 
 fn register_mock_stake_extension() {
+    MOCK_STATE.with(|state| {
+        *state.borrow_mut() = MockState::default();
+    });
     ink::env::test::register_chain_extension(MockStakeExtension);
+}
+
+fn set_mock_stake_amount(amount: AlphaAmount) {
+    MOCK_STATE.with(|state| {
+        state.borrow_mut().stake_amount = amount;
+    });
+}
+
+fn set_transfer_succeeds(transfer_succeeds: bool) {
+    MOCK_STATE.with(|state| {
+        state.borrow_mut().transfer_succeeds = transfer_succeeds;
+    });
+}
+
+fn encode_some_stake(
+    output: &mut Vec<u8>,
+    hotkey: TestAccountId,
+    coldkey: TestAccountId,
+    netuid: u16,
+    stake_amount: AlphaAmount,
+) {
+    output.push(1);
+    output.extend(Encode::encode(&hotkey));
+    output.extend(Encode::encode(&coldkey));
+    output.extend(Encode::encode(&Compact(otc_shared::runtime::NetUid::from(
+        netuid,
+    ))));
+    output.extend(Encode::encode(&Compact(AlphaCurrency::from(stake_amount))));
+    output.extend(Encode::encode(&Compact(0u64)));
+    output.extend(Encode::encode(&Compact(AlphaCurrency::from(0))));
+    output.extend(Encode::encode(&Compact(TaoCurrency::from(0))));
+    output.extend(Encode::encode(&Compact(0u64)));
+    output.extend(Encode::encode(&true));
 }
 
 /// Helper function to create fee rate bits from percentage
@@ -2491,4 +2559,48 @@ fn admin_functions_work_when_paused() {
     let result = contract.resume();
     assert!(result.is_ok());
     assert_eq!(contract.get_pause_state(), PauseState::NotPaused);
+}
+
+#[ink::test]
+fn cancel_alpha_listing_traps_when_post_transfer_verification_fails() {
+    register_mock_stake_extension();
+    let accounts = ink::env::test::default_accounts::<BittensorEnvironment>();
+    let fee_rate = fee_rate_from_percentage(0.0);
+    let amount = 2_000_000_000u64;
+    // The transfer reports success, but the contract's stake never decreases.
+    set_mock_stake_amount(amount);
+    set_transfer_succeeds(true);
+
+    let mut contract = OtcContract::new(
+        accounts.alice,
+        accounts.bob,
+        fee_rate,
+        1_000_000_000,
+        1_000_000_000,
+        100,
+    );
+    let listing = AlphaListing {
+        id: 1,
+        netuid: 1,
+        seller: accounts.charlie,
+        amount,
+        price_offset_bps: 0,
+        fee_rate: contract.fee_rate,
+        created_at: 1,
+    };
+    contract
+        .alpha_listings
+        .insert((1, accounts.charlie, 1), &listing);
+    contract
+        .user_listings
+        .insert((accounts.charlie, 1), &vec![1]);
+    contract.increase_reserved_alpha(1, amount).unwrap();
+
+    ink::env::test::set_block_number::<BittensorEnvironment>(200);
+    ink::env::test::set_caller::<BittensorEnvironment>(accounts.charlie);
+
+    let result = std::panic::catch_unwind(AssertUnwindSafe(|| contract.cancel_alpha_listing(1, 1)));
+
+    assert!(result.is_err());
+    assert_eq!(contract.get_reserved_alpha(1), amount);
 }

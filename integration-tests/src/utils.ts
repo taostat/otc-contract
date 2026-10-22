@@ -15,6 +15,9 @@ export const TEST_CONFIG = {
     blockTime: 4000, // Expected block time in ms
 };
 
+const TARGETED_STAKE_TOP_UP = 50_000_000_000_000n; // 50,000 TAO
+const MAX_TARGETED_STAKE_ATTEMPTS = 20;
+
 function getWalletFromKeypair(keypair: KeyPair): Wallet {
     const signer = getPolkadotSigner(
         keypair.publicKey,
@@ -219,7 +222,8 @@ export async function registerValidator(
     netuid: number,
     hotkey: string,
     coldkeySigner: PolkadotSigner,
-    stakeAmount: bigint
+    stakeAmount: bigint,
+    minimumAlphaAmount: bigint = 0n
 ): Promise<void> {
     // Register the hotkey on the subnet
     const registerTx = api.tx.SubtensorModule.burned_register({
@@ -230,16 +234,56 @@ export async function registerValidator(
     await registerTx.signAndSubmit(coldkeySigner);
     console.log(`Registered validator with hotkey ${hotkey.slice(0, 10)}... on subnet ${netuid}`);
 
-    // Add stake
-    if (stakeAmount > 0n) {
+    // Add stake. Tests should pass a large enough TAO amount for the Alpha they
+    // intend to move because dynamic subnet prices vary across localnet runs.
+    const addStake = async (amount: bigint): Promise<void> => {
         const stakeTx = api.tx.SubtensorModule.add_stake({
             hotkey,
             netuid,
-            amount_staked: stakeAmount
+            amount_staked: amount
         });
         await stakeTx.signAndSubmit(coldkeySigner);
-        console.log(`Staked ${raoToTao(stakeAmount)} Alpha for validator on subnet ${netuid}`);
+    };
+
+    let currentStake = 0n;
+    const coldkey = ss58Address(coldkeySigner.publicKey, TEST_CONFIG.ss58Prefix);
+
+    if (stakeAmount > 0n) {
+        await addStake(stakeAmount);
+        currentStake = await getStakeForHotkeyColdkey(api, hotkey, coldkey, netuid);
+        console.log(`Validator has ${raoToTao(currentStake)} Alpha on subnet ${netuid}`);
     }
+
+    let attempts = 0;
+    while (minimumAlphaAmount > 0n && currentStake < minimumAlphaAmount && attempts < MAX_TARGETED_STAKE_ATTEMPTS) {
+        attempts += 1;
+        await addStake(TARGETED_STAKE_TOP_UP);
+        currentStake = await getStakeForHotkeyColdkey(api, hotkey, coldkey, netuid);
+        console.log(
+            `Validator top-up ${attempts}/${MAX_TARGETED_STAKE_ATTEMPTS}: ${raoToTao(currentStake)} Alpha on subnet ${netuid}`
+        );
+    }
+
+    if (minimumAlphaAmount > 0n && currentStake < minimumAlphaAmount) {
+        throw new Error(
+            `Validator ${hotkey} only reached ${raoToTao(currentStake)} Alpha on subnet ${netuid}; required ${raoToTao(minimumAlphaAmount)}`
+        );
+    }
+}
+
+async function getStakeForHotkeyColdkey(
+    api: TypedApi<typeof devnet>,
+    hotkey: string,
+    coldkey: string,
+    netuid: number
+): Promise<bigint> {
+    const stakeInfo = await api.apis.StakeInfoRuntimeApi.get_stake_info_for_hotkey_coldkey_netuid(
+        hotkey,
+        coldkey,
+        netuid
+    );
+
+    return stakeInfo?.stake ?? 0n;
 }
 
 /**
