@@ -6,540 +6,280 @@ pub mod types;
 
 pub use otc_shared::BittensorEnvironment;
 
+/// Factory for lockup listings. Each listing is its own `listing_vault`, created
+/// from the code registry's current vault code; the factory holds no Alpha.
+///
+/// The factory keeps the `(netuid, seller, listing_id) -> vault` index and the
+/// settings vaults read: the validator hotkey per subnet, the fee recipient and
+/// the trading pause. A compromised factory could block takes or redirect future
+/// fees, but never touch a seller's Alpha: cancelling and sweeping a vault never
+/// consult the factory.
 #[ink::contract(env = otc_shared::BittensorEnvironment)]
 mod lockup_listings {
     use crate::errors::Error;
     use crate::events::*;
-    use crate::types::{
-        EscrowsMapping, LockupListing, LockupListingId, LockupListingsMapping, PurchaseId,
-        ReservedAlphaMapping, UserLockupListingsMapping,
-    };
-    use alpha_lockup::AlphaLockupRef;
-    use fixed::types::U64F64;
-    use ink::prelude::{boxed::Box, vec::Vec};
+    use crate::types::{Config, ListingId, ListingKey, UserListings};
+    use ink::prelude::vec::Vec;
+    use ink::storage::Mapping;
+    use otc_shared::events::Upgraded;
     use otc_shared::{
-        stake_delta_verified, AlphaAmount, AlphaCurrency, BlockAge, FixedDecimal, NetUid,
-        PauseState, PriceOffsetBps, ProxyCall, RuntimeCall, SubtensorCall, TaoAmount,
+        check_upgrade, AlphaAmount, BlockAge, FixedDecimal, NetUid, PriceOffsetBps, UpgradeError,
+        UpgradePolicy, VaultFactory,
     };
-    use sp_runtime::MultiAddress;
 
-    /// Maximum number of active lockup listings a user can maintain per subnet
-    const MAX_LISTINGS_PER_USER_PER_NETUID: usize = 25;
+    /// Storage layout version this code expects; see `ensure_migrated`.
+    pub const STORAGE_VERSION: u16 = 1;
 
-    /// Bittensor minimum stake transfer amount (2_000_000 rao = 0.002 TAO)
-    const BITTENSOR_MIN_STAKE: u64 = 2_000_000;
+    /// Maximum number of open listings a seller can have per subnet
+    pub const MAX_LISTINGS_PER_USER_PER_NETUID: usize = 25;
 
+    /// Highest fee rate the owner can set: 5%, as U64F64 bits
+    pub const MAX_FEE_RATE: u128 = 922_337_203_685_477_580;
+
+    /// Longest single pause: about a week of 12-second blocks. The owner can renew
+    /// it, but a pause always expires unless renewed.
+    pub const MAX_PAUSE: BlockAge = 50_400;
+
+    /// Root storage. Upgrades keep this struct exactly as it is; add new state in
+    /// `Lazy` or `Mapping` fields with explicit storage keys instead.
     #[ink(storage)]
-    pub struct LockupListingsContract {
-        /// Lockup listings: (netuid, seller, listing_id) -> LockupListing
-        pub lockup_listings: LockupListingsMapping,
-
-        /// User's listing IDs for iteration: (seller, netuid) -> Vec<listing_id>
-        pub user_lockup_listings: UserLockupListingsMapping,
-
-        /// Track escrows created: (netuid, listing_id, purchase_id) -> escrow_account_id
-        pub escrows: EscrowsMapping,
-
-        /// Alpha currently reserved for lockup listings per subnet
-        pub reserved_alpha: ReservedAlphaMapping,
-
-        /// Global listing counter
-        pub next_listing_id: LockupListingId,
-
-        /// Global purchase counter (for unique escrow salts)
-        pub next_purchase_id: PurchaseId,
-
-        /// Contract owner
-        pub owner: AccountId,
-
-        /// Validator hotkey (escrows will use this hotkey)
-        pub hotkey: AccountId,
-
-        /// Code hash of the alpha_lockup escrow contract
-        pub escrow_code_hash: Hash,
-
-        /// Code registry that approves escrow upgrades; passed to every new escrow
-        pub registry: AccountId,
-
-        /// Fee rate charged on trades (as decimal, e.g., 0.005 = 0.5%)
-        pub fee_rate: FixedDecimal,
-
-        /// Minimum Alpha amount for listings
-        pub min_listing_amount: AlphaAmount,
-
-        /// Minimum Alpha amount for purchases
-        pub min_purchase_amount: AlphaAmount,
-
-        /// Minimum lockup duration (in blocks)
-        pub min_lockup_duration: BlockAge,
-
-        /// Maximum lockup duration (in blocks)
-        pub max_lockup_duration: BlockAge,
-
-        /// Pause state for emergency control
-        pub pause_state: PauseState,
+    pub struct LockupListings {
+        owner: AccountId,
+        /// Proposed new owner, who must accept before taking over
+        pending_owner: Option<AccountId>,
+        /// Code registry for vault code and this factory's upgrades
+        registry: AccountId,
+        /// Storage layout version, see `STORAGE_VERSION`
+        version: u16,
+        next_listing_id: ListingId,
+        /// Per-seller counter that salts vault addresses, so they are predictable
+        seller_nonces: Mapping<AccountId, u64>,
+        listings: Mapping<ListingKey, AccountId>,
+        /// The reverse index, so a vault can report its listing closed
+        vault_listings: Mapping<AccountId, ListingKey>,
+        user_listings: UserListings,
+        /// Validator hotkey for subnets without an override
+        default_hotkey: AccountId,
+        validator_hotkeys: Mapping<NetUid, AccountId>,
+        fee_rate: FixedDecimal,
+        fee_recipient: AccountId,
+        min_listing_amount: AlphaAmount,
+        min_purchase_amount: AlphaAmount,
+        min_lockup_duration: BlockAge,
+        max_lockup_duration: BlockAge,
+        /// New listings and takes are paused before this block
+        paused_until: BlockNumber,
     }
 
-    impl LockupListingsContract {
+    /// What a new vault is created with, besides the factory's settings
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub struct VaultTerms {
+        seller: AccountId,
+        listing_id: ListingId,
+        netuid: NetUid,
+        hotkey: AccountId,
+        amount: AlphaAmount,
+        price_offset_bps: PriceOffsetBps,
+        min_price: u64,
+        lockup_duration: BlockAge,
+    }
+
+    impl LockupListings {
         #[allow(clippy::too_many_arguments)]
         #[ink(constructor)]
         pub fn new(
             owner: AccountId,
-            hotkey: AccountId,
-            escrow_code_hash: Hash,
             registry: AccountId,
+            default_hotkey: AccountId,
             fee_rate: u128,
+            fee_recipient: AccountId,
             min_listing_amount: AlphaAmount,
             min_purchase_amount: AlphaAmount,
             min_lockup_duration: BlockAge,
             max_lockup_duration: BlockAge,
-        ) -> Self {
-            let fee_rate = FixedDecimal::from_bits(fee_rate);
+        ) -> Result<Self, Error> {
+            Self::validate_fee_rate(fee_rate)?;
+            Self::validate_lockup_limits(min_lockup_duration, max_lockup_duration)?;
 
-            Self {
-                lockup_listings: Default::default(),
-                user_lockup_listings: Default::default(),
-                escrows: Default::default(),
-                reserved_alpha: Default::default(),
-                next_listing_id: 1,
-                next_purchase_id: 1,
+            Ok(Self {
                 owner,
-                hotkey,
-                escrow_code_hash,
+                pending_owner: None,
                 registry,
-                fee_rate,
+                version: STORAGE_VERSION,
+                next_listing_id: 1,
+                seller_nonces: Mapping::default(),
+                listings: Mapping::default(),
+                vault_listings: Mapping::default(),
+                user_listings: Mapping::default(),
+                default_hotkey,
+                validator_hotkeys: Mapping::default(),
+                fee_rate: FixedDecimal::from_bits(fee_rate),
+                fee_recipient,
                 min_listing_amount,
                 min_purchase_amount,
                 min_lockup_duration,
                 max_lockup_duration,
-                pause_state: PauseState::NotPaused,
-            }
+                paused_until: 0,
+            })
         }
 
-        // ============ Listing Functions ============
-
-        /// Create a lockup listing
-        /// The seller's Alpha is transferred to this contract and held until purchased or cancelled
+        /// Create a Pending lockup listing for `amount` Alpha on `hotkey` and return
+        /// its id and vault. The seller pays the vault's storage deposit, then funds
+        /// it by transferring the stake to the vault and calling `activate`, in one
+        /// batch.
+        ///
+        /// `min_price` is the seller's floor (TAO per Alpha, scaled by 1e9; 0 for
+        /// none): takes below it fail, which limits spot-price manipulation.
         #[ink(message)]
-        pub fn create_lockup_listing(
+        pub fn create_listing(
             &mut self,
-            hotkey: AccountId,
             netuid: NetUid,
+            hotkey: AccountId,
             amount: AlphaAmount,
             price_offset_bps: PriceOffsetBps,
+            min_price: u64,
             lockup_duration: BlockAge,
-        ) -> Result<LockupListingId, Error> {
-            self.ensure_trading_enabled()?;
+        ) -> Result<(ListingId, AccountId), Error> {
+            use otc_shared::upgrade::LISTING_VAULT;
 
-            let seller = self.env().caller();
+            self.ensure_migrated();
 
+            if self.is_paused() {
+                return Err(Error::TradingPaused);
+            }
             if amount < self.min_listing_amount {
                 return Err(Error::AmountTooSmall);
             }
-
-            if price_offset_bps <= -10000 {
+            if price_offset_bps <= -10_000 {
                 return Err(Error::InvalidPriceOffset);
             }
-
             if lockup_duration < self.min_lockup_duration {
                 return Err(Error::LockupDurationTooShort);
             }
-
             if lockup_duration > self.max_lockup_duration {
                 return Err(Error::LockupDurationTooLong);
             }
 
-            let mut user_listings = self
-                .user_lockup_listings
-                .get((seller, netuid))
-                .unwrap_or_default();
-            if user_listings.len() >= MAX_LISTINGS_PER_USER_PER_NETUID {
+            let seller = self.env().caller();
+            let mut seller_listings = self.user_listings.get((seller, netuid)).unwrap_or_default();
+            if seller_listings.len() >= MAX_LISTINGS_PER_USER_PER_NETUID {
                 return Err(Error::TooManyListings);
             }
 
             let listing_id = self.next_listing_id;
-            let next_id = listing_id.checked_add(1).ok_or(Error::Overflow)?;
+            self.next_listing_id = listing_id.checked_add(1).ok_or(Error::Overflow)?;
+            let nonce = self.seller_nonces.get(seller).unwrap_or(0);
+            self.seller_nonces
+                .insert(seller, &nonce.checked_add(1).ok_or(Error::Overflow)?);
 
-            let seller_stake_before = self.get_stake_amount(seller, hotkey, netuid)?;
-            if seller_stake_before < amount {
-                return Err(Error::InsufficientStake);
-            }
-
-            let contract_stake_before = self
-                .get_stake_amount(self.env().account_id(), hotkey, netuid)
-                .unwrap_or(0);
-
-            // Transfer stake from seller to contract via proxy
-            let transfer_call = RuntimeCall::SubtensorModule(SubtensorCall::TransferStake {
-                destination_coldkey: self.env().account_id(),
-                hotkey,
-                origin_netuid: otc_shared::runtime::NetUid::from(netuid),
-                destination_netuid: otc_shared::runtime::NetUid::from(netuid),
-                alpha_amount: AlphaCurrency::from(amount),
-            });
-
-            let proxy_call = RuntimeCall::Proxy(ProxyCall::Proxy {
-                real: MultiAddress::Id(seller),
-                force_proxy_type: None,
-                call: Box::new(transfer_call),
-            });
-
-            self.env()
-                .call_runtime(&proxy_call)
-                .map_err(|_| Error::RuntimeCallFailed)?;
-
-            // Verify transfer
-            let seller_stake_after = self.get_stake_amount(seller, hotkey, netuid).unwrap_or(0);
-            let contract_stake_after =
-                self.get_stake_amount(self.env().account_id(), hotkey, netuid)?;
-
-            let seller_decrease = seller_stake_before.saturating_sub(seller_stake_after);
-            let contract_increase = contract_stake_after.saturating_sub(contract_stake_before);
-
-            if !stake_delta_verified(seller_decrease, amount)
-                || !stake_delta_verified(contract_increase, amount)
-            {
-                Self::trap_stake_transfer_not_verified();
-            }
-
-            // Subtensor can round a transfer down by a few rao. The listing holds what
-            // actually arrived, so later moves never ask for stake the contract lacks.
-            let mut listed_amount = contract_increase;
-
-            // Consolidate stake to contract's hotkey if needed
-            if hotkey != self.hotkey {
-                let contract_account = self.env().account_id();
-                let target_stake_before = self
-                    .get_stake_amount(contract_account, self.hotkey, netuid)
-                    .unwrap_or(0);
-
-                self.env()
-                    .extension()
-                    .move_stake(
-                        hotkey,
-                        self.hotkey,
-                        netuid,
-                        netuid,
-                        AlphaCurrency::from(listed_amount),
-                    )
-                    .map_err(|_| Error::RuntimeCallFailed)?;
-
-                let target_stake_after =
-                    self.get_stake_amount(contract_account, self.hotkey, netuid)?;
-                let target_increase = target_stake_after.saturating_sub(target_stake_before);
-                if !stake_delta_verified(target_increase, listed_amount) {
-                    Self::trap_stake_transfer_not_verified();
-                }
-                listed_amount = target_increase;
-            }
-
-            self.increase_reserved_alpha(netuid, listed_amount)?;
-
-            self.next_listing_id = next_id;
-
-            let listing = LockupListing {
-                id: listing_id,
-                netuid,
-                seller,
-                total_amount: listed_amount,
-                remaining_amount: listed_amount,
-                price_offset_bps,
-                lockup_duration,
-                fee_rate: self.fee_rate,
-                created_at: self.env().block_number(),
-            };
-
-            self.lockup_listings
-                .insert((netuid, seller, listing_id), &listing);
-
-            user_listings.push(listing_id);
-            self.user_lockup_listings
-                .insert((seller, netuid), &user_listings);
-
-            self.env().emit_event(LockupListingCreated {
-                seller,
-                hotkey,
-                netuid,
-                listing_id,
-                amount: listed_amount,
-                price_offset_bps,
-                lockup_duration,
-            });
-
-            Ok(listing_id)
-        }
-
-        /// Take a portion (or all) of a lockup listing
-        /// Creates a new escrow contract for the buyer
-        #[ink(message, payable)]
-        pub fn take_lockup_listing(
-            &mut self,
-            netuid: NetUid,
-            seller: AccountId,
-            listing_id: LockupListingId,
-            amount: AlphaAmount,
-        ) -> Result<PurchaseId, Error> {
-            self.ensure_trading_enabled()?;
-
-            let buyer = self.env().caller();
-            let tao_received = self.env().transferred_value();
-
-            let mut listing = self
-                .lockup_listings
-                .get((netuid, seller, listing_id))
-                .ok_or(Error::ListingNotFound)?;
-
-            // Transfers round down, so a listing can hold slightly less than it was
-            // created with. The final remainder can always be taken, even when it is
-            // below the minimum purchase; otherwise it could never be filled.
-            if amount < self.min_purchase_amount && amount != listing.remaining_amount {
-                return Err(Error::AmountTooSmall);
-            }
-
-            if amount > listing.remaining_amount {
-                return Err(Error::AmountExceedsRemaining);
-            }
-
-            // Calculate new remaining amount and validate against Bittensor minimum stake
-            let new_remaining = listing
-                .remaining_amount
-                .checked_sub(amount)
-                .ok_or(Error::Overflow)?;
-
-            // Ensure remaining amount is either 0 or above Bittensor's minimum stake
-            if new_remaining > 0 && new_remaining < BITTENSOR_MIN_STAKE {
-                return Err(Error::AmountBelowMinimumStake);
-            }
-
-            // Calculate price at current market + offset
-            let market_price = self.get_market_price(listing.netuid)?;
-            let executed_price = Self::apply_price_offset(market_price, listing.price_offset_bps)?;
-            let price_decimal = Self::price_to_fixed_decimal(executed_price);
-
-            // Calculate TAO required: price * alpha_amount
-            let tao_amount = price_decimal.mul(amount).map_err(|_| Error::Overflow)?;
-
-            // Calculate fee
-            let fee_amount = listing
-                .fee_rate
-                .mul(tao_amount)
-                .map_err(|_| Error::Overflow)?;
-
-            let total_tao_required = tao_amount.checked_add(fee_amount).ok_or(Error::Overflow)?;
-
-            // Verify payment (allow overpayment, will refund excess)
-            if tao_received < total_tao_required {
-                return Err(Error::InsufficientPayment);
-            }
-
-            let excess_tao = tao_received
-                .checked_sub(total_tao_required)
-                .ok_or(Error::Overflow)?;
-
-            // Calculate unlock block
-            let unlock_block = self
-                .env()
-                .block_number()
-                .checked_add(listing.lockup_duration)
-                .ok_or(Error::Overflow)?;
-
-            // Get purchase ID for escrow salt
-            let purchase_id = self.next_purchase_id;
-            self.next_purchase_id = purchase_id.checked_add(1).ok_or(Error::Overflow)?;
-
-            // Instantiate escrow contract
-            let escrow_salt = Self::generate_escrow_salt(listing_id, purchase_id);
-
-            let escrow = AlphaLockupRef::new(
-                buyer,
-                netuid,
-                amount,
-                unlock_block,
-                self.hotkey,
-                self.registry,
-            )
-            .code_hash(self.escrow_code_hash)
-            .endowment(0)
-            .salt_bytes(escrow_salt)
-            .instantiate();
-
-            let escrow_account = escrow.account_id();
-            let contract_account = self.env().account_id();
-            let contract_stake_before =
-                self.get_stake_amount(contract_account, self.hotkey, netuid)?;
-            let escrow_stake_before = self
-                .get_stake_amount(escrow_account, self.hotkey, netuid)
-                .unwrap_or(0);
-
-            // Transfer Alpha from contract to escrow
-            self.env()
-                .extension()
-                .transfer_stake(
-                    escrow_account,
-                    self.hotkey,
-                    netuid,
-                    netuid,
-                    AlphaCurrency::from(amount),
-                )
-                .map_err(|_| Error::RuntimeCallFailed)?;
-
-            let contract_stake_after =
-                self.get_stake_amount(contract_account, self.hotkey, netuid)?;
-            let escrow_stake_after = self.get_stake_amount(escrow_account, self.hotkey, netuid)?;
-            let contract_decrease = contract_stake_before.saturating_sub(contract_stake_after);
-            let escrow_increase = escrow_stake_after.saturating_sub(escrow_stake_before);
-
-            if !stake_delta_verified(contract_decrease, amount)
-                || !stake_delta_verified(escrow_increase, amount)
-            {
-                Self::trap_stake_transfer_not_verified();
-            }
-
-            // Update reserved alpha
-            self.decrease_reserved_alpha(netuid, amount)?;
-
-            // Update listing remaining amount (already validated above)
-            listing.remaining_amount = new_remaining;
-
-            if new_remaining == 0 {
-                // Remove listing completely
-                self.lockup_listings.remove((netuid, seller, listing_id));
-
-                let mut user_listings = self
-                    .user_lockup_listings
-                    .get((seller, netuid))
-                    .unwrap_or_default();
-                user_listings.retain(|&id| id != listing_id);
-
-                if user_listings.is_empty() {
-                    self.user_lockup_listings.remove((seller, netuid));
-                } else {
-                    self.user_lockup_listings
-                        .insert((seller, netuid), &user_listings);
-                }
-
-                // Emit event for indexer tracking
-                self.env().emit_event(LockupListingFullyFilled {
+            let code_hash = self
+                .registry_current(LISTING_VAULT)?
+                .ok_or(Error::NoCurrentCode)?;
+            let vault = self.instantiate_vault(
+                code_hash,
+                VaultTerms {
                     seller,
-                    netuid,
                     listing_id,
-                });
-            } else {
-                // Update listing with new remaining amount
-                self.lockup_listings
-                    .insert((netuid, seller, listing_id), &listing);
-            }
+                    netuid,
+                    hotkey,
+                    amount,
+                    price_offset_bps,
+                    min_price,
+                    lockup_duration,
+                },
+                Self::vault_salt(seller, nonce),
+            )?;
 
-            // Store escrow reference
-            self.escrows
-                .insert((netuid, listing_id, purchase_id), &escrow_account);
+            let key = (netuid, seller, listing_id);
+            self.listings.insert(key, &vault);
+            self.vault_listings.insert(vault, &key);
+            seller_listings.push(listing_id);
+            self.user_listings
+                .insert((seller, netuid), &seller_listings);
 
-            // Transfer TAO to seller (minus fee)
-            self.env()
-                .transfer(seller, tao_amount)
-                .map_err(|_| Error::TransferFailed)?;
-
-            if fee_amount > 0 {
-                self.env()
-                    .transfer(self.owner, fee_amount)
-                    .map_err(|_| Error::TransferFailed)?;
-            }
-
-            // Refund excess TAO to buyer if any
-            if excess_tao > 0 {
-                self.env()
-                    .transfer(buyer, excess_tao)
-                    .map_err(|_| Error::TransferFailed)?;
-            }
-
-            self.env().emit_event(LockupListingTaken {
+            self.env().emit_event(ListingCreated {
                 seller,
-                buyer,
                 netuid,
                 listing_id,
-                purchase_id,
-                alpha_amount: amount,
-                tao_amount,
-                executed_price,
-                unlock_block,
-                escrow_account,
-                fee: fee_amount,
+                vault,
+                hotkey,
+                amount,
+                price_offset_bps,
+                min_price,
+                lockup_duration,
             });
 
-            Ok(purchase_id)
+            Ok((listing_id, vault))
         }
 
-        /// Cancel a lockup listing and return remaining Alpha to seller
+        /// Drop a closed listing from the index when its vault's own report did not
+        /// arrive, for example because the report ran out of gas. Anyone can call
+        /// this; it fails while the vault is still pending or open.
         #[ink(message)]
-        pub fn cancel_lockup_listing(
-            &mut self,
-            netuid: NetUid,
-            listing_id: LockupListingId,
-        ) -> Result<(), Error> {
-            self.ensure_not_fully_paused()?;
-
-            let seller = self.env().caller();
-
-            let listing = self
-                .lockup_listings
-                .get((netuid, seller, listing_id))
-                .ok_or(Error::ListingNotFound)?;
-
-            self.execute_listing_cancellation(listing, seller, false)
-        }
-
-        /// Force-cancel a lockup listing as the contract owner
-        #[ink(message)]
-        pub fn force_cancel_lockup_listing(
+        pub fn prune_listing(
             &mut self,
             netuid: NetUid,
             seller: AccountId,
-            listing_id: LockupListingId,
+            listing_id: ListingId,
         ) -> Result<(), Error> {
-            self.ensure_owner()?;
+            self.ensure_migrated();
 
-            let listing = self
-                .lockup_listings
-                .get((netuid, seller, listing_id))
-                .ok_or(Error::ListingNotFound)?;
+            let key = (netuid, seller, listing_id);
+            let vault = self.listings.get(key).ok_or(Error::ListingNotFound)?;
+            if self.vault_is_open(vault)? {
+                return Err(Error::ListingStillOpen);
+            }
 
-            let initiator = self.env().caller();
-
-            self.execute_listing_cancellation(listing, initiator, true)
+            self.remove_listing(vault, key);
+            Ok(())
         }
 
-        // ============ Getters ============
+        // ============ Views ============
 
+        /// The vault of an open listing
         #[ink(message)]
         pub fn get_listing(
             &self,
             netuid: NetUid,
             seller: AccountId,
-            listing_id: LockupListingId,
-        ) -> Option<LockupListing> {
-            self.lockup_listings.get((netuid, seller, listing_id))
-        }
-
-        #[ink(message)]
-        pub fn get_user_listings(&self, seller: AccountId, netuid: NetUid) -> Vec<LockupListingId> {
-            self.user_lockup_listings
-                .get((seller, netuid))
-                .unwrap_or_default()
-        }
-
-        #[ink(message)]
-        pub fn get_escrow(
-            &self,
-            netuid: NetUid,
-            listing_id: LockupListingId,
-            purchase_id: PurchaseId,
+            listing_id: ListingId,
         ) -> Option<AccountId> {
-            self.escrows.get((netuid, listing_id, purchase_id))
+            self.listings.get((netuid, seller, listing_id))
+        }
+
+        /// Which open listing a vault holds
+        #[ink(message)]
+        pub fn get_vault_listing(&self, vault: AccountId) -> Option<ListingKey> {
+            self.vault_listings.get(vault)
+        }
+
+        /// A seller's open listings on a subnet
+        #[ink(message)]
+        pub fn get_user_listings(&self, seller: AccountId, netuid: NetUid) -> Vec<ListingId> {
+            self.user_listings.get((seller, netuid)).unwrap_or_default()
+        }
+
+        /// The nonce that will salt the seller's next vault, for predicting its
+        /// address
+        #[ink(message)]
+        pub fn get_seller_nonce(&self, seller: AccountId) -> u64 {
+            self.seller_nonces.get(seller).unwrap_or(0)
         }
 
         #[ink(message)]
-        pub fn get_reserved_alpha(&self, netuid: NetUid) -> AlphaAmount {
-            self.reserved_alpha_for(netuid)
+        pub fn get_config(&self) -> Config {
+            Config {
+                owner: self.owner,
+                registry: self.registry,
+                default_hotkey: self.default_hotkey,
+                fee_rate: self.fee_rate,
+                fee_recipient: self.fee_recipient,
+                min_listing_amount: self.min_listing_amount,
+                min_purchase_amount: self.min_purchase_amount,
+                min_lockup_duration: self.min_lockup_duration,
+                max_lockup_duration: self.max_lockup_duration,
+                paused_until: self.paused_until,
+            }
         }
 
         #[ink(message)]
@@ -548,13 +288,8 @@ mod lockup_listings {
         }
 
         #[ink(message)]
-        pub fn get_hotkey(&self) -> AccountId {
-            self.hotkey
-        }
-
-        #[ink(message)]
-        pub fn get_fee_rate(&self) -> FixedDecimal {
-            self.fee_rate
+        pub fn get_pending_owner(&self) -> Option<AccountId> {
+            self.pending_owner
         }
 
         #[ink(message)]
@@ -563,203 +298,169 @@ mod lockup_listings {
         }
 
         #[ink(message)]
-        pub fn get_escrow_code_hash(&self) -> Hash {
-            self.escrow_code_hash
+        pub fn get_version(&self) -> u16 {
+            self.version
         }
 
+        // ============ Admin ============
+
+        /// Propose `new_owner`, who takes over by calling `accept_ownership`. A new
+        /// proposal replaces the previous one; `None` withdraws it.
         #[ink(message)]
-        pub fn get_min_listing_amount(&self) -> AlphaAmount {
-            self.min_listing_amount
-        }
-
-        #[ink(message)]
-        pub fn get_min_purchase_amount(&self) -> AlphaAmount {
-            self.min_purchase_amount
-        }
-
-        #[ink(message)]
-        pub fn get_lockup_duration_limits(&self) -> (BlockAge, BlockAge) {
-            (self.min_lockup_duration, self.max_lockup_duration)
-        }
-
-        #[ink(message)]
-        pub fn get_pause_state(&self) -> PauseState {
-            self.pause_state
-        }
-
-        /// Estimate the price for taking a portion of a lockup listing at current market price
-        /// Returns: (executed_price * 1e9, tao_amount, total_with_fee)
-        #[ink(message)]
-        pub fn estimate_lockup_price(
-            &self,
-            netuid: NetUid,
-            seller: AccountId,
-            listing_id: LockupListingId,
-            amount: AlphaAmount,
-        ) -> Result<(u64, TaoAmount, TaoAmount), Error> {
-            let listing = self
-                .lockup_listings
-                .get((netuid, seller, listing_id))
-                .ok_or(Error::ListingNotFound)?;
-
-            if amount > listing.remaining_amount {
-                return Err(Error::AmountExceedsRemaining);
-            }
-
-            let market_price = self.get_market_price(listing.netuid)?;
-            let executed_price = Self::apply_price_offset(market_price, listing.price_offset_bps)?;
-            let price_decimal = Self::price_to_fixed_decimal(executed_price);
-
-            let tao_amount = price_decimal.mul(amount).map_err(|_| Error::Overflow)?;
-            let fee_amount = listing
-                .fee_rate
-                .mul(tao_amount)
-                .map_err(|_| Error::Overflow)?;
-            let total_required = tao_amount.checked_add(fee_amount).ok_or(Error::Overflow)?;
-
-            Ok((executed_price, tao_amount, total_required))
-        }
-
-        // ============ Admin Functions ============
-
-        #[ink(message)]
-        pub fn update_owner(&mut self, new_owner: AccountId) -> Result<(), Error> {
+        pub fn transfer_ownership(&mut self, new_owner: Option<AccountId>) -> Result<(), Error> {
             self.ensure_owner()?;
 
-            let old_owner = self.owner;
-            self.owner = new_owner;
-
-            self.env().emit_event(OwnerUpdated {
-                old_owner,
-                new_owner,
-            });
-
+            self.pending_owner = new_owner;
+            self.env()
+                .emit_event(OwnershipTransferProposed { new_owner });
             Ok(())
         }
 
         #[ink(message)]
-        pub fn update_hotkey(&mut self, new_hotkey: AccountId) -> Result<(), Error> {
+        pub fn accept_ownership(&mut self) -> Result<(), Error> {
+            let caller = self.env().caller();
+            if self.pending_owner != Some(caller) {
+                return Err(Error::Unauthorized);
+            }
+
+            let old_owner = self.owner;
+            self.owner = caller;
+            self.pending_owner = None;
+            self.env().emit_event(OwnerChanged {
+                old_owner,
+                new_owner: caller,
+            });
+            Ok(())
+        }
+
+        /// Set the validator hotkey for subnets without an override. Open listings
+        /// follow through `consolidate()` on their vaults.
+        #[ink(message)]
+        pub fn set_default_hotkey(&mut self, new_hotkey: AccountId) -> Result<(), Error> {
             self.ensure_owner()?;
 
-            let old_hotkey = self.hotkey;
-            self.hotkey = new_hotkey;
-
-            self.env().emit_event(HotkeyUpdated {
+            let old_hotkey = self.default_hotkey;
+            self.default_hotkey = new_hotkey;
+            self.env().emit_event(DefaultHotkeyChanged {
                 old_hotkey,
                 new_hotkey,
             });
-
             Ok(())
         }
 
+        /// Override the validator hotkey for `netuid`, or remove the override with
+        /// `None`
         #[ink(message)]
-        pub fn update_fee_rate(&mut self, new_rate: u128) -> Result<(), Error> {
+        pub fn set_validator_hotkey(
+            &mut self,
+            netuid: NetUid,
+            hotkey: Option<AccountId>,
+        ) -> Result<(), Error> {
             self.ensure_owner()?;
+
+            match hotkey {
+                Some(hotkey) => {
+                    self.validator_hotkeys.insert(netuid, &hotkey);
+                }
+                None => self.validator_hotkeys.remove(netuid),
+            }
+            self.env()
+                .emit_event(ValidatorHotkeyChanged { netuid, hotkey });
+            Ok(())
+        }
+
+        /// Set the fee rate for new listings, as U64F64 bits, at most `MAX_FEE_RATE`.
+        /// Existing listings keep the rate they were created with.
+        #[ink(message)]
+        pub fn set_fee_rate(&mut self, new_rate: u128) -> Result<(), Error> {
+            self.ensure_owner()?;
+            Self::validate_fee_rate(new_rate)?;
 
             let old_rate = self.fee_rate;
-            let new_rate = FixedDecimal::from_bits(new_rate);
-            self.fee_rate = new_rate;
-
-            self.env().emit_event(FeeRateUpdated { old_rate, new_rate });
-
+            self.fee_rate = FixedDecimal::from_bits(new_rate);
+            self.env().emit_event(FeeRateChanged {
+                old_rate,
+                new_rate: self.fee_rate,
+            });
             Ok(())
         }
 
         #[ink(message)]
-        pub fn update_escrow_code_hash(&mut self, new_hash: Hash) -> Result<(), Error> {
+        pub fn set_fee_recipient(&mut self, new_recipient: AccountId) -> Result<(), Error> {
             self.ensure_owner()?;
 
-            let old_hash = self.escrow_code_hash;
-            self.escrow_code_hash = new_hash;
-
-            self.env().emit_event(EscrowCodeHashUpdated {
-                old_hash: <[u8; 32]>::try_from(old_hash.as_ref()).expect("Hash is 32 bytes"),
-                new_hash: <[u8; 32]>::try_from(new_hash.as_ref()).expect("Hash is 32 bytes"),
+            let old_recipient = self.fee_recipient;
+            self.fee_recipient = new_recipient;
+            self.env().emit_event(FeeRecipientChanged {
+                old_recipient,
+                new_recipient,
             });
-
             Ok(())
         }
 
         #[ink(message)]
-        pub fn update_min_listing_amount(&mut self, new_amount: AlphaAmount) -> Result<(), Error> {
+        pub fn set_min_listing_amount(&mut self, new_amount: AlphaAmount) -> Result<(), Error> {
             self.ensure_owner()?;
 
             let old_amount = self.min_listing_amount;
             self.min_listing_amount = new_amount;
-
-            self.env().emit_event(MinListingAmountUpdated {
+            self.env().emit_event(MinListingAmountChanged {
                 old_amount,
                 new_amount,
             });
-
             Ok(())
         }
 
+        /// Set the minimum purchase for new listings
         #[ink(message)]
-        pub fn update_min_purchase_amount(&mut self, new_amount: AlphaAmount) -> Result<(), Error> {
+        pub fn set_min_purchase_amount(&mut self, new_amount: AlphaAmount) -> Result<(), Error> {
             self.ensure_owner()?;
 
             let old_amount = self.min_purchase_amount;
             self.min_purchase_amount = new_amount;
-
-            self.env().emit_event(MinPurchaseAmountUpdated {
+            self.env().emit_event(MinPurchaseAmountChanged {
                 old_amount,
                 new_amount,
             });
-
             Ok(())
         }
 
         #[ink(message)]
-        pub fn update_lockup_duration_limits(
+        pub fn set_lockup_duration_limits(
             &mut self,
-            new_min: BlockAge,
-            new_max: BlockAge,
+            min: BlockAge,
+            max: BlockAge,
         ) -> Result<(), Error> {
             self.ensure_owner()?;
+            Self::validate_lockup_limits(min, max)?;
 
-            let old_min = self.min_lockup_duration;
-            let old_max = self.max_lockup_duration;
-            self.min_lockup_duration = new_min;
-            self.max_lockup_duration = new_max;
-
-            self.env().emit_event(LockupDurationUpdated {
-                old_min,
-                old_max,
-                new_min,
-                new_max,
-            });
-
+            self.min_lockup_duration = min;
+            self.max_lockup_duration = max;
+            self.env()
+                .emit_event(LockupDurationLimitsChanged { min, max });
             Ok(())
         }
 
+        /// Pause new listings and takes for `blocks` blocks, at most `MAX_PAUSE`.
+        /// Calling it again restarts the pause from now. Cancels, sweeps and claims
+        /// are never paused.
         #[ink(message)]
-        pub fn pause_trading(&mut self, reason: Vec<u8>) -> Result<(), Error> {
+        pub fn pause(&mut self, blocks: BlockAge) -> Result<(), Error> {
             self.ensure_owner()?;
 
-            self.pause_state = PauseState::TradingPaused;
-
-            self.env().emit_event(ContractPaused {
-                pause_state: PauseState::TradingPaused,
-                reason,
+            if blocks == 0 || blocks > MAX_PAUSE {
+                return Err(Error::InvalidPauseDuration);
+            }
+            let until = self
+                .env()
+                .block_number()
+                .checked_add(blocks)
+                .ok_or(Error::Overflow)?;
+            self.paused_until = until;
+            self.env().emit_event(TradingPaused {
+                until,
                 paused_by: self.env().caller(),
             });
-
-            Ok(())
-        }
-
-        #[ink(message)]
-        pub fn pause_fully(&mut self, reason: Vec<u8>) -> Result<(), Error> {
-            self.ensure_owner()?;
-
-            self.pause_state = PauseState::FullyPaused;
-
-            self.env().emit_event(ContractPaused {
-                pause_state: PauseState::FullyPaused,
-                reason,
-                paused_by: self.env().caller(),
-            });
-
             Ok(())
         }
 
@@ -767,215 +468,109 @@ mod lockup_listings {
         pub fn resume(&mut self) -> Result<(), Error> {
             self.ensure_owner()?;
 
-            self.pause_state = PauseState::NotPaused;
-
-            self.env().emit_event(ContractResumed {
+            self.paused_until = 0;
+            self.env().emit_event(TradingResumed {
                 resumed_by: self.env().caller(),
             });
-
             Ok(())
         }
 
+        /// Install `code_hash`, which must be the registry's current factory code.
+        /// Only the owner can upgrade. The new code migrates storage on its next
+        /// call, or when anyone calls `migrate`.
         #[ink(message)]
-        pub fn set_code(&mut self, code_hash: Hash) -> Result<(), Error> {
+        pub fn upgrade(&mut self, code_hash: Hash) -> Result<(), Error> {
+            use otc_shared::upgrade::LOCKUP_FACTORY;
+
             self.ensure_owner()?;
+            let current = self.registry_current(LOCKUP_FACTORY)?;
+            check_upgrade(true, UpgradePolicy::ConsentOnly, code_hash, current, None)
+                .map_err(Self::upgrade_error)?;
 
-            self.env()
-                .set_code_hash(&code_hash)
-                .map_err(|_| Error::CodeUpgradeFailed)?;
+            self.install_code(code_hash)?;
 
+            self.env().emit_event(Upgraded {
+                code_hash,
+                initiated_by: self.env().caller(),
+            });
             Ok(())
         }
 
-        // ============ Internal Helpers ============
-
-        fn get_stake_amount(
-            &self,
-            coldkey: AccountId,
-            hotkey: AccountId,
-            netuid: NetUid,
-        ) -> Result<AlphaAmount, Error> {
-            match self
-                .env()
-                .extension()
-                .get_stake_info(hotkey, coldkey, netuid)
-            {
-                Ok(Some(info)) => Ok(info.stake_amount()),
-                Ok(None) => Ok(0),
-                Err(_) => Err(Error::StakeQueryFailed),
-            }
+        /// Bring storage up to this code's `STORAGE_VERSION`. Every state-changing
+        /// message does this first; anyone can also call it directly after an
+        /// upgrade.
+        #[ink(message)]
+        pub fn migrate(&mut self) {
+            self.ensure_migrated();
         }
 
-        /// A transfer that completed but moved the wrong amount must revert the whole
-        /// call, including the transfer itself, rather than leave accounting skewed.
-        fn trap_stake_transfer_not_verified() -> ! {
-            panic!("post-transfer stake verification failed")
+        // ============ Internal ============
+
+        fn is_paused(&self) -> bool {
+            self.env().block_number() < self.paused_until
         }
 
-        fn reserved_alpha_for(&self, netuid: NetUid) -> AlphaAmount {
-            self.reserved_alpha.get(netuid).unwrap_or(0)
-        }
+        fn remove_listing(&mut self, vault: AccountId, key: ListingKey) {
+            let (netuid, seller, listing_id) = key;
 
-        fn increase_reserved_alpha(
-            &mut self,
-            netuid: NetUid,
-            amount: AlphaAmount,
-        ) -> Result<(), Error> {
-            if amount == 0 {
-                return Ok(());
-            }
-
-            let current = self.reserved_alpha_for(netuid);
-            let new_total = current.checked_add(amount).ok_or(Error::Overflow)?;
-            self.reserved_alpha.insert(netuid, &new_total);
-            Ok(())
-        }
-
-        fn decrease_reserved_alpha(
-            &mut self,
-            netuid: NetUid,
-            amount: AlphaAmount,
-        ) -> Result<(), Error> {
-            if amount == 0 {
-                return Ok(());
-            }
-
-            let current = self.reserved_alpha_for(netuid);
-            let new_total = current.checked_sub(amount).ok_or(Error::Overflow)?;
-
-            if new_total == 0 {
-                self.reserved_alpha.remove(netuid);
+            self.vault_listings.remove(vault);
+            self.listings.remove(key);
+            let mut seller_listings = self.user_listings.get((seller, netuid)).unwrap_or_default();
+            seller_listings.retain(|&id| id != listing_id);
+            if seller_listings.is_empty() {
+                self.user_listings.remove((seller, netuid));
             } else {
-                self.reserved_alpha.insert(netuid, &new_total);
+                self.user_listings
+                    .insert((seller, netuid), &seller_listings);
             }
 
+            self.env().emit_event(ListingClosed {
+                seller,
+                netuid,
+                listing_id,
+                vault,
+            });
+        }
+
+        fn validate_fee_rate(fee_rate: u128) -> Result<(), Error> {
+            if fee_rate > MAX_FEE_RATE {
+                return Err(Error::FeeRateTooHigh);
+            }
             Ok(())
         }
 
-        fn get_market_price(&self, netuid: NetUid) -> Result<u64, Error> {
-            self.env()
-                .extension()
-                .get_alpha_price(netuid)
-                .map_err(|_| Error::MarketPriceFetchFailed)
-        }
-
-        pub fn apply_price_offset(
-            market_price: u64,
-            offset_bps: PriceOffsetBps,
-        ) -> Result<u64, Error> {
-            let base: i64 = 10000;
-            let offset = i64::from(offset_bps);
-            let multiplier = base.checked_add(offset).ok_or(Error::Overflow)?;
-
-            if multiplier <= 0 {
-                return Err(Error::InvalidPriceOffset);
+        fn validate_lockup_limits(min: BlockAge, max: BlockAge) -> Result<(), Error> {
+            if min > max {
+                return Err(Error::InvalidLockupDurationLimits);
             }
-
-            let multiplier_u128 = u128::try_from(multiplier).map_err(|_| Error::Overflow)?;
-
-            let result = u128::from(market_price)
-                .checked_mul(multiplier_u128)
-                .ok_or(Error::Overflow)?
-                .checked_div(10000)
-                .ok_or(Error::Overflow)?;
-
-            u64::try_from(result).map_err(|_| Error::Overflow)
+            Ok(())
         }
 
-        pub fn price_to_fixed_decimal(scaled_price: u64) -> FixedDecimal {
-            let divisor = U64F64::from_num(1_000_000_000u64);
-            let price = U64F64::from_num(scaled_price)
-                .checked_div(divisor)
-                .unwrap_or_default();
-            FixedDecimal::from_bits(price.to_bits())
-        }
-
-        fn generate_escrow_salt(listing_id: LockupListingId, purchase_id: PurchaseId) -> [u8; 16] {
-            let mut salt = [0u8; 16];
-            salt[..8].copy_from_slice(&listing_id.to_le_bytes());
-            salt[8..].copy_from_slice(&purchase_id.to_le_bytes());
+        /// The seller and their nonce: unique per vault, and predictable, so a
+        /// frontend can fund the vault in the same batch that creates it.
+        fn vault_salt(seller: AccountId, nonce: u64) -> [u8; 40] {
+            let mut salt = [0u8; 40];
+            salt[..32].copy_from_slice(seller.as_ref());
+            salt[32..].copy_from_slice(&nonce.to_le_bytes());
             salt
         }
 
-        fn execute_listing_cancellation(
-            &mut self,
-            listing: LockupListing,
-            initiated_by: AccountId,
-            forced: bool,
-        ) -> Result<(), Error> {
-            let netuid = listing.netuid;
-            let seller = listing.seller;
-            let listing_id = listing.id;
-            let amount = listing.remaining_amount;
-
-            // Remove listing
-            self.lockup_listings.remove((netuid, seller, listing_id));
-
-            let mut user_listings = self
-                .user_lockup_listings
-                .get((seller, netuid))
-                .unwrap_or_default();
-            user_listings.retain(|&id| id != listing_id);
-
-            if user_listings.is_empty() {
-                self.user_lockup_listings.remove((seller, netuid));
-            } else {
-                self.user_lockup_listings
-                    .insert((seller, netuid), &user_listings);
+        fn upgrade_error(error: UpgradeError) -> Error {
+            match error {
+                UpgradeError::NoCurrentCode => Error::NoCurrentCode,
+                // The owner always has consent, so only a wrong hash remains.
+                _ => Error::NotCurrentCode,
             }
+        }
 
-            let contract_account = self.env().account_id();
-            let contract_stake_before =
-                self.get_stake_amount(contract_account, self.hotkey, netuid)?;
-            let seller_stake_before = self
-                .get_stake_amount(seller, self.hotkey, netuid)
-                .unwrap_or(0);
-
-            // Transfer remaining Alpha back to seller
-            self.env()
-                .extension()
-                .transfer_stake(
-                    seller,
-                    self.hotkey,
-                    netuid,
-                    netuid,
-                    AlphaCurrency::from(amount),
-                )
-                .map_err(|_| Error::RuntimeCallFailed)?;
-
-            let contract_stake_after =
-                self.get_stake_amount(contract_account, self.hotkey, netuid)?;
-            let seller_stake_after = self.get_stake_amount(seller, self.hotkey, netuid)?;
-            let contract_decrease = contract_stake_before.saturating_sub(contract_stake_after);
-            let seller_increase = seller_stake_after.saturating_sub(seller_stake_before);
-
-            if !stake_delta_verified(contract_decrease, amount)
-                || !stake_delta_verified(seller_increase, amount)
-            {
-                Self::trap_stake_transfer_not_verified();
+        /// Storage only migrates upwards. Older code runs on newer storage without
+        /// knowing its added fields, so a rollback after a storage change must ship
+        /// as new code with a higher version, never as the old code.
+        fn ensure_migrated(&mut self) {
+            if self.version < STORAGE_VERSION {
+                // Versions newer than 1 initialise their added storage here.
+                self.version = STORAGE_VERSION;
             }
-
-            // Update reserved alpha
-            self.decrease_reserved_alpha(netuid, amount)?;
-
-            if forced {
-                self.env().emit_event(LockupListingForceCancelled {
-                    seller,
-                    initiated_by,
-                    netuid,
-                    listing_id,
-                    amount_returned: amount,
-                });
-            } else {
-                self.env().emit_event(LockupListingCancelled {
-                    seller,
-                    netuid,
-                    listing_id,
-                    amount_returned: amount,
-                });
-            }
-
-            Ok(())
         }
 
         fn ensure_owner(&self) -> Result<(), Error> {
@@ -985,18 +580,138 @@ mod lockup_listings {
             Ok(())
         }
 
-        fn ensure_not_fully_paused(&self) -> Result<(), Error> {
-            if self.pause_state == PauseState::FullyPaused {
-                return Err(Error::ContractFullyPaused);
+        #[cfg(not(test))]
+        fn registry_current(&self, kind: otc_shared::CodeKind) -> Result<Option<Hash>, Error> {
+            use code_registry::CodeRegistryRef;
+            use ink::codegen::TraitCallBuilder;
+            use ink::env::call::FromAccountId;
+
+            Ok(CodeRegistryRef::from_account_id(self.registry)
+                .call()
+                .current(kind)
+                .try_invoke()
+                .map_err(|_| Error::RegistryQueryFailed)?
+                .map_err(|_| Error::RegistryQueryFailed)?
+                .map(|code| code.code_hash))
+        }
+
+        #[cfg(not(test))]
+        fn instantiate_vault(
+            &self,
+            code_hash: Hash,
+            terms: VaultTerms,
+            salt: [u8; 40],
+        ) -> Result<AccountId, Error> {
+            use ink::ToAccountId;
+            use listing_vault::ListingVaultRef;
+
+            // Lockup listings can be cancelled at any time. The arguments are
+            // part of the vault's address, so they hold nothing the seller can't
+            // predict: no listing id, and no block number.
+            let vault = ListingVaultRef::new(
+                terms.seller,
+                terms.netuid,
+                terms.hotkey,
+                terms.amount,
+                terms.price_offset_bps,
+                terms.min_price,
+                self.fee_rate,
+                self.min_purchase_amount,
+                Some(terms.lockup_duration),
+                0,
+                self.registry,
+            )
+            .code_hash(code_hash)
+            .endowment(0)
+            .salt_bytes(salt)
+            .try_instantiate()
+            .map_err(|_| Error::VaultInstantiationFailed)?
+            .map_err(|_| Error::VaultInstantiationFailed)?;
+
+            Ok(vault.to_account_id())
+        }
+
+        #[cfg(not(test))]
+        fn install_code(&mut self, code_hash: Hash) -> Result<(), Error> {
+            self.env()
+                .set_code_hash(&code_hash)
+                .map_err(|_| Error::CodeUpgradeFailed)
+        }
+
+        /// Whether the vault still has a pending or open listing. A vault that no
+        /// longer exists has been closed for good.
+        #[cfg(not(test))]
+        fn vault_is_open(&self, vault: AccountId) -> Result<bool, Error> {
+            use ink::codegen::TraitCallBuilder;
+            use ink::env::call::FromAccountId;
+            use listing_vault::{ListingVaultRef, Status};
+
+            if !self.env().is_contract(&vault) {
+                return Ok(false);
             }
+            let status = ListingVaultRef::from_account_id(vault)
+                .call()
+                .get_status()
+                .try_invoke()
+                .map_err(|_| Error::VaultQueryFailed)?
+                .map_err(|_| Error::VaultQueryFailed)?;
+            Ok(status != Status::Closed)
+        }
+
+        // ink!'s off-chain test environment cannot call or instantiate other
+        // contracts or replace code, so unit tests answer registry queries and
+        // record vaults and upgrades here; localnet integration tests cover the
+        // real calls.
+        #[cfg(test)]
+        fn registry_current(&self, kind: otc_shared::CodeKind) -> Result<Option<Hash>, Error> {
+            Ok(tests::registry_current(kind))
+        }
+
+        #[cfg(test)]
+        fn instantiate_vault(
+            &self,
+            code_hash: Hash,
+            terms: VaultTerms,
+            salt: [u8; 40],
+        ) -> Result<AccountId, Error> {
+            Ok(tests::record_vault(code_hash, terms, salt))
+        }
+
+        #[cfg(test)]
+        fn install_code(&mut self, code_hash: Hash) -> Result<(), Error> {
+            tests::record_installed_code(code_hash);
             Ok(())
         }
 
-        fn ensure_trading_enabled(&self) -> Result<(), Error> {
-            match self.pause_state {
-                PauseState::NotPaused => Ok(()),
-                PauseState::TradingPaused => Err(Error::TradingPaused),
-                PauseState::FullyPaused => Err(Error::ContractFullyPaused),
+        #[cfg(test)]
+        fn vault_is_open(&self, vault: AccountId) -> Result<bool, Error> {
+            Ok(tests::vault_is_open(vault))
+        }
+    }
+
+    impl VaultFactory for LockupListings {
+        #[ink(message)]
+        fn trading_paused(&self) -> bool {
+            self.is_paused()
+        }
+
+        #[ink(message)]
+        fn fee_recipient(&self) -> AccountId {
+            self.fee_recipient
+        }
+
+        #[ink(message)]
+        fn validator_hotkey(&self, netuid: NetUid) -> AccountId {
+            self.validator_hotkeys
+                .get(netuid)
+                .unwrap_or(self.default_hotkey)
+        }
+
+        #[ink(message)]
+        fn listing_closed(&mut self) {
+            let vault = self.env().caller();
+            if let Some(key) = self.vault_listings.get(vault) {
+                self.remove_listing(vault, key);
             }
         }
     }
@@ -1005,339 +720,476 @@ mod lockup_listings {
     mod tests {
         use super::*;
         use ink::env::test;
-        use otc_shared::BittensorEnvironment;
+        use ink::env::Environment;
+        use ink::scale::Decode;
+        use otc_shared::upgrade::{LISTING_VAULT, LOCKUP_FACTORY};
+        use otc_shared::{BittensorEnvironment, CodeKind};
+        use std::cell::RefCell;
+        use std::collections::BTreeMap;
 
-        fn default_accounts() -> test::DefaultAccounts<BittensorEnvironment> {
+        type TestAccountId = <BittensorEnvironment as Environment>::AccountId;
+
+        const NETUID: NetUid = 1;
+        const MIN_LISTING: AlphaAmount = 1_000_000_000;
+        const MIN_PURCHASE: AlphaAmount = 100_000_000;
+        const MIN_LOCKUP: BlockAge = 10;
+        const MAX_LOCKUP: BlockAge = 1_000;
+        /// 0.5%, as U64F64 bits
+        const FEE_RATE: u128 = 92_233_720_368_547_758;
+        const NOW: BlockNumber = 100;
+
+        thread_local! {
+            static REGISTRY: RefCell<BTreeMap<CodeKind, Hash>> = const { RefCell::new(BTreeMap::new()) };
+            static VAULTS: RefCell<Vec<(Hash, VaultTerms, [u8; 40])>> = const { RefCell::new(Vec::new()) };
+            static INSTALLED_CODE: RefCell<Option<Hash>> = const { RefCell::new(None) };
+            /// Vaults that report `Closed` or no longer exist
+            static CLOSED_VAULTS: RefCell<Vec<TestAccountId>> = const { RefCell::new(Vec::new()) };
+        }
+
+        pub(super) fn vault_is_open(vault: TestAccountId) -> bool {
+            CLOSED_VAULTS.with(|closed| !closed.borrow().contains(&vault))
+        }
+
+        fn close_vault(vault: TestAccountId) {
+            CLOSED_VAULTS.with(|closed| closed.borrow_mut().push(vault));
+        }
+
+        pub(super) fn registry_current(kind: CodeKind) -> Option<Hash> {
+            REGISTRY.with(|registry| registry.borrow().get(&kind).copied())
+        }
+
+        fn set_registry_current(kind: CodeKind, code: Option<Hash>) {
+            REGISTRY.with(|registry| match code {
+                Some(code) => registry.borrow_mut().insert(kind, code),
+                None => registry.borrow_mut().remove(&kind),
+            });
+        }
+
+        /// Records the vault and returns a distinct account for it.
+        pub(super) fn record_vault(
+            code_hash: Hash,
+            terms: VaultTerms,
+            salt: [u8; 40],
+        ) -> TestAccountId {
+            VAULTS.with(|vaults| {
+                let mut vaults = vaults.borrow_mut();
+                vaults.push((code_hash, terms, salt));
+                let mut account = [0xAA; 32];
+                account[31] = u8::try_from(vaults.len()).expect("few vaults");
+                TestAccountId::from(account)
+            })
+        }
+
+        fn vaults() -> Vec<(Hash, VaultTerms, [u8; 40])> {
+            VAULTS.with(|vaults| vaults.borrow().clone())
+        }
+
+        pub(super) fn record_installed_code(code_hash: Hash) {
+            INSTALLED_CODE.with(|installed| *installed.borrow_mut() = Some(code_hash));
+        }
+
+        fn installed_code() -> Option<Hash> {
+            INSTALLED_CODE.with(|installed| *installed.borrow())
+        }
+
+        fn accounts() -> test::DefaultAccounts<BittensorEnvironment> {
             test::default_accounts::<BittensorEnvironment>()
         }
 
-        fn create_test_contract() -> LockupListingsContract {
-            let accounts = default_accounts();
-            let escrow_code_hash = Hash::from([0u8; 32]);
-            let fee_rate = 3_000_000_000_000_000_000u128; // 3% as raw bits
+        fn hash(byte: u8) -> Hash {
+            Hash::from([byte; 32])
+        }
 
-            LockupListingsContract::new(
-                accounts.alice, // owner
-                accounts.bob,   // hotkey
-                escrow_code_hash,
-                accounts.django, // registry
+        fn registry_account() -> TestAccountId {
+            TestAccountId::from([0x55; 32])
+        }
+
+        fn fee_collector() -> TestAccountId {
+            TestAccountId::from([0x66; 32])
+        }
+
+        fn set_caller(account: TestAccountId) {
+            test::set_caller::<BittensorEnvironment>(account);
+        }
+
+        fn last_event<E: Decode>() -> E {
+            let events = test::recorded_events().collect::<Vec<_>>();
+            E::decode(&mut &events.last().expect("an event").data[..]).expect("decode event")
+        }
+
+        fn new_factory(
+            fee_rate: u128,
+            min_lockup: BlockAge,
+            max_lockup: BlockAge,
+        ) -> Result<LockupListings, Error> {
+            let accounts = accounts();
+            LockupListings::new(
+                accounts.alice,
+                registry_account(),
+                accounts.charlie,
                 fee_rate,
-                1_000_000_000, // min_listing_amount (1 Alpha)
-                100_000_000,   // min_purchase_amount (0.1 Alpha)
-                7200,          // min_lockup_duration (~1 day)
-                2_592_000,     // max_lockup_duration (~30 days)
+                fee_collector(),
+                MIN_LISTING,
+                MIN_PURCHASE,
+                min_lockup,
+                max_lockup,
             )
         }
 
-        #[ink::test]
-        fn constructor_works() {
-            let accounts = default_accounts();
-            let contract = create_test_contract();
+        /// Roles: alice owns the factory, bob sells, charlie is the default
+        /// validator hotkey, django a third party, and eve the seller's hotkey.
+        fn factory() -> LockupListings {
+            REGISTRY.with(|registry| registry.borrow_mut().clear());
+            set_registry_current(LISTING_VAULT, Some(hash(0xA1)));
+            VAULTS.with(|vaults| vaults.borrow_mut().clear());
+            INSTALLED_CODE.with(|installed| *installed.borrow_mut() = None);
+            CLOSED_VAULTS.with(|closed| closed.borrow_mut().clear());
+            test::set_block_number::<BittensorEnvironment>(NOW);
+            set_caller(accounts().alice);
 
-            assert_eq!(contract.get_owner(), accounts.alice);
-            assert_eq!(contract.get_hotkey(), accounts.bob);
-            assert_eq!(contract.get_min_listing_amount(), 1_000_000_000);
-            assert_eq!(contract.get_min_purchase_amount(), 100_000_000);
-            let (min_duration, max_duration) = contract.get_lockup_duration_limits();
-            assert_eq!(min_duration, 7200);
-            assert_eq!(max_duration, 2_592_000);
-            assert_eq!(contract.get_pause_state(), PauseState::NotPaused);
+            new_factory(FEE_RATE, MIN_LOCKUP, MAX_LOCKUP).expect("valid config")
+        }
+
+        fn create(factory: &mut LockupListings) -> Result<(ListingId, AccountId), Error> {
+            let accounts = accounts();
+            set_caller(accounts.bob);
+            factory.create_listing(NETUID, accounts.eve, MIN_LISTING, 100, 7, 20)
         }
 
         #[ink::test]
-        fn update_owner_works() {
-            let accounts = default_accounts();
-            let mut contract = create_test_contract();
+        fn constructor_validates_the_config() {
+            let accounts = accounts();
 
-            // Set caller to owner
-            test::set_caller::<BittensorEnvironment>(accounts.alice);
+            assert!(matches!(
+                new_factory(MAX_FEE_RATE + 1, MIN_LOCKUP, MAX_LOCKUP),
+                Err(Error::FeeRateTooHigh)
+            ));
+            assert!(matches!(
+                new_factory(FEE_RATE, MAX_LOCKUP + 1, MAX_LOCKUP),
+                Err(Error::InvalidLockupDurationLimits)
+            ));
 
-            let result = contract.update_owner(accounts.charlie);
-            assert!(result.is_ok());
-            assert_eq!(contract.get_owner(), accounts.charlie);
+            let factory = new_factory(MAX_FEE_RATE, MIN_LOCKUP, MAX_LOCKUP).expect("valid");
+            let config = factory.get_config();
+            assert_eq!(config.owner, accounts.alice);
+            assert_eq!(config.registry, registry_account());
+            assert_eq!(config.default_hotkey, accounts.charlie);
+            assert_eq!(config.fee_rate.to_bits(), MAX_FEE_RATE);
+            assert_eq!(config.fee_recipient, fee_collector());
+            assert_eq!(config.paused_until, 0);
+            assert_eq!(factory.get_version(), STORAGE_VERSION);
         }
 
         #[ink::test]
-        fn update_owner_fails_if_not_owner() {
-            let accounts = default_accounts();
-            let mut contract = create_test_contract();
+        fn create_listing_makes_a_vault_from_the_registry_and_indexes_it() {
+            let accounts = accounts();
+            let mut factory = factory();
 
-            // Set caller to non-owner
-            test::set_caller::<BittensorEnvironment>(accounts.bob);
+            let (listing_id, vault) = create(&mut factory).expect("create");
+            assert_eq!(listing_id, 1);
 
-            let result = contract.update_owner(accounts.charlie);
-            assert_eq!(result, Err(Error::Unauthorized));
-        }
-
-        #[ink::test]
-        fn update_hotkey_works() {
-            let accounts = default_accounts();
-            let mut contract = create_test_contract();
-
-            test::set_caller::<BittensorEnvironment>(accounts.alice);
-
-            let result = contract.update_hotkey(accounts.charlie);
-            assert!(result.is_ok());
-            assert_eq!(contract.get_hotkey(), accounts.charlie);
-        }
-
-        #[ink::test]
-        fn update_fee_rate_works() {
-            let accounts = default_accounts();
-            let mut contract = create_test_contract();
-
-            test::set_caller::<BittensorEnvironment>(accounts.alice);
-
-            let new_fee_rate_bits = 5_000_000_000_000_000_000u128; // 5%
-            let result = contract.update_fee_rate(new_fee_rate_bits);
-            assert!(result.is_ok());
+            let (code_hash, terms, salt) = vaults()[0];
+            assert_eq!(code_hash, hash(0xA1));
             assert_eq!(
-                contract.get_fee_rate(),
-                FixedDecimal::from_bits(new_fee_rate_bits)
+                terms,
+                VaultTerms {
+                    seller: accounts.bob,
+                    listing_id: 1,
+                    netuid: NETUID,
+                    hotkey: accounts.eve,
+                    amount: MIN_LISTING,
+                    price_offset_bps: 100,
+                    min_price: 7,
+                    lockup_duration: 20,
+                }
             );
-        }
+            assert_eq!(&salt[..32], AsRef::<[u8]>::as_ref(&accounts.bob));
+            assert_eq!(salt[32..], 0u64.to_le_bytes());
 
-        #[ink::test]
-        fn update_min_listing_amount_works() {
-            let accounts = default_accounts();
-            let mut contract = create_test_contract();
-
-            test::set_caller::<BittensorEnvironment>(accounts.alice);
-
-            let result = contract.update_min_listing_amount(2_000_000_000);
-            assert!(result.is_ok());
-            assert_eq!(contract.get_min_listing_amount(), 2_000_000_000);
-        }
-
-        #[ink::test]
-        fn update_min_purchase_amount_works() {
-            let accounts = default_accounts();
-            let mut contract = create_test_contract();
-
-            test::set_caller::<BittensorEnvironment>(accounts.alice);
-
-            let result = contract.update_min_purchase_amount(200_000_000);
-            assert!(result.is_ok());
-            assert_eq!(contract.get_min_purchase_amount(), 200_000_000);
-        }
-
-        #[ink::test]
-        fn update_lockup_duration_limits_works() {
-            let accounts = default_accounts();
-            let mut contract = create_test_contract();
-
-            test::set_caller::<BittensorEnvironment>(accounts.alice);
-
-            let result = contract.update_lockup_duration_limits(1000, 5_000_000);
-            assert!(result.is_ok());
-            let (min_duration, max_duration) = contract.get_lockup_duration_limits();
-            assert_eq!(min_duration, 1000);
-            assert_eq!(max_duration, 5_000_000);
-        }
-
-        #[ink::test]
-        fn pause_trading_works() {
-            let accounts = default_accounts();
-            let mut contract = create_test_contract();
-
-            test::set_caller::<BittensorEnvironment>(accounts.alice);
-
-            let reason = b"Maintenance".to_vec();
-            let result = contract.pause_trading(reason);
-            assert!(result.is_ok());
-            assert_eq!(contract.get_pause_state(), PauseState::TradingPaused);
-        }
-
-        #[ink::test]
-        fn pause_fully_works() {
-            let accounts = default_accounts();
-            let mut contract = create_test_contract();
-
-            test::set_caller::<BittensorEnvironment>(accounts.alice);
-
-            let reason = b"Emergency".to_vec();
-            let result = contract.pause_fully(reason);
-            assert!(result.is_ok());
-            assert_eq!(contract.get_pause_state(), PauseState::FullyPaused);
-        }
-
-        #[ink::test]
-        fn resume_works() {
-            let accounts = default_accounts();
-            let mut contract = create_test_contract();
-
-            test::set_caller::<BittensorEnvironment>(accounts.alice);
-
-            // First pause
-            contract.pause_trading(b"Test".to_vec()).unwrap();
-            assert_eq!(contract.get_pause_state(), PauseState::TradingPaused);
-
-            // Then resume
-            let result = contract.resume();
-            assert!(result.is_ok());
-            assert_eq!(contract.get_pause_state(), PauseState::NotPaused);
-        }
-
-        #[ink::test]
-        fn pause_requires_owner() {
-            let accounts = default_accounts();
-            let mut contract = create_test_contract();
-
-            test::set_caller::<BittensorEnvironment>(accounts.bob);
-
-            let result = contract.pause_trading(b"Test".to_vec());
-            assert_eq!(result, Err(Error::Unauthorized));
-        }
-
-        #[ink::test]
-        fn get_listing_returns_none_when_not_found() {
-            let accounts = default_accounts();
-            let contract = create_test_contract();
-
-            let result = contract.get_listing(1, accounts.alice, 1);
-            assert!(result.is_none());
-        }
-
-        #[ink::test]
-        fn get_user_listings_returns_empty_vec() {
-            let accounts = default_accounts();
-            let contract = create_test_contract();
-
-            let result = contract.get_user_listings(accounts.alice, 1);
-            assert!(result.is_empty());
-        }
-
-        #[ink::test]
-        fn cancel_listing_fails_when_not_found() {
-            let accounts = default_accounts();
-            let mut contract = create_test_contract();
-
-            test::set_caller::<BittensorEnvironment>(accounts.alice);
-
-            let result = contract.cancel_lockup_listing(1, 1);
-            assert_eq!(result, Err(Error::ListingNotFound));
-        }
-
-        #[ink::test]
-        fn force_cancel_requires_owner() {
-            let accounts = default_accounts();
-            let mut contract = create_test_contract();
-
-            test::set_caller::<BittensorEnvironment>(accounts.bob);
-
-            let result = contract.force_cancel_lockup_listing(1, accounts.alice, 1);
-            assert_eq!(result, Err(Error::Unauthorized));
-        }
-
-        #[ink::test]
-        fn update_escrow_code_hash_works() {
-            let accounts = default_accounts();
-            let mut contract = create_test_contract();
-
-            test::set_caller::<BittensorEnvironment>(accounts.alice);
-
-            let new_hash = Hash::from([1u8; 32]);
-            let result = contract.update_escrow_code_hash(new_hash);
-            assert!(result.is_ok());
-        }
-
-        #[ink::test]
-        fn operations_blocked_when_fully_paused() {
-            let accounts = default_accounts();
-            let mut contract = create_test_contract();
-
-            test::set_caller::<BittensorEnvironment>(accounts.alice);
-            contract.pause_fully(b"Emergency".to_vec()).unwrap();
-
-            // Trying to cancel should fail when fully paused
-            let result = contract.cancel_lockup_listing(1, 1);
-            assert_eq!(result, Err(Error::ContractFullyPaused));
-        }
-
-        #[ink::test]
-        fn admin_functions_work_when_paused() {
-            let accounts = default_accounts();
-            let mut contract = create_test_contract();
-
-            test::set_caller::<BittensorEnvironment>(accounts.alice);
-            contract.pause_fully(b"Emergency".to_vec()).unwrap();
-
-            // Admin functions should still work
-            let result = contract.update_min_listing_amount(5_000_000_000);
-            assert!(result.is_ok());
-        }
-
-        #[ink::test]
-        fn reserved_alpha_tracking_works() {
-            let mut contract = create_test_contract();
-
-            // Initially zero
-            assert_eq!(contract.get_reserved_alpha(1), 0);
-
-            // Increase reserved alpha
-            contract.increase_reserved_alpha(1, 1_000_000_000).unwrap();
-            assert_eq!(contract.get_reserved_alpha(1), 1_000_000_000);
-
-            // Increase again
-            contract.increase_reserved_alpha(1, 500_000_000).unwrap();
-            assert_eq!(contract.get_reserved_alpha(1), 1_500_000_000);
-
-            // Decrease
-            let result = contract.decrease_reserved_alpha(1, 300_000_000);
-            assert!(result.is_ok());
-            assert_eq!(contract.get_reserved_alpha(1), 1_200_000_000);
-        }
-
-        #[ink::test]
-        fn decrease_reserved_alpha_prevents_underflow() {
-            let mut contract = create_test_contract();
-
-            contract.increase_reserved_alpha(1, 100).unwrap();
-
-            let result = contract.decrease_reserved_alpha(1, 200);
-            assert_eq!(result, Err(Error::Overflow));
-        }
-
-        #[ink::test]
-        fn generate_escrow_salt_is_unique() {
-            let salt1 = LockupListingsContract::generate_escrow_salt(1, 1);
-            let salt2 = LockupListingsContract::generate_escrow_salt(1, 2);
-            let salt3 = LockupListingsContract::generate_escrow_salt(2, 1);
-
-            assert_ne!(salt1, salt2);
-            assert_ne!(salt1, salt3);
-            assert_ne!(salt2, salt3);
-        }
-
-        #[ink::test]
-        fn bittensor_min_stake_constant_is_correct() {
+            assert_eq!(factory.get_listing(NETUID, accounts.bob, 1), Some(vault));
             assert_eq!(
-                BITTENSOR_MIN_STAKE, 2_000_000,
-                "Bittensor's DefaultMinStake is 2_000_000 rao (0.002 TAO)"
+                factory.get_vault_listing(vault),
+                Some((NETUID, accounts.bob, 1))
+            );
+            assert_eq!(factory.get_user_listings(accounts.bob, NETUID), vec![1]);
+            assert_eq!(factory.get_seller_nonce(accounts.bob), 1);
+
+            let created = last_event::<ListingCreated>();
+            assert_eq!(created.seller, accounts.bob);
+            assert_eq!(created.vault, vault);
+            assert_eq!(created.min_price, 7);
+
+            // The next listing gets a new id and a new salt.
+            let (second_id, second_vault) = create(&mut factory).expect("create");
+            assert_eq!(second_id, 2);
+            assert_ne!(second_vault, vault);
+            assert_eq!(vaults()[1].2[32..], 1u64.to_le_bytes());
+        }
+
+        #[ink::test]
+        fn create_listing_checks_the_terms() {
+            let accounts = accounts();
+            let mut factory = factory();
+            set_caller(accounts.bob);
+
+            assert_eq!(
+                factory.create_listing(NETUID, accounts.eve, MIN_LISTING - 1, 0, 0, 20),
+                Err(Error::AmountTooSmall)
+            );
+            assert_eq!(
+                factory.create_listing(NETUID, accounts.eve, MIN_LISTING, -10_000, 0, 20),
+                Err(Error::InvalidPriceOffset)
+            );
+            assert_eq!(
+                factory.create_listing(NETUID, accounts.eve, MIN_LISTING, 0, 0, MIN_LOCKUP - 1),
+                Err(Error::LockupDurationTooShort)
+            );
+            assert_eq!(
+                factory.create_listing(NETUID, accounts.eve, MIN_LISTING, 0, 0, MAX_LOCKUP + 1),
+                Err(Error::LockupDurationTooLong)
+            );
+
+            set_registry_current(LISTING_VAULT, None);
+            assert_eq!(create(&mut factory), Err(Error::NoCurrentCode));
+            assert!(vaults().is_empty());
+        }
+
+        #[ink::test]
+        fn sellers_are_limited_per_subnet() {
+            let accounts = accounts();
+            let mut factory = factory();
+            for _ in 0..MAX_LISTINGS_PER_USER_PER_NETUID {
+                create(&mut factory).expect("create");
+            }
+            assert_eq!(create(&mut factory), Err(Error::TooManyListings));
+
+            // Closing a listing frees a slot.
+            let vault = factory
+                .get_listing(NETUID, accounts.bob, 3)
+                .expect("listing 3");
+            set_caller(vault);
+            factory.listing_closed();
+            assert!(create(&mut factory).is_ok());
+        }
+
+        #[ink::test]
+        fn only_a_listing_vault_can_close_its_listing() {
+            let accounts = accounts();
+            let mut factory = factory();
+            let (_, vault) = create(&mut factory).expect("create");
+            let (_, other) = create(&mut factory).expect("create");
+
+            // Anyone else is ignored.
+            set_caller(accounts.django);
+            factory.listing_closed();
+            assert_eq!(factory.get_user_listings(accounts.bob, NETUID), vec![1, 2]);
+
+            set_caller(vault);
+            factory.listing_closed();
+            assert_eq!(factory.get_listing(NETUID, accounts.bob, 1), None);
+            assert_eq!(factory.get_vault_listing(vault), None);
+            assert_eq!(factory.get_user_listings(accounts.bob, NETUID), vec![2]);
+            let closed = last_event::<ListingClosed>();
+            assert_eq!(closed.vault, vault);
+            assert_eq!(closed.listing_id, 1);
+
+            // A second report changes nothing.
+            factory.listing_closed();
+            assert_eq!(
+                factory.get_vault_listing(other),
+                Some((NETUID, accounts.bob, 2))
             );
         }
 
         #[ink::test]
-        fn min_stake_validation_logic() {
-            // Test the validation logic for remaining amounts
-            let total_amount: u64 = 5_000_000; // 5M rao
-            let purchase_amount: u64 = 4_000_000; // 4M rao
-            let new_remaining = total_amount - purchase_amount; // 1M rao
+        fn anyone_prunes_a_closed_listing_whose_report_never_arrived() {
+            let accounts = accounts();
+            let mut factory = factory();
+            let (listing_id, vault) = create(&mut factory).expect("create");
 
-            assert!(
-                new_remaining > 0 && new_remaining < BITTENSOR_MIN_STAKE,
-                "Should fail: 1M < 2M and > 0"
+            set_caller(accounts.django);
+            assert_eq!(
+                factory.prune_listing(NETUID, accounts.bob, listing_id),
+                Err(Error::ListingStillOpen)
             );
 
-            // If remaining would be exactly 0, it should pass
-            let full_purchase = total_amount;
-            let zero_remaining = total_amount - full_purchase;
-            assert!(!(zero_remaining > 0 && zero_remaining < BITTENSOR_MIN_STAKE));
+            // The vault closed, but its report to the factory failed.
+            close_vault(vault);
+            assert_eq!(
+                factory.prune_listing(NETUID, accounts.bob, listing_id),
+                Ok(())
+            );
+            assert_eq!(factory.get_listing(NETUID, accounts.bob, listing_id), None);
+            assert_eq!(factory.get_vault_listing(vault), None);
+            assert!(factory.get_user_listings(accounts.bob, NETUID).is_empty());
+            assert_eq!(last_event::<ListingClosed>().vault, vault);
 
-            // If remaining would be >= BITTENSOR_MIN_STAKE, it should pass
-            let smaller_purchase: u64 = 2_500_000;
-            let valid_remaining = total_amount - smaller_purchase; // 2.5M rao
-            assert!(!(valid_remaining > 0 && valid_remaining < BITTENSOR_MIN_STAKE));
+            assert_eq!(
+                factory.prune_listing(NETUID, accounts.bob, listing_id),
+                Err(Error::ListingNotFound)
+            );
+        }
+
+        #[ink::test]
+        fn pauses_expire_and_can_be_renewed_or_lifted() {
+            let accounts = accounts();
+            let mut factory = factory();
+
+            set_caller(accounts.django);
+            assert_eq!(factory.pause(10), Err(Error::Unauthorized));
+
+            set_caller(accounts.alice);
+            assert_eq!(factory.pause(0), Err(Error::InvalidPauseDuration));
+            assert_eq!(
+                factory.pause(MAX_PAUSE + 1),
+                Err(Error::InvalidPauseDuration)
+            );
+            assert_eq!(factory.pause(10), Ok(()));
+            assert!(factory.trading_paused());
+            assert_eq!(last_event::<TradingPaused>().until, NOW + 10);
+            assert_eq!(create(&mut factory), Err(Error::TradingPaused));
+
+            test::set_block_number::<BittensorEnvironment>(NOW + 10);
+            assert!(!factory.trading_paused());
+            assert!(create(&mut factory).is_ok());
+
+            set_caller(accounts.alice);
+            assert_eq!(factory.pause(MAX_PAUSE), Ok(()));
+            assert!(factory.trading_paused());
+            assert_eq!(factory.resume(), Ok(()));
+            assert!(!factory.trading_paused());
+        }
+
+        #[ink::test]
+        fn validator_hotkeys_default_and_override_per_subnet() {
+            let accounts = accounts();
+            let mut factory = factory();
+            assert_eq!(factory.validator_hotkey(NETUID), accounts.charlie);
+
+            set_caller(accounts.alice);
+            assert_eq!(
+                factory.set_validator_hotkey(NETUID, Some(accounts.django)),
+                Ok(())
+            );
+            assert_eq!(factory.validator_hotkey(NETUID), accounts.django);
+            assert_eq!(factory.validator_hotkey(NETUID + 1), accounts.charlie);
+
+            assert_eq!(factory.set_default_hotkey(accounts.eve), Ok(()));
+            assert_eq!(factory.validator_hotkey(NETUID + 1), accounts.eve);
+
+            assert_eq!(factory.set_validator_hotkey(NETUID, None), Ok(()));
+            assert_eq!(factory.validator_hotkey(NETUID), accounts.eve);
+        }
+
+        #[ink::test]
+        fn only_the_owner_changes_settings_and_the_fee_is_capped() {
+            let accounts = accounts();
+            let mut factory = factory();
+
+            set_caller(accounts.django);
+            assert_eq!(factory.set_fee_rate(0), Err(Error::Unauthorized));
+            assert_eq!(
+                factory.set_fee_recipient(accounts.django),
+                Err(Error::Unauthorized)
+            );
+            assert_eq!(factory.set_min_listing_amount(1), Err(Error::Unauthorized));
+            assert_eq!(factory.set_min_purchase_amount(1), Err(Error::Unauthorized));
+            assert_eq!(
+                factory.set_lockup_duration_limits(1, 2),
+                Err(Error::Unauthorized)
+            );
+            assert_eq!(
+                factory.set_default_hotkey(accounts.django),
+                Err(Error::Unauthorized)
+            );
+            assert_eq!(
+                factory.set_validator_hotkey(NETUID, Some(accounts.django)),
+                Err(Error::Unauthorized)
+            );
+            assert_eq!(
+                factory.transfer_ownership(Some(accounts.django)),
+                Err(Error::Unauthorized)
+            );
+
+            set_caller(accounts.alice);
+            assert_eq!(
+                factory.set_fee_rate(MAX_FEE_RATE + 1),
+                Err(Error::FeeRateTooHigh)
+            );
+            assert_eq!(factory.set_fee_rate(MAX_FEE_RATE), Ok(()));
+            assert_eq!(factory.get_config().fee_rate.to_bits(), MAX_FEE_RATE);
+            assert_eq!(
+                factory.set_lockup_duration_limits(5, 4),
+                Err(Error::InvalidLockupDurationLimits)
+            );
+            assert_eq!(factory.set_lockup_duration_limits(5, 5), Ok(()));
+            assert_eq!(factory.set_fee_recipient(accounts.django), Ok(()));
+            assert_eq!(factory.fee_recipient(), accounts.django);
+            assert_eq!(factory.set_min_listing_amount(42), Ok(()));
+            assert_eq!(factory.set_min_purchase_amount(43), Ok(()));
+            let config = factory.get_config();
+            assert_eq!(config.min_listing_amount, 42);
+            assert_eq!(config.min_purchase_amount, 43);
+        }
+
+        #[ink::test]
+        fn ownership_changes_only_when_the_new_owner_accepts() {
+            let accounts = accounts();
+            let mut factory = factory();
+
+            set_caller(accounts.alice);
+            assert_eq!(factory.transfer_ownership(Some(accounts.django)), Ok(()));
+            assert_eq!(factory.get_pending_owner(), Some(accounts.django));
+            // Until django accepts, alice is still the owner.
+            assert_eq!(factory.set_fee_rate(0), Ok(()));
+
+            set_caller(accounts.eve);
+            assert_eq!(factory.accept_ownership(), Err(Error::Unauthorized));
+
+            set_caller(accounts.django);
+            assert_eq!(factory.accept_ownership(), Ok(()));
+            assert_eq!(factory.get_owner(), accounts.django);
+            assert_eq!(factory.get_pending_owner(), None);
+            assert_eq!(last_event::<OwnerChanged>().old_owner, accounts.alice);
+
+            set_caller(accounts.alice);
+            assert_eq!(factory.set_fee_rate(0), Err(Error::Unauthorized));
+
+            // A proposal can be withdrawn.
+            set_caller(accounts.django);
+            assert_eq!(factory.transfer_ownership(Some(accounts.eve)), Ok(()));
+            assert_eq!(factory.transfer_ownership(None), Ok(()));
+            set_caller(accounts.eve);
+            assert_eq!(factory.accept_ownership(), Err(Error::Unauthorized));
+        }
+
+        #[ink::test]
+        fn only_the_owner_upgrades_to_the_registry_current_code() {
+            let accounts = accounts();
+            let mut factory = factory();
+
+            set_caller(accounts.django);
+            assert_eq!(factory.upgrade(hash(3)), Err(Error::Unauthorized));
+
+            set_caller(accounts.alice);
+            assert_eq!(factory.upgrade(hash(3)), Err(Error::NoCurrentCode));
+            set_registry_current(LOCKUP_FACTORY, Some(hash(3)));
+            assert_eq!(factory.upgrade(hash(4)), Err(Error::NotCurrentCode));
+            assert_eq!(installed_code(), None);
+            assert_eq!(factory.upgrade(hash(3)), Ok(()));
+            assert_eq!(installed_code(), Some(hash(3)));
+        }
+
+        #[ink::test]
+        fn state_changing_messages_migrate_first() {
+            let mut factory = factory();
+            factory.version = 0;
+            create(&mut factory).expect("create");
+            assert_eq!(factory.get_version(), STORAGE_VERSION);
+
+            factory.version = 0;
+            factory.migrate();
+            assert_eq!(factory.get_version(), STORAGE_VERSION);
         }
     }
 }

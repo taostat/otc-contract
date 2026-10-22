@@ -1,126 +1,100 @@
-use crate::types::{LockupListingId, PurchaseId};
-use ink::prelude::vec::Vec;
+use crate::types::ListingId;
 use ink::primitives::AccountId;
-use otc_shared::{
-    AlphaAmount, Balance, BlockAge, BlockNumber, FixedDecimal, NetUid, PauseState, PriceOffsetBps,
-    TaoAmount,
-};
+use otc_shared::{AlphaAmount, BlockAge, BlockNumber, FixedDecimal, NetUid, PriceOffsetBps};
 
+/// A seller created a listing; it opens once the seller funds and activates its vault
 #[ink::event]
-pub struct LockupListingCreated {
+pub struct ListingCreated {
     #[ink(topic)]
     pub seller: AccountId,
-    pub hotkey: AccountId,
     #[ink(topic)]
     pub netuid: NetUid,
-    pub listing_id: LockupListingId,
+    pub listing_id: ListingId,
+    #[ink(topic)]
+    pub vault: AccountId,
+    pub hotkey: AccountId,
     pub amount: AlphaAmount,
     pub price_offset_bps: PriceOffsetBps,
+    pub min_price: u64,
     pub lockup_duration: BlockAge,
 }
 
+/// A vault reported that its listing filled or was cancelled
 #[ink::event]
-pub struct LockupListingTaken {
-    #[ink(topic)]
-    pub seller: AccountId,
-    #[ink(topic)]
-    pub buyer: AccountId,
-    #[ink(topic)]
-    pub netuid: NetUid,
-    pub listing_id: LockupListingId,
-    pub purchase_id: PurchaseId,
-    pub alpha_amount: AlphaAmount,
-    pub tao_amount: TaoAmount,
-    pub executed_price: u64,
-    pub unlock_block: BlockNumber,
-    pub escrow_account: AccountId,
-    pub fee: Balance,
-}
-
-#[ink::event]
-pub struct LockupListingCancelled {
+pub struct ListingClosed {
     #[ink(topic)]
     pub seller: AccountId,
     #[ink(topic)]
     pub netuid: NetUid,
-    pub listing_id: LockupListingId,
-    pub amount_returned: AlphaAmount,
+    pub listing_id: ListingId,
+    #[ink(topic)]
+    pub vault: AccountId,
+}
+
+/// The owner proposed a new owner, or withdrew the proposal with `None`
+#[ink::event]
+pub struct OwnershipTransferProposed {
+    pub new_owner: Option<AccountId>,
 }
 
 #[ink::event]
-pub struct LockupListingForceCancelled {
-    #[ink(topic)]
-    pub seller: AccountId,
-    #[ink(topic)]
-    pub initiated_by: AccountId,
-    #[ink(topic)]
-    pub netuid: NetUid,
-    pub listing_id: LockupListingId,
-    pub amount_returned: AlphaAmount,
-}
-
-#[ink::event]
-pub struct LockupListingFullyFilled {
-    #[ink(topic)]
-    pub seller: AccountId,
-    #[ink(topic)]
-    pub netuid: NetUid,
-    pub listing_id: LockupListingId,
-}
-
-#[ink::event]
-pub struct OwnerUpdated {
+pub struct OwnerChanged {
     pub old_owner: AccountId,
     pub new_owner: AccountId,
 }
 
 #[ink::event]
-pub struct HotkeyUpdated {
+pub struct DefaultHotkeyChanged {
     pub old_hotkey: AccountId,
     pub new_hotkey: AccountId,
 }
 
+/// `hotkey` is `None` when the subnet falls back to the default hotkey
 #[ink::event]
-pub struct FeeRateUpdated {
+pub struct ValidatorHotkeyChanged {
+    #[ink(topic)]
+    pub netuid: NetUid,
+    pub hotkey: Option<AccountId>,
+}
+
+#[ink::event]
+pub struct FeeRateChanged {
     pub old_rate: FixedDecimal,
     pub new_rate: FixedDecimal,
 }
 
 #[ink::event]
-pub struct MinListingAmountUpdated {
+pub struct FeeRecipientChanged {
+    pub old_recipient: AccountId,
+    pub new_recipient: AccountId,
+}
+
+#[ink::event]
+pub struct MinListingAmountChanged {
     pub old_amount: AlphaAmount,
     pub new_amount: AlphaAmount,
 }
 
 #[ink::event]
-pub struct MinPurchaseAmountUpdated {
+pub struct MinPurchaseAmountChanged {
     pub old_amount: AlphaAmount,
     pub new_amount: AlphaAmount,
 }
 
 #[ink::event]
-pub struct LockupDurationUpdated {
-    pub old_min: BlockAge,
-    pub old_max: BlockAge,
-    pub new_min: BlockAge,
-    pub new_max: BlockAge,
+pub struct LockupDurationLimitsChanged {
+    pub min: BlockAge,
+    pub max: BlockAge,
 }
 
+/// New listings and takes are paused until `until`
 #[ink::event]
-pub struct EscrowCodeHashUpdated {
-    pub old_hash: [u8; 32],
-    pub new_hash: [u8; 32],
-}
-
-#[ink::event]
-pub struct ContractPaused {
-    #[ink(topic)]
-    pub pause_state: PauseState,
-    pub reason: Vec<u8>,
+pub struct TradingPaused {
+    pub until: BlockNumber,
     pub paused_by: AccountId,
 }
 
 #[ink::event]
-pub struct ContractResumed {
+pub struct TradingResumed {
     pub resumed_by: AccountId,
 }
