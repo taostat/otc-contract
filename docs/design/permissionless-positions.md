@@ -80,8 +80,8 @@ Function 15 returns the pool's spot price (`current_alpha_price`). In one `utili
 
 ```text
 code_registry       immutable   timelocked allowlist of code hashes; no chain calls
-lockup_listings v2  upgradeable creates vaults; config, pause, listing index; holds no Alpha
-otc v2              upgradeable TAO offers (pooled TAO); spot listings via vaults
+lockup_listings v2  upgradeable creates spot and lockup vaults; config, pause, listing index; holds no Alpha
+otc v2              upgradeable TAO offers (pooled TAO)
 listing_vault       per listing holds the seller's Alpha; settles itself; upgrades itself
 alpha_lockup v2     per purchase holds the buyer's Alpha until unlock; upgrades itself
 ```
@@ -173,20 +173,20 @@ TAO isn't tied to a subnet, so offers stay pooled in `otc`. Changes:
 
   This leaves one `call_runtime` path, which an upgrade can fix if Subtensor renumbers calls. A proxy-free alternative is listed under [Open questions](#open-questions).
 
-### Spot listings (otc)
+### Spot listings
 
-Spot listings move to `listing_vault` with `lockup_duration = None`. `claim_dividends` goes away, because emissions on listed Alpha belong to the seller.
+Spot listings move to `listing_vault` with `lockup_duration = None`, created by the same factory as lockup listings, so `otc` keeps only TAO offers. `claim_dividends` goes away, because emissions on listed Alpha belong to the seller.
 
-### Factories
+### Factory
 
-`lockup_listings` v2 and the listing half of `otc` v2:
+`lockup_listings` v2 is the one listing factory, for spot and lockup listings. It:
 
 - create vaults from the registry's current vault code;
 - keep the `(netuid, seller, listing_id) → vault` index and emit events for indexers;
 - hold config that vaults read: the validator hotkey per netuid, the fee recipient, and the trading pause;
 - copy the fee rate and limits into each vault at creation.
 
-Factories hold no Alpha. A compromised factory could block takes or redirect future fees, but it can't touch principal: `cancel` and the sweeps never consult the factory.
+The factory holds no Alpha. A compromised factory could block takes or redirect future fees, but it can't touch principal: `cancel` and the sweeps never consult the factory.
 
 ### Hotkeys
 
@@ -283,7 +283,7 @@ Every upgradeable contract carries a `version` field and a `migrate()` path. CI 
 | Fee rate for new listings (capped by `MAX_FEE`) | owner | none | Affects new listings only |
 | Minimum amounts, lockup bounds, validator hotkey | owner | none | New listings only; `consolidate()` is optional |
 | Pause new listings and takes | owner | none | Expires unless renewed; never blocks exits |
-| Freeze new listings on a netuid (otc) | owner | none | Restrict-only |
+| Freeze new listings on a netuid (`lockup_listings`) | owner | none | Restrict-only |
 
 Removed:
 
