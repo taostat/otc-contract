@@ -4,6 +4,8 @@ pub mod chain_extension;
 pub mod errors;
 pub mod runtime;
 pub mod stake;
+#[cfg(all(feature = "std", any(test, feature = "testing")))]
+pub mod testing;
 pub mod types;
 pub mod upgrade;
 
@@ -17,7 +19,9 @@ pub use errors::SharedError;
 pub use runtime::{AlphaCurrency, ProxyCall, ProxyType, RuntimeCall, SubtensorCall, TaoCurrency};
 
 // Re-export stake transfer verification helpers
-pub use stake::{stake_delta_verified, TRANSFER_TOLERANCE};
+pub use stake::{
+    stake_delta_verified, stake_of, transfer_stake_verified, TransferError, TRANSFER_TOLERANCE,
+};
 
 // Re-export code registry kinds and the position upgrade rule
 pub use upgrade::{check_upgrade, CodeKind, UpgradeError, UpgradePolicy};
