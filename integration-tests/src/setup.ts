@@ -21,8 +21,8 @@ const LOCKUP_LISTINGS_ADDRESS_FILE = path.join(process.cwd(), ".lockup-listings-
 const ALPHA_LOCKUP_CODE_HASH_FILE = path.join(process.cwd(), ".alpha-lockup-code-hash");
 // Deployment caching is opt-in so every run gets fresh contracts by default.
 const REUSE_DEPLOYMENT_CACHE = process.env.OTC_TEST_REUSE_DEPLOYMENTS === "1";
-// pallet-contracts requires the caller to hold the full storage deposit limit, and the
-// test helpers use a generous limit, so every test account starts well funded.
+// Tests move TAO amounts that depend on dynamic subnet prices, so every test account
+// starts well funded rather than failing on balance when prices move.
 const TEST_ACCOUNT_TOP_UP = 1_000_000_000_000_000n; // 1,000,000 TAO
 
 // A random salt lets the same code and constructor arguments deploy again on one chain.
@@ -526,16 +526,18 @@ export class TestSetup {
         api: TypedApi<typeof devnet>,
         accounts: TestContext['accounts']
     ): Promise<void> {
-        for (const account of [accounts.bob, accounts.charlie, accounts.dave, accounts.eve]) {
-            const setBalance = api.tx.Balances.force_set_balance({
+        const calls = [accounts.bob, accounts.charlie, accounts.dave, accounts.eve].map((account) =>
+            api.tx.Balances.force_set_balance({
                 who: MultiAddress.Id(account.address),
                 new_free: TEST_ACCOUNT_TOP_UP,
-            });
-            const result = await api.tx.Sudo.sudo({ call: setBalance.decodedCall }).signAndSubmit(accounts.alice.signer);
-            const sudid = result.events.find((event: any) => event.type === "Sudo" && event.value.type === "Sudid");
-            if (!result.ok || !sudid || sudid.value.value.success === false) {
-                throw new Error(`Failed to top up test account ${account.address}`);
-            }
+            }).decodedCall
+        );
+        // One sudo batch: batch_all reverts every top-up if any of them fails.
+        const batch = api.tx.Utility.batch_all({ calls });
+        const result = await api.tx.Sudo.sudo({ call: batch.decodedCall }).signAndSubmit(accounts.alice.signer);
+        const sudid = result.events.find((event: any) => event.type === "Sudo" && event.value.type === "Sudid");
+        if (!result.ok || !sudid || sudid.value.value.success === false) {
+            throw new Error("Failed to top up test accounts");
         }
     }
 }

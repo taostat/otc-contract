@@ -22,6 +22,7 @@ import {
 } from "../utils";
 import {
     createLockupListing,
+    getLockupListingRemaining,
     queryOk,
     submitOk,
     takeLockupListing,
@@ -107,21 +108,12 @@ describe("Lockup Listings Contract - Take Listing", () => {
         await cleanupTestEnvironment();
     });
 
-    // Stake transfers can round down by a rao, so a listing holds slightly less
-    // than the amount requested. Full fills must take what the listing recorded.
     async function listedAmountOf(listingId: bigint): Promise<bigint> {
-        const listingResult = await contract.query("get_listing", {
-            origin: context.accounts.alice.address,
-            data: {
-                netuid,
-                seller: context.accounts.bob.address,
-                listing_id: listingId
-            }
+        return getLockupListingRemaining(contract, context.accounts.alice.address, {
+            netuid,
+            seller: context.accounts.bob.address,
+            listing_id: listingId,
         });
-        if (!listingResult.success || !listingResult.value.response) {
-            throw new Error(`Failed to read listing ${listingId}`);
-        }
-        return listingResult.value.response.remaining_amount;
     }
 
     describe("Happy Paths", () => {

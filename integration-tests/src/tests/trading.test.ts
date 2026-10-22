@@ -22,7 +22,7 @@ import {
     getStakeBalance,
     formatStakeAmount,
 } from "../utils/stake-helpers";
-import { submitOk, withIntegrationGas } from "../test-helpers";
+import { getAlphaListingAmount, submitOk, withIntegrationGas } from "../test-helpers";
 
 type ContractsError = {
     type: 'Contracts',
@@ -134,17 +134,12 @@ describe("Trading Execution", () => {
         await cleanupTestEnvironment();
     });
 
-    // Stake transfers can round down by a rao, so a listing holds slightly less
-    // than the amount requested. Price checks use what the listing recorded.
     async function listedAmountOf(seller: string, listingId: bigint): Promise<bigint> {
-        const listingResult = await contract.query("get_listing", {
-            origin: context.accounts.alice.address,
-            data: { netuid, seller, listing_id: listingId }
+        return getAlphaListingAmount(contract, context.accounts.alice.address, {
+            netuid,
+            seller,
+            listing_id: listingId,
         });
-        if (!listingResult.success || !listingResult.value.response) {
-            throw new Error(`Failed to read listing ${listingId}`);
-        }
-        return listingResult.value.response.amount;
     }
 
     describe("Taking Alpha Listings", () => {

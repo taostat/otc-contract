@@ -8,7 +8,9 @@ const INTEGRATION_GAS_LIMIT = {
     ref_time: 250_000_000_000n,
     proof_size: 3_000_000n,
 };
-const INTEGRATION_STORAGE_DEPOSIT_LIMIT = 10_000_000_000_000n;
+// pallet-contracts requires the caller to hold the full limit up front. Contract storage
+// deposits on Subtensor are tiny, so 10 TAO leaves a wide margin.
+const INTEGRATION_STORAGE_DEPOSIT_LIMIT = 10_000_000_000n;
 
 export function withIntegrationGas<T extends Record<string, unknown>>(args: T): T & {
     gasLimit: typeof INTEGRATION_GAS_LIMIT;
@@ -158,4 +160,30 @@ export async function createTaoOffer(
         event,
         offerId: BigInt(event.value.tao_offer_id),
     };
+}
+
+// Stake transfers can round down by a rao, so a listing holds slightly less than the
+// amount requested. Full fills and price checks use what the listing recorded.
+export async function getLockupListingRemaining(
+    contract: any,
+    origin: string,
+    data: { netuid: number; seller: string; listing_id: bigint },
+): Promise<bigint> {
+    const listing = queryOk<any>(await contract.query("get_listing", { origin, data }), "get_listing");
+    if (!listing) {
+        throw new Error(`Lockup listing ${data.listing_id} not found`);
+    }
+    return BigInt(listing.remaining_amount);
+}
+
+export async function getAlphaListingAmount(
+    contract: any,
+    origin: string,
+    data: { netuid: number; seller: string; listing_id: bigint },
+): Promise<bigint> {
+    const listing = queryOk<any>(await contract.query("get_listing", { origin, data }), "get_listing");
+    if (!listing) {
+        throw new Error(`Alpha listing ${data.listing_id} not found`);
+    }
+    return BigInt(listing.amount);
 }
