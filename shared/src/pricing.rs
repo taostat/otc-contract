@@ -13,6 +13,9 @@ pub const PRICE_SCALE: u64 = 1_000_000_000;
 /// is cheap.
 pub const BITTENSOR_MIN_STAKE: AlphaAmount = 2_000_000;
 
+/// The highest fee rate a listing factory or `otc` may charge: 5%, as U64F64 bits.
+pub const MAX_FEE_RATE: u128 = 922_337_203_685_477_580;
+
 /// Offsets are basis points: -10000 would price Alpha at zero.
 const BPS: i64 = 10_000;
 
