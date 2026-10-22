@@ -13,11 +13,24 @@ pub use self::code_registry::{CodeRegistry, CodeRegistryRef};
 /// it has been current for `force_delay` blocks, anyone may apply it to positions
 /// that allow forced upgrades. Owner and guardian changes go through the same
 /// delay and veto.
+///
+/// Both roles should be multisigs. A compromised key can stall upgrades but never
+/// move funds: a rogue owner can only propose code the guardian must keep vetoing
+/// or revoking, and a rogue guardian can veto every proposal and its own
+/// replacement. The registry has no recovery path from either; recovering means
+/// deploying a new registry and new factories, and positions bound to this
+/// registry keep their current code.
 #[ink::contract(env = otc_shared::BittensorEnvironment)]
 mod code_registry {
     use ink::prelude::vec::Vec;
     use ink::storage::Mapping;
     use otc_shared::CodeKind;
+
+    /// Shortest delays a deployment may use: about a day at 12 second blocks. The
+    /// registry is never upgraded, so a delay set too short could not be fixed.
+    /// The `short-delays` feature removes the floor for localnet test builds only.
+    #[cfg(not(feature = "short-delays"))]
+    pub const MIN_DELAY: BlockNumber = 7_200;
 
     #[derive(Debug, PartialEq, Eq)]
     #[ink::scale_derive(Encode, Decode, TypeInfo)]
@@ -38,6 +51,8 @@ mod code_registry {
         NoPendingRoleChange,
         /// The owner and the guardian must be different accounts
         RolesMustDiffer,
+        /// A newer proposal for this kind was already activated
+        Superseded,
         /// Block number arithmetic overflowed
         Overflow,
     }
@@ -51,11 +66,15 @@ mod code_registry {
     }
 
     /// A code hash waiting for its upgrade delay to elapse.
+    ///
+    /// `sequence` orders proposals: only a proposal newer than the current code
+    /// can be activated, so a stale proposal can never roll the code back.
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     #[ink::scale_derive(Encode, Decode, TypeInfo)]
     #[cfg_attr(feature = "std", derive(ink::storage::traits::StorageLayout))]
     pub struct Proposal {
         pub proposed_at: BlockNumber,
+        pub sequence: u64,
     }
 
     /// The code a kind's contracts may currently adopt, and since when.
@@ -152,13 +171,18 @@ mod code_registry {
         current: Mapping<CodeKind, CurrentCode>,
         revoked: Mapping<(CodeKind, Hash), bool>,
         pending_role_change: Option<RoleChange>,
+        /// Sequence of the most recent proposal, across all kinds
+        last_sequence: u64,
+        /// Sequence of the newest proposal activated per kind. It survives
+        /// revocation, so revoking current code cannot reopen older proposals.
+        activated_sequence: Mapping<CodeKind, u64>,
     }
 
     impl CodeRegistry {
         /// Create the registry with each kind's initial code already current.
         ///
-        /// The delays cannot be changed later. Production deployments should use
-        /// delays long enough for users to react; tests may use short ones.
+        /// The delays cannot be changed later and must be at least `MIN_DELAY`
+        /// (except in `short-delays` test builds).
         #[ink(constructor)]
         pub fn new(
             owner: AccountId,
@@ -168,10 +192,16 @@ mod code_registry {
             initial_codes: Vec<(CodeKind, Hash)>,
         ) -> Self {
             assert!(owner != guardian, "owner and guardian must differ");
+            #[cfg(not(feature = "short-delays"))]
+            assert!(
+                upgrade_delay >= MIN_DELAY && force_delay >= MIN_DELAY,
+                "delays must be at least MIN_DELAY"
+            );
 
             let now = Self::env().block_number();
             let mut current = Mapping::default();
             for (kind, code_hash) in initial_codes {
+                assert!(!current.contains(kind), "duplicate kind in initial codes");
                 current.insert(
                     kind,
                     &CurrentCode {
@@ -190,6 +220,8 @@ mod code_registry {
                 current,
                 revoked: Mapping::default(),
                 pending_role_change: None,
+                last_sequence: 0,
+                activated_sequence: Mapping::default(),
             }
         }
 
@@ -210,8 +242,15 @@ mod code_registry {
 
             let proposed_at = self.env().block_number();
             let activates_at = self.after_delay(proposed_at, self.upgrade_delay)?;
-            self.proposals
-                .insert((kind, code_hash), &Proposal { proposed_at });
+            let sequence = self.last_sequence.checked_add(1).ok_or(Error::Overflow)?;
+            self.last_sequence = sequence;
+            self.proposals.insert(
+                (kind, code_hash),
+                &Proposal {
+                    proposed_at,
+                    sequence,
+                },
+            );
 
             self.env().emit_event(CodeProposed {
                 kind,
@@ -254,6 +293,10 @@ mod code_registry {
                 return Err(Error::DelayNotElapsed);
             }
 
+            if proposal.sequence <= self.activated_sequence.get(kind).unwrap_or(0) {
+                return Err(Error::Superseded);
+            }
+
             let previous = self.current.get(kind).map(|code| code.code_hash);
             self.current.insert(
                 kind,
@@ -262,6 +305,7 @@ mod code_registry {
                     since: now,
                 },
             );
+            self.activated_sequence.insert(kind, &proposal.sequence);
             self.proposals.remove((kind, code_hash));
 
             self.env().emit_event(CodeActivated {
@@ -458,8 +502,10 @@ mod code_registry {
         use otc_shared::upgrade::{ESCROW, LISTING_VAULT};
         use otc_shared::BittensorEnvironment;
 
-        const UPGRADE_DELAY: BlockNumber = 100;
-        const FORCE_DELAY: BlockNumber = 300;
+        // The suggested production delays: 3 and 7 days at 12 second blocks. They
+        // satisfy MIN_DELAY with or without the short-delays feature.
+        const UPGRADE_DELAY: BlockNumber = 21_600;
+        const FORCE_DELAY: BlockNumber = 50_400;
 
         fn accounts() -> test::DefaultAccounts<BittensorEnvironment> {
             test::default_accounts::<BittensorEnvironment>()
@@ -522,6 +568,33 @@ mod code_registry {
             );
         }
 
+        #[cfg(not(feature = "short-delays"))]
+        #[ink::test]
+        #[should_panic(expected = "delays must be at least MIN_DELAY")]
+        fn constructor_rejects_delays_below_the_floor() {
+            let accounts = accounts();
+            CodeRegistry::new(
+                accounts.alice,
+                accounts.bob,
+                MIN_DELAY - 1,
+                FORCE_DELAY,
+                Vec::new(),
+            );
+        }
+
+        #[ink::test]
+        #[should_panic(expected = "duplicate kind in initial codes")]
+        fn constructor_rejects_duplicate_initial_kinds() {
+            let accounts = accounts();
+            CodeRegistry::new(
+                accounts.alice,
+                accounts.bob,
+                UPGRADE_DELAY,
+                FORCE_DELAY,
+                ink::prelude::vec![(ESCROW, hash(1)), (ESCROW, hash(2))],
+            );
+        }
+
         #[ink::test]
         fn only_owner_can_propose() {
             let mut registry = registry();
@@ -536,7 +609,10 @@ mod code_registry {
             assert_eq!(registry.propose(LISTING_VAULT, hash(2)), Ok(()));
             assert_eq!(
                 registry.proposal(LISTING_VAULT, hash(2)),
-                Some(Proposal { proposed_at: 10 })
+                Some(Proposal {
+                    proposed_at: 10,
+                    sequence: 1,
+                })
             );
         }
 
@@ -601,6 +677,72 @@ mod code_registry {
         }
 
         #[ink::test]
+        fn stale_proposals_cannot_roll_the_code_back() {
+            let mut registry = registry();
+            set_caller(accounts().alice);
+            assert_eq!(registry.propose(LISTING_VAULT, hash(2)), Ok(()));
+            set_block(20);
+            assert_eq!(registry.propose(LISTING_VAULT, hash(3)), Ok(()));
+
+            // The newer proposal is activated first.
+            set_caller(accounts().django);
+            set_block(20 + UPGRADE_DELAY);
+            assert_eq!(registry.activate(LISTING_VAULT, hash(3)), Ok(()));
+
+            // The older one has matured too, but it can no longer replace v3.
+            assert_eq!(
+                registry.activate(LISTING_VAULT, hash(2)),
+                Err(Error::Superseded)
+            );
+            assert!(registry.is_current(LISTING_VAULT, hash(3)));
+
+            // Revoking v3 does not reopen the stale proposal either.
+            set_caller(accounts().bob);
+            assert_eq!(registry.revoke(LISTING_VAULT, hash(3)), Ok(()));
+            assert_eq!(
+                registry.activate(LISTING_VAULT, hash(2)),
+                Err(Error::Superseded)
+            );
+            assert_eq!(registry.current(LISTING_VAULT), None);
+
+            // Rolling back on purpose means proposing the old code again.
+            set_caller(accounts().alice);
+            set_block(100 + UPGRADE_DELAY);
+            assert_eq!(registry.propose(LISTING_VAULT, hash(1)), Ok(()));
+            set_block(100 + 2 * UPGRADE_DELAY);
+            assert_eq!(registry.activate(LISTING_VAULT, hash(1)), Ok(()));
+            assert!(registry.is_current(LISTING_VAULT, hash(1)));
+        }
+
+        #[ink::test]
+        fn proposals_activated_in_order_both_apply() {
+            let mut registry = registry();
+            set_caller(accounts().alice);
+            assert_eq!(registry.propose(LISTING_VAULT, hash(2)), Ok(()));
+            set_block(20);
+            assert_eq!(registry.propose(LISTING_VAULT, hash(3)), Ok(()));
+
+            set_block(20 + UPGRADE_DELAY);
+            assert_eq!(registry.activate(LISTING_VAULT, hash(2)), Ok(()));
+            assert_eq!(registry.activate(LISTING_VAULT, hash(3)), Ok(()));
+            assert!(registry.is_current(LISTING_VAULT, hash(3)));
+        }
+
+        #[ink::test]
+        fn sequences_are_shared_across_kinds() {
+            let mut registry = registry();
+            set_caller(accounts().alice);
+            assert_eq!(registry.propose(ESCROW, hash(5)), Ok(()));
+            assert_eq!(registry.propose(LISTING_VAULT, hash(2)), Ok(()));
+
+            set_block(10 + UPGRADE_DELAY);
+            assert_eq!(registry.activate(LISTING_VAULT, hash(2)), Ok(()));
+            // A newer activation on another kind does not supersede this one.
+            assert_eq!(registry.activate(ESCROW, hash(5)), Ok(()));
+            assert!(registry.is_current(ESCROW, hash(5)));
+        }
+
+        #[ink::test]
         fn guardian_veto_stops_a_proposal() {
             let mut registry = registry();
             set_caller(accounts().alice);
@@ -629,7 +771,8 @@ mod code_registry {
             assert_eq!(
                 registry.proposal(LISTING_VAULT, hash(2)),
                 Some(Proposal {
-                    proposed_at: 10 + UPGRADE_DELAY
+                    proposed_at: 10 + UPGRADE_DELAY,
+                    sequence: 2,
                 })
             );
         }

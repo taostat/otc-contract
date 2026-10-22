@@ -18,3 +18,5 @@ std = [
     "otc-shared/std",
 ]
 ink-as-dependency = []
+# Test builds only: removes the minimum delays so localnet tests can use short ones.
+short-delays = []
