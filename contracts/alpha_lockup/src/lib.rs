@@ -11,6 +11,7 @@ pub use self::alpha_lockup::{AlphaLockup, AlphaLockupRef};
 /// `ConsentOnly`.
 #[ink::contract(env = otc_shared::BittensorEnvironment)]
 mod alpha_lockup {
+    use otc_shared::events::{HotkeyResynced, TaoSwept, UpgradePolicyChanged, Upgraded};
     use otc_shared::{
         check_upgrade, stake_of, transfer_stake_verified, AlphaAmount, NetUid, TransferError,
         UpgradeError, UpgradePolicy,
@@ -114,45 +115,6 @@ mod alpha_lockup {
         #[ink(topic)]
         pub beneficiary: AccountId,
         pub tao_balance: Balance,
-    }
-
-    /// Event emitted when the escrow's TAO balance is sent to the beneficiary
-    #[ink::event]
-    pub struct TaoSwept {
-        #[ink(topic)]
-        pub beneficiary: AccountId,
-        #[ink(topic)]
-        pub initiated_by: AccountId,
-        pub amount: Balance,
-    }
-
-    /// Event emitted when the escrow follows its stake to another hotkey
-    #[ink::event]
-    pub struct HotkeyResynced {
-        #[ink(topic)]
-        pub old_hotkey: AccountId,
-        #[ink(topic)]
-        pub new_hotkey: AccountId,
-        #[ink(topic)]
-        pub initiated_by: AccountId,
-        pub new_hotkey_stake: AlphaAmount,
-    }
-
-    /// Event emitted when the escrow installs new code
-    #[ink::event]
-    pub struct Upgraded {
-        #[ink(topic)]
-        pub code_hash: Hash,
-        #[ink(topic)]
-        pub initiated_by: AccountId,
-    }
-
-    /// Event emitted when the beneficiary changes who may upgrade the escrow
-    #[ink::event]
-    pub struct UpgradePolicyChanged {
-        #[ink(topic)]
-        pub beneficiary: AccountId,
-        pub policy: UpgradePolicy,
     }
 
     /// Information about a lockup escrow
@@ -322,7 +284,7 @@ mod alpha_lockup {
             self.transfer_tao(beneficiary, amount)?;
 
             self.env().emit_event(TaoSwept {
-                beneficiary,
+                owner: beneficiary,
                 initiated_by: self.env().caller(),
                 amount,
             });
@@ -472,7 +434,7 @@ mod alpha_lockup {
             self.upgrade_policy = policy;
 
             self.env().emit_event(UpgradePolicyChanged {
-                beneficiary: self.buyer,
+                owner: self.buyer,
                 policy,
             });
 
@@ -1070,7 +1032,7 @@ mod alpha_lockup {
             let events = test::recorded_events().collect::<Vec<_>>();
             let swept = <TaoSwept as Decode>::decode(&mut &events[0].data[..])
                 .expect("decode TaoSwept event");
-            assert_eq!(swept.beneficiary, accounts.alice);
+            assert_eq!(swept.owner, accounts.alice);
             assert_eq!(swept.initiated_by, accounts.django);
             assert_eq!(swept.amount, ESCROW_TAO_BALANCE);
         }
