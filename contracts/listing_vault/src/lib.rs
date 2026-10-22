@@ -211,6 +211,7 @@ mod listing_vault {
         pub fee_rate: FixedDecimal,
         pub min_purchase: AlphaAmount,
         pub lockup_duration: Option<BlockAge>,
+        pub cancel_delay: BlockAge,
         pub cancellable_after: BlockNumber,
         pub status: Status,
         pub stake: AlphaAmount,
@@ -244,7 +245,10 @@ mod listing_vault {
         min_purchase: AlphaAmount,
         /// `None` for spot listings; otherwise how long bought Alpha stays locked
         lockup_duration: Option<BlockAge>,
-        /// First block at which the seller may cancel
+        /// How long after activation the seller must wait to cancel, so a listing
+        /// can't vanish the moment it opens
+        cancel_delay: BlockAge,
+        /// First block at which the seller may cancel; 0 until activation
         cancellable_after: BlockNumber,
         status: Status,
         /// Counter for escrow salts
@@ -274,7 +278,7 @@ mod listing_vault {
             fee_rate: FixedDecimal,
             min_purchase: AlphaAmount,
             lockup_duration: Option<BlockAge>,
-            cancellable_after: BlockNumber,
+            cancel_delay: BlockAge,
             registry: AccountId,
         ) -> Self {
             Self {
@@ -290,7 +294,8 @@ mod listing_vault {
                 fee_rate,
                 min_purchase,
                 lockup_duration,
-                cancellable_after,
+                cancel_delay,
+                cancellable_after: 0,
                 status: Status::Pending,
                 next_purchase_id: 1,
                 upgrade_policy: UpgradePolicy::default(),
@@ -319,6 +324,11 @@ mod listing_vault {
             self.total = funded;
             self.remaining = funded;
             self.status = Status::Open;
+            self.cancellable_after = self
+                .env()
+                .block_number()
+                .checked_add(self.cancel_delay)
+                .ok_or(Error::Overflow)?;
 
             if let Ok(validator) = self.factory_validator_hotkey() {
                 if validator != self.hotkey {
@@ -441,7 +451,9 @@ mod listing_vault {
             Ok(escrow)
         }
 
-        /// Close the listing and return its stake to the seller. If Subtensor
+        /// Close the listing and return its stake to the seller, once the cancel
+        /// delay since activation has passed; a Pending vault can be cancelled at
+        /// any time. If Subtensor
         /// refuses the transfer, for example while the subnet is being dissolved,
         /// the listing still closes; the sweeps return whatever is left later.
         /// Never pausable, and never depends on the factory.
@@ -716,6 +728,7 @@ mod listing_vault {
                 fee_rate: self.fee_rate,
                 min_purchase: self.min_purchase,
                 lockup_duration: self.lockup_duration,
+                cancel_delay: self.cancel_delay,
                 cancellable_after: self.cancellable_after,
                 status: self.status,
                 stake: self.own_stake(self.hotkey)?,
@@ -1233,22 +1246,12 @@ mod listing_vault {
             test::set_caller::<BittensorEnvironment>(account);
         }
 
+        #[derive(Default)]
         struct Terms {
             price_offset_bps: PriceOffsetBps,
             min_price: u64,
             lockup_duration: Option<BlockAge>,
-            cancellable_after: BlockNumber,
-        }
-
-        impl Default for Terms {
-            fn default() -> Self {
-                Self {
-                    price_offset_bps: 0,
-                    min_price: 0,
-                    lockup_duration: None,
-                    cancellable_after: CREATED_AT,
-                }
-            }
+            cancel_delay: BlockAge,
         }
 
         /// Roles in every test: alice sells, bob is the factory, charlie buys,
@@ -1288,7 +1291,7 @@ mod listing_vault {
                 fee_rate(),
                 MIN_PURCHASE,
                 terms.lockup_duration,
-                terms.cancellable_after,
+                terms.cancel_delay,
                 registry_account(),
             )
         }
@@ -1663,19 +1666,26 @@ mod listing_vault {
         }
 
         #[ink::test]
-        fn cancel_waits_for_cancellable_after_and_works_while_pending() {
+        fn cancel_waits_for_the_delay_after_activation_but_not_while_pending() {
             let accounts = accounts();
             let mut vault = open_vault(Terms {
-                cancellable_after: CREATED_AT + 10,
+                cancel_delay: 10,
                 ..Terms::default()
             });
+            assert_eq!(
+                vault.get_info().expect("info").cancellable_after,
+                CREATED_AT + 10
+            );
             set_caller(accounts.alice);
             assert_eq!(vault.cancel(), Err(Error::CancelTooEarly));
             test::set_block_number::<BittensorEnvironment>(CREATED_AT + 10);
             assert_eq!(vault.cancel(), Ok(()));
 
-            // A funded vault the seller never activated returns its stake too.
-            let mut vault = pending_vault(Terms::default());
+            // A funded vault the seller never activated returns its stake at once.
+            let mut vault = pending_vault(Terms {
+                cancel_delay: 10,
+                ..Terms::default()
+            });
             fund(LISTED);
             set_caller(accounts.alice);
             assert_eq!(vault.cancel(), Ok(()));
