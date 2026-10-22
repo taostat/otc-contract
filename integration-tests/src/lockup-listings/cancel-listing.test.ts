@@ -23,6 +23,7 @@ import {
     getStakeBalance,
     formatStakeAmount,
 } from "../utils/stake-helpers";
+import { submitOk, withIntegrationGas } from "../test-helpers";
 
 describe("Lockup Listings Contract - Cancel Listing", () => {
     let context: LockupListingsContext;
@@ -101,7 +102,7 @@ describe("Lockup Listings Contract - Cancel Listing", () => {
             const listAmount = taoToRao(10);
 
             // Create a listing first
-            const listTx = contract.send("create_lockup_listing", {
+            const listTx = contract.send("create_lockup_listing", withIntegrationGas({
                 origin: accounts.bob.address,
                 data: {
                     hotkey: bobHotkey.address,
@@ -110,7 +111,7 @@ describe("Lockup Listings Contract - Cancel Listing", () => {
                     price_offset_bps: MARKET_PRICE,
                     lockup_duration: MEDIUM_LOCKUP_DURATION
                 }
-            });
+            }));
 
             await listTx.signAndSubmit(accounts.bob.signer);
             await waitForBlocks(context.api, 2);
@@ -136,13 +137,13 @@ describe("Lockup Listings Contract - Cancel Listing", () => {
             console.log(`Bob's stake before cancel: ${formatStakeAmount(stakeBefore)}`);
 
             // Cancel the listing
-            const cancelTx = contract.send("cancel_lockup_listing", {
+            const cancelTx = contract.send("cancel_lockup_listing", withIntegrationGas({
                 origin: accounts.bob.address,
                 data: {
                     netuid,
                     listing_id: listingId
                 }
-            });
+            }));
 
             const result = await cancelTx.signAndSubmit(accounts.bob.signer);
             expect(result.ok).toBe(true);
@@ -173,7 +174,7 @@ describe("Lockup Listings Contract - Cancel Listing", () => {
             const stakeBeforeListing = await getStakeBalance(context.api, bobHotkey.address, netuid, accounts.bob.address);
 
             // Create listing
-            const listTx = contract.send("create_lockup_listing", {
+            const listTx = contract.send("create_lockup_listing", withIntegrationGas({
                 origin: accounts.bob.address,
                 data: {
                     hotkey: bobHotkey.address,
@@ -182,7 +183,7 @@ describe("Lockup Listings Contract - Cancel Listing", () => {
                     price_offset_bps: MARKET_PRICE,
                     lockup_duration: MEDIUM_LOCKUP_DURATION
                 }
-            });
+            }));
 
             await listTx.signAndSubmit(accounts.bob.signer);
             await waitForBlocks(context.api, 2);
@@ -207,13 +208,13 @@ describe("Lockup Listings Contract - Cancel Listing", () => {
             const listingId = listingsResult.value.response[listingsResult.value.response.length - 1];
 
             // Cancel listing
-            const cancelTx = contract.send("cancel_lockup_listing", {
+            const cancelTx = contract.send("cancel_lockup_listing", withIntegrationGas({
                 origin: accounts.bob.address,
                 data: {
                     netuid,
                     listing_id: listingId
                 }
-            });
+            }));
 
             await cancelTx.signAndSubmit(accounts.bob.signer);
             await waitForBlocks(context.api, 2);
@@ -245,7 +246,7 @@ describe("Lockup Listings Contract - Cancel Listing", () => {
             });
 
             // Create listing
-            const listTx = contract.send("create_lockup_listing", {
+            const listTx = contract.send("create_lockup_listing", withIntegrationGas({
                 origin: accounts.bob.address,
                 data: {
                     hotkey: bobHotkey.address,
@@ -254,9 +255,9 @@ describe("Lockup Listings Contract - Cancel Listing", () => {
                     price_offset_bps: MARKET_PRICE,
                     lockup_duration: MEDIUM_LOCKUP_DURATION
                 }
-            });
+            }));
 
-            await listTx.signAndSubmit(accounts.bob.signer);
+            await submitOk(listTx, accounts.bob.signer, "create_lockup_listing");
             await waitForBlocks(context.api, 1);
 
             // Get reserved after listing
@@ -280,15 +281,15 @@ describe("Lockup Listings Contract - Cancel Listing", () => {
 
             const listingId = listingsResult.value.response[listingsResult.value.response.length - 1];
 
-            const cancelTx = contract.send("cancel_lockup_listing", {
+            const cancelTx = contract.send("cancel_lockup_listing", withIntegrationGas({
                 origin: accounts.bob.address,
                 data: {
                     netuid,
                     listing_id: listingId
                 }
-            });
+            }));
 
-            await cancelTx.signAndSubmit(accounts.bob.signer);
+            await submitOk(cancelTx, accounts.bob.signer, "cancel_lockup_listing");
             await waitForBlocks(context.api, 1);
 
             // Get reserved after cancel
@@ -317,7 +318,7 @@ describe("Lockup Listings Contract - Cancel Listing", () => {
             const listAmount = taoToRao(10);
 
             // Charlie creates a listing
-            const listTx = contract.send("create_lockup_listing", {
+            const listTx = contract.send("create_lockup_listing", withIntegrationGas({
                 origin: accounts.charlie.address,
                 data: {
                     hotkey: charlieHotkey.address,
@@ -326,7 +327,7 @@ describe("Lockup Listings Contract - Cancel Listing", () => {
                     price_offset_bps: MARKET_PRICE,
                     lockup_duration: MEDIUM_LOCKUP_DURATION
                 }
-            });
+            }));
 
             await listTx.signAndSubmit(accounts.charlie.signer);
             await waitForBlocks(context.api, 2);
@@ -348,14 +349,14 @@ describe("Lockup Listings Contract - Cancel Listing", () => {
             const listingId = listingsResult.value.response[listingsResult.value.response.length - 1];
 
             // Alice (owner) force cancels Charlie's listing
-            const forceCancelTx = contract.send("force_cancel_lockup_listing", {
+            const forceCancelTx = contract.send("force_cancel_lockup_listing", withIntegrationGas({
                 origin: accounts.alice.address,
                 data: {
                     netuid,
                     seller: accounts.charlie.address,
                     listing_id: listingId
                 }
-            });
+            }));
 
             const result = await forceCancelTx.signAndSubmit(accounts.alice.signer);
             expect(result.ok).toBe(true);
@@ -381,13 +382,13 @@ describe("Lockup Listings Contract - Cancel Listing", () => {
         it("should fail when listing not found", async () => {
             const { accounts } = context;
 
-            const cancelTx = contract.send("cancel_lockup_listing", {
+            const cancelTx = contract.send("cancel_lockup_listing", withIntegrationGas({
                 origin: accounts.bob.address,
                 data: {
                     netuid,
                     listing_id: 999999n
                 }
-            });
+            }));
 
             const result = await cancelTx.signAndSubmit(accounts.bob.signer);
             expect(result.ok).toBe(false);
@@ -397,7 +398,7 @@ describe("Lockup Listings Contract - Cancel Listing", () => {
             const { accounts } = context;
 
             // Create a listing first
-            const listTx = contract.send("create_lockup_listing", {
+            const listTx = contract.send("create_lockup_listing", withIntegrationGas({
                 origin: accounts.bob.address,
                 data: {
                     hotkey: bobHotkey.address,
@@ -406,7 +407,7 @@ describe("Lockup Listings Contract - Cancel Listing", () => {
                     price_offset_bps: MARKET_PRICE,
                     lockup_duration: MEDIUM_LOCKUP_DURATION
                 }
-            });
+            }));
 
             await listTx.signAndSubmit(accounts.bob.signer);
             await waitForBlocks(context.api, 1);
@@ -426,14 +427,14 @@ describe("Lockup Listings Contract - Cancel Listing", () => {
             const listingId = listingsResult.value.response[listingsResult.value.response.length - 1];
 
             // Charlie (not owner) tries to force cancel Bob's listing
-            const forceCancelTx = contract.send("force_cancel_lockup_listing", {
+            const forceCancelTx = contract.send("force_cancel_lockup_listing", withIntegrationGas({
                 origin: accounts.charlie.address,
                 data: {
                     netuid,
                     seller: accounts.bob.address,
                     listing_id: listingId
                 }
-            });
+            }));
 
             const result = await forceCancelTx.signAndSubmit(accounts.charlie.signer);
             expect(result.ok).toBe(false);
@@ -443,7 +444,7 @@ describe("Lockup Listings Contract - Cancel Listing", () => {
             const { accounts } = context;
 
             // Create a listing first
-            const listTx = contract.send("create_lockup_listing", {
+            const listTx = contract.send("create_lockup_listing", withIntegrationGas({
                 origin: accounts.bob.address,
                 data: {
                     hotkey: bobHotkey.address,
@@ -452,7 +453,7 @@ describe("Lockup Listings Contract - Cancel Listing", () => {
                     price_offset_bps: MARKET_PRICE,
                     lockup_duration: MEDIUM_LOCKUP_DURATION
                 }
-            });
+            }));
 
             await listTx.signAndSubmit(accounts.bob.signer);
             await waitForBlocks(context.api, 1);
@@ -479,13 +480,13 @@ describe("Lockup Listings Contract - Cancel Listing", () => {
             await pauseTx.signAndSubmit(accounts.alice.signer);
 
             // Try to cancel
-            const cancelTx = contract.send("cancel_lockup_listing", {
+            const cancelTx = contract.send("cancel_lockup_listing", withIntegrationGas({
                 origin: accounts.bob.address,
                 data: {
                     netuid,
                     listing_id: listingId
                 }
-            });
+            }));
 
             const result = await cancelTx.signAndSubmit(accounts.bob.signer);
             expect(result.ok).toBe(false);
@@ -502,7 +503,7 @@ describe("Lockup Listings Contract - Cancel Listing", () => {
             const { accounts } = context;
 
             // Create a listing first
-            const listTx = contract.send("create_lockup_listing", {
+            const listTx = contract.send("create_lockup_listing", withIntegrationGas({
                 origin: accounts.bob.address,
                 data: {
                     hotkey: bobHotkey.address,
@@ -511,7 +512,7 @@ describe("Lockup Listings Contract - Cancel Listing", () => {
                     price_offset_bps: MARKET_PRICE,
                     lockup_duration: MEDIUM_LOCKUP_DURATION
                 }
-            });
+            }));
 
             await listTx.signAndSubmit(accounts.bob.signer);
             await waitForBlocks(context.api, 1);
@@ -538,13 +539,13 @@ describe("Lockup Listings Contract - Cancel Listing", () => {
             await pauseTx.signAndSubmit(accounts.alice.signer);
 
             // Cancel should work even with trading paused
-            const cancelTx = contract.send("cancel_lockup_listing", {
+            const cancelTx = contract.send("cancel_lockup_listing", withIntegrationGas({
                 origin: accounts.bob.address,
                 data: {
                     netuid,
                     listing_id: listingId
                 }
-            });
+            }));
 
             const result = await cancelTx.signAndSubmit(accounts.bob.signer);
             expect(result.ok).toBe(true);

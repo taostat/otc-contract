@@ -1,6 +1,6 @@
 {
   "source": {
-    "hash": "0x190370f553996602f21229e47258cd9c2a3cf1f8a16aef8795c57f875df6f9ad",
+    "hash": "0xe03caf0e485bd354dc4788a707871abece9dfc5147695da6327748f0bf6037ee",
     "language": "ink! 5.1.1",
     "compiler": "rustc 1.89.0",
     "build_info": {
@@ -69,6 +69,15 @@
               ],
               "type": 0
             }
+          },
+          {
+            "label": "registry",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
           }
         ],
         "default": false,
@@ -83,12 +92,20 @@
             "ink_primitives",
             "ConstructorResult"
           ],
-          "type": 9
+          "type": 10
         },
         "selector": "0x9bae9d5e"
       }
     ],
-    "docs": [],
+    "docs": [
+      " Per-purchase escrow: holds the buyer's Alpha on its own coldkey until",
+      " `unlock_block`, then anyone can pay it out to the current beneficiary.",
+      "",
+      " The escrow upgrades itself, but only to the code registry's current escrow",
+      " code: the beneficiary can adopt it at any time, and anyone can apply it once it",
+      " has been current for the registry's force delay, unless the beneficiary chose",
+      " `ConsentOnly`."
+    ],
     "environment": {
       "accountId": {
         "displayName": [
@@ -112,13 +129,13 @@
         "displayName": [
           "ChainExtension"
         ],
-        "type": 24
+        "type": 29
       },
       "hash": {
         "displayName": [
           "Hash"
         ],
-        "type": 23
+        "type": 16
       },
       "maxEventTopics": 4,
       "staticBufferSize": 16384,
@@ -290,6 +307,486 @@
         "label": "BeneficiaryTransferred",
         "module_path": "alpha_lockup::alpha_lockup",
         "signature_topic": "0xa8b0cfcc2435f490ef0ce7be9c36a671cb2f6fc0610e7c89be015b735509db24"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "beneficiary",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "tao_balance",
+            "type": {
+              "displayName": [
+                "Balance"
+              ],
+              "type": 4
+            }
+          }
+        ],
+        "docs": [
+          "Event emitted when the beneficiary closes the escrow"
+        ],
+        "label": "EscrowClosed",
+        "module_path": "alpha_lockup::alpha_lockup",
+        "signature_topic": "0xd89cad1e3758e604f130db0a81079a5041711ee7e348b817860735477e5c4517"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "beneficiary",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "initiated_by",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "amount",
+            "type": {
+              "displayName": [
+                "Balance"
+              ],
+              "type": 4
+            }
+          }
+        ],
+        "docs": [
+          "Event emitted when the escrow's TAO balance is sent to the beneficiary"
+        ],
+        "label": "TaoSwept",
+        "module_path": "alpha_lockup::alpha_lockup",
+        "signature_topic": "0xffc83658b8556616ae18d6071f1e37c10fce38e2c3cca12fb3e96d171cdedb5b"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "old_hotkey",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "new_hotkey",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "initiated_by",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "new_hotkey_stake",
+            "type": {
+              "displayName": [
+                "AlphaAmount"
+              ],
+              "type": 4
+            }
+          }
+        ],
+        "docs": [
+          "Event emitted when the escrow follows its stake to another hotkey"
+        ],
+        "label": "HotkeyResynced",
+        "module_path": "alpha_lockup::alpha_lockup",
+        "signature_topic": "0x1f6a05115faf2230ea59c7e181eb3704d16bd8f9a3c35263c0253c25b3ecb792"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "code_hash",
+            "type": {
+              "displayName": [
+                "Hash"
+              ],
+              "type": 16
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "initiated_by",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          }
+        ],
+        "docs": [
+          "Event emitted when the escrow installs new code"
+        ],
+        "label": "Upgraded",
+        "module_path": "alpha_lockup::alpha_lockup",
+        "signature_topic": "0xf948c495403d7387e6f1f54500e0e501588d596b53989c6fc8859c2c6f58fbf0"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "beneficiary",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "policy",
+            "type": {
+              "displayName": [
+                "UpgradePolicy"
+              ],
+              "type": 9
+            }
+          }
+        ],
+        "docs": [
+          "Event emitted when the beneficiary changes who may upgrade the escrow"
+        ],
+        "label": "UpgradePolicyChanged",
+        "module_path": "alpha_lockup::alpha_lockup",
+        "signature_topic": "0xcdc998b3b364356a7bf35e0b542fc5c04520623c33a9e8e92c18289dde90ba93"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "kind",
+            "type": {
+              "displayName": [
+                "CodeKind"
+              ],
+              "type": 3
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "code_hash",
+            "type": {
+              "displayName": [
+                "Hash"
+              ],
+              "type": 16
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "activates_at",
+            "type": {
+              "displayName": [
+                "BlockNumber"
+              ],
+              "type": 5
+            }
+          }
+        ],
+        "docs": [],
+        "label": "CodeProposed",
+        "module_path": "code_registry::code_registry",
+        "signature_topic": "0xaf5d48c20412e9396c5f015a47f95fabb89ef1b58ce2477ce14f787d6f0f68eb"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "kind",
+            "type": {
+              "displayName": [
+                "CodeKind"
+              ],
+              "type": 3
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "code_hash",
+            "type": {
+              "displayName": [
+                "Hash"
+              ],
+              "type": 16
+            }
+          }
+        ],
+        "docs": [],
+        "label": "CodeVetoed",
+        "module_path": "code_registry::code_registry",
+        "signature_topic": "0x6a035b30f2dd1c3f5b9c79b36954b91f33f35f647486120f2bc1a880f574ea9e"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "kind",
+            "type": {
+              "displayName": [
+                "CodeKind"
+              ],
+              "type": 3
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "code_hash",
+            "type": {
+              "displayName": [
+                "Hash"
+              ],
+              "type": 16
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "previous",
+            "type": {
+              "displayName": [
+                "Option"
+              ],
+              "type": 27
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "activated_by",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          }
+        ],
+        "docs": [],
+        "label": "CodeActivated",
+        "module_path": "code_registry::code_registry",
+        "signature_topic": "0xf12a377c5c944ef14c6e22ee515657efe78f273649dc3a9843808e6e53e4ede2"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "kind",
+            "type": {
+              "displayName": [
+                "CodeKind"
+              ],
+              "type": 3
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "code_hash",
+            "type": {
+              "displayName": [
+                "Hash"
+              ],
+              "type": 16
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "revoked_by",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "was_current",
+            "type": {
+              "displayName": [
+                "bool"
+              ],
+              "type": 6
+            }
+          }
+        ],
+        "docs": [],
+        "label": "CodeRevoked",
+        "module_path": "code_registry::code_registry",
+        "signature_topic": "0x44bc476a161a1e96e625187859cca03b7a154835f04b117230871ccb432bf025"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "role",
+            "type": {
+              "displayName": [
+                "Role"
+              ],
+              "type": 28
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "account",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "executable_at",
+            "type": {
+              "displayName": [
+                "BlockNumber"
+              ],
+              "type": 5
+            }
+          }
+        ],
+        "docs": [],
+        "label": "RoleChangeProposed",
+        "module_path": "code_registry::code_registry",
+        "signature_topic": "0xd67c860be027cabda996d3450f58fb1c384010d8ac2042a5bffce6cd584f6d94"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "role",
+            "type": {
+              "displayName": [
+                "Role"
+              ],
+              "type": 28
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "account",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          }
+        ],
+        "docs": [],
+        "label": "RoleChangeVetoed",
+        "module_path": "code_registry::code_registry",
+        "signature_topic": "0xc9899c72e7b1c4e873e6d59943adb6018c09feed9e117ce2d20a078ac4f89e8b"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "role",
+            "type": {
+              "displayName": [
+                "Role"
+              ],
+              "type": 28
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "old_account",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "new_account",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          }
+        ],
+        "docs": [],
+        "label": "RoleChanged",
+        "module_path": "code_registry::code_registry",
+        "signature_topic": "0xb00d0c5d20113a679ea27014ce78036c7e92b7207ff9ecd9a3fb333254ddd143"
       }
     ],
     "lang_error": {
@@ -297,17 +794,21 @@
         "ink",
         "LangError"
       ],
-      "type": 11
+      "type": 12
     },
     "messages": [
       {
         "args": [],
         "default": false,
         "docs": [
-          " Claim the locked Alpha after the lockup period has expired",
-          " Anyone can trigger claim after unlock.",
-          " Transfers all stake (including dividends) to the current beneficiary",
-          " Terminates the contract after successful claim"
+          " Pay the escrow's stake on its hotkey, including staking rewards, to the",
+          " current beneficiary once the lockup has expired. Anyone can call it.",
+          "",
+          " Claiming never closes the escrow. Stake can still sit on another hotkey,",
+          " for example after a validator hotkey swap, and anyone can claim it after",
+          " `resync_hotkey`. If claiming terminated the escrow, anyone could strand",
+          " that stake by donating a little on the old hotkey and claiming first.",
+          " The beneficiary closes the escrow with `close`."
         ],
         "label": "claim",
         "mutates": true,
@@ -317,9 +818,90 @@
             "ink",
             "MessageResult"
           ],
-          "type": 12
+          "type": 13
         },
         "selector": "0xb388803f"
+      },
+      {
+        "args": [],
+        "default": false,
+        "docs": [
+          " Terminate the escrow, sending its TAO balance and the storage deposit",
+          " to the beneficiary.",
+          "",
+          " Only the beneficiary can close, because only they can judge that no",
+          " stake or liquidation TAO is still on its way: a terminated escrow",
+          " loses anything that arrives later. It fails while the escrow holds",
+          " stake on its hotkey."
+        ],
+        "label": "close",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 13
+        },
+        "selector": "0x3c922166"
+      },
+      {
+        "args": [],
+        "default": false,
+        "docs": [
+          " Send the escrow's whole TAO balance to the beneficiary.",
+          "",
+          " TAO only reaches an escrow when its subnet is dissolved and Subtensor",
+          " liquidates the stake, or when someone sends it. Anyone can sweep at any",
+          " time. Sweeping never terminates the escrow, because liquidation can credit",
+          " TAO in several steps, and credits to a terminated escrow would be lost."
+        ],
+        "label": "sweep_tao",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 13
+        },
+        "selector": "0x05592c08"
+      },
+      {
+        "args": [
+          {
+            "label": "new_hotkey",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          }
+        ],
+        "default": false,
+        "docs": [
+          " Point the escrow at `new_hotkey` after its stake moved there, for",
+          " example through a validator hotkey swap. Moves nothing.",
+          "",
+          " Anyone can call this. It is accepted only when the escrow holds more",
+          " stake on `new_hotkey` than on its current hotkey, so pointing it",
+          " elsewhere would take a donation larger than the escrow's own stake, and",
+          " that donation belongs to the beneficiary."
+        ],
+        "label": "resync_hotkey",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 13
+        },
+        "selector": "0x94e8c496"
       },
       {
         "args": [
@@ -345,7 +927,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 12
+          "type": 13
         },
         "selector": "0xd4e6520b"
       },
@@ -363,7 +945,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 12
+          "type": 13
         },
         "selector": "0x5ea1391e"
       },
@@ -381,9 +963,92 @@
             "ink",
             "MessageResult"
           ],
-          "type": 12
+          "type": 13
         },
         "selector": "0xafa64855"
+      },
+      {
+        "args": [
+          {
+            "label": "code_hash",
+            "type": {
+              "displayName": [
+                "Hash"
+              ],
+              "type": 16
+            }
+          }
+        ],
+        "default": false,
+        "docs": [
+          " Install `code_hash`, which must be the registry's current escrow code.",
+          "",
+          " The beneficiary can upgrade at any time. Anyone else can upgrade once",
+          " the code has been current for the registry's force delay, unless the",
+          " beneficiary set the policy to `ConsentOnly`. The new code takes effect",
+          " from the next call, and migrates storage then if it needs to."
+        ],
+        "label": "upgrade",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 13
+        },
+        "selector": "0x9852f7b0"
+      },
+      {
+        "args": [
+          {
+            "label": "policy",
+            "type": {
+              "displayName": [
+                "UpgradePolicy"
+              ],
+              "type": 9
+            }
+          }
+        ],
+        "default": false,
+        "docs": [
+          " Choose whether anyone may force the registry's current code onto this",
+          " escrow after the force delay (`Auto`), or only the beneficiary may",
+          " upgrade it (`ConsentOnly`)."
+        ],
+        "label": "set_upgrade_policy",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 13
+        },
+        "selector": "0xfb5ead6c"
+      },
+      {
+        "args": [],
+        "default": false,
+        "docs": [
+          " Bring storage up to this code's `STORAGE_VERSION`. Every state-changing",
+          " message does this first; anyone can also call it directly after an",
+          " upgrade."
+        ],
+        "label": "migrate",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 10
+        },
+        "selector": "0x060d3f50"
       },
       {
         "args": [],
@@ -399,7 +1064,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 15
+          "type": 17
         },
         "selector": "0x67889d2b"
       },
@@ -417,7 +1082,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 18
+          "type": 20
         },
         "selector": "0x72eb13ec"
       },
@@ -435,7 +1100,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 18
+          "type": 20
         },
         "selector": "0x9510a8c5"
       },
@@ -453,7 +1118,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 19
+          "type": 21
         },
         "selector": "0x0e40d549"
       },
@@ -471,7 +1136,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 20
+          "type": 22
         },
         "selector": "0x59061f47"
       },
@@ -489,9 +1154,63 @@
             "ink",
             "MessageResult"
           ],
-          "type": 18
+          "type": 20
         },
         "selector": "0xead097fa"
+      },
+      {
+        "args": [],
+        "default": false,
+        "docs": [
+          " Get the code registry that approves this escrow's upgrades"
+        ],
+        "label": "get_registry",
+        "mutates": false,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 20
+        },
+        "selector": "0x15a5d20a"
+      },
+      {
+        "args": [],
+        "default": false,
+        "docs": [
+          " Get who may upgrade this escrow"
+        ],
+        "label": "get_upgrade_policy",
+        "mutates": false,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 23
+        },
+        "selector": "0x4ee14a9e"
+      },
+      {
+        "args": [],
+        "default": false,
+        "docs": [
+          " Get the storage layout version"
+        ],
+        "label": "get_version",
+        "mutates": false,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 24
+        },
+        "selector": "0x0c1a1d77"
       },
       {
         "args": [],
@@ -507,7 +1226,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 21
+          "type": 25
         },
         "selector": "0xff067f36"
       },
@@ -515,7 +1234,7 @@
         "args": [],
         "default": false,
         "docs": [
-          " Check if the lockup has been claimed"
+          " Whether a claim has paid out"
         ],
         "label": "is_claimed",
         "mutates": false,
@@ -525,7 +1244,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 22
+          "type": 26
         },
         "selector": "0xc58eed46"
       },
@@ -543,7 +1262,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 21
+          "type": 25
         },
         "selector": "0x51626016"
       },
@@ -561,7 +1280,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 18
+          "type": 20
         },
         "selector": "0x2be79821"
       }
@@ -654,6 +1373,43 @@
                 }
               },
               "name": "claimed"
+            },
+            {
+              "layout": {
+                "leaf": {
+                  "key": "0x00000000",
+                  "ty": 0
+                }
+              },
+              "name": "registry"
+            },
+            {
+              "layout": {
+                "enum": {
+                  "dispatchKey": "0x00000000",
+                  "name": "UpgradePolicy",
+                  "variants": {
+                    "0": {
+                      "fields": [],
+                      "name": "Auto"
+                    },
+                    "1": {
+                      "fields": [],
+                      "name": "ConsentOnly"
+                    }
+                  }
+                }
+              },
+              "name": "upgrade_policy"
+            },
+            {
+              "layout": {
+                "leaf": {
+                  "key": "0x00000000",
+                  "ty": 3
+                }
+              },
+              "name": "version"
             }
           ],
           "name": "AlphaLockup"
@@ -775,6 +1531,21 @@
                 "name": "claimed",
                 "type": 6,
                 "typeName": "<bool as::ink::storage::traits::AutoStorableHint<::ink::storage\n::traits::ManualKey<3719261149u32, ()>,>>::Type"
+              },
+              {
+                "name": "registry",
+                "type": 0,
+                "typeName": "<AccountId as::ink::storage::traits::AutoStorableHint<::ink::\nstorage::traits::ManualKey<327431663u32, ()>,>>::Type"
+              },
+              {
+                "name": "upgrade_policy",
+                "type": 9,
+                "typeName": "<UpgradePolicy as::ink::storage::traits::AutoStorableHint<::ink::\nstorage::traits::ManualKey<86709303u32, ()>,>>::Type"
+              },
+              {
+                "name": "version",
+                "type": 3,
+                "typeName": "<u16 as::ink::storage::traits::AutoStorableHint<::ink::storage\n::traits::ManualKey<2611951015u32, ()>,>>::Type"
               }
             ]
           }
@@ -826,9 +1597,33 @@
           "variant": {
             "variants": [
               {
+                "index": 0,
+                "name": "Auto"
+              },
+              {
+                "index": 1,
+                "name": "ConsentOnly"
+              }
+            ]
+          }
+        },
+        "path": [
+          "otc_shared",
+          "upgrade",
+          "UpgradePolicy"
+        ]
+      }
+    },
+    {
+      "id": 10,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
                 "fields": [
                   {
-                    "type": 10
+                    "type": 11
                   }
                 ],
                 "index": 0,
@@ -837,7 +1632,7 @@
               {
                 "fields": [
                   {
-                    "type": 11
+                    "type": 12
                   }
                 ],
                 "index": 1,
@@ -849,11 +1644,11 @@
         "params": [
           {
             "name": "T",
-            "type": 10
+            "type": 11
           },
           {
             "name": "E",
-            "type": 11
+            "type": 12
           }
         ],
         "path": [
@@ -862,7 +1657,7 @@
       }
     },
     {
-      "id": 10,
+      "id": 11,
       "type": {
         "def": {
           "tuple": []
@@ -870,7 +1665,7 @@
       }
     },
     {
-      "id": 11,
+      "id": 12,
       "type": {
         "def": {
           "variant": {
@@ -889,48 +1684,6 @@
       }
     },
     {
-      "id": 12,
-      "type": {
-        "def": {
-          "variant": {
-            "variants": [
-              {
-                "fields": [
-                  {
-                    "type": 13
-                  }
-                ],
-                "index": 0,
-                "name": "Ok"
-              },
-              {
-                "fields": [
-                  {
-                    "type": 11
-                  }
-                ],
-                "index": 1,
-                "name": "Err"
-              }
-            ]
-          }
-        },
-        "params": [
-          {
-            "name": "T",
-            "type": 13
-          },
-          {
-            "name": "E",
-            "type": 11
-          }
-        ],
-        "path": [
-          "Result"
-        ]
-      }
-    },
-    {
       "id": 13,
       "type": {
         "def": {
@@ -939,7 +1692,7 @@
               {
                 "fields": [
                   {
-                    "type": 10
+                    "type": 14
                   }
                 ],
                 "index": 0,
@@ -948,7 +1701,7 @@
               {
                 "fields": [
                   {
-                    "type": 14
+                    "type": 12
                   }
                 ],
                 "index": 1,
@@ -960,11 +1713,11 @@
         "params": [
           {
             "name": "T",
-            "type": 10
+            "type": 14
           },
           {
             "name": "E",
-            "type": 14
+            "type": 12
           }
         ],
         "path": [
@@ -979,6 +1732,48 @@
           "variant": {
             "variants": [
               {
+                "fields": [
+                  {
+                    "type": 11
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 15
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 11
+          },
+          {
+            "name": "E",
+            "type": 15
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 15,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
                 "index": 0,
                 "name": "Unauthorized"
               },
@@ -988,31 +1783,71 @@
               },
               {
                 "index": 2,
-                "name": "AlreadyClaimed"
-              },
-              {
-                "index": 3,
                 "name": "StakeQueryFailed"
               },
               {
-                "index": 4,
+                "index": 3,
                 "name": "StakeTransferFailed"
               },
               {
-                "index": 5,
+                "index": 4,
                 "name": "InvalidBeneficiary"
               },
               {
-                "index": 6,
+                "index": 5,
                 "name": "NoPendingBeneficiary"
               },
               {
-                "index": 7,
+                "index": 6,
                 "name": "NoAlphaToClaim"
               },
               {
-                "index": 8,
+                "index": 7,
                 "name": "BeneficiaryTransferPending"
+              },
+              {
+                "index": 8,
+                "name": "NoTaoToSweep"
+              },
+              {
+                "index": 9,
+                "name": "TaoTransferFailed"
+              },
+              {
+                "index": 10,
+                "name": "InvalidHotkey"
+              },
+              {
+                "index": 11,
+                "name": "InsufficientStakeOnHotkey"
+              },
+              {
+                "index": 12,
+                "name": "NoCurrentCode"
+              },
+              {
+                "index": 13,
+                "name": "NotCurrentCode"
+              },
+              {
+                "index": 14,
+                "name": "ConsentRequired"
+              },
+              {
+                "index": 15,
+                "name": "ForceDelayNotElapsed"
+              },
+              {
+                "index": 16,
+                "name": "RegistryQueryFailed"
+              },
+              {
+                "index": 17,
+                "name": "CodeUpgradeFailed"
+              },
+              {
+                "index": 18,
+                "name": "StakeRemaining"
               }
             ]
           }
@@ -1025,91 +1860,111 @@
       }
     },
     {
-      "id": 15,
-      "type": {
-        "def": {
-          "variant": {
-            "variants": [
-              {
-                "fields": [
-                  {
-                    "type": 16
-                  }
-                ],
-                "index": 0,
-                "name": "Ok"
-              },
-              {
-                "fields": [
-                  {
-                    "type": 11
-                  }
-                ],
-                "index": 1,
-                "name": "Err"
-              }
-            ]
-          }
-        },
-        "params": [
-          {
-            "name": "T",
-            "type": 16
-          },
-          {
-            "name": "E",
-            "type": 11
-          }
-        ],
-        "path": [
-          "Result"
-        ]
-      }
-    },
-    {
       "id": 16,
       "type": {
         "def": {
-          "variant": {
-            "variants": [
+          "composite": {
+            "fields": [
               {
-                "fields": [
-                  {
-                    "type": 17
-                  }
-                ],
-                "index": 0,
-                "name": "Ok"
-              },
-              {
-                "fields": [
-                  {
-                    "type": 14
-                  }
-                ],
-                "index": 1,
-                "name": "Err"
+                "type": 1,
+                "typeName": "[u8; 32]"
               }
             ]
           }
         },
-        "params": [
-          {
-            "name": "T",
-            "type": 17
-          },
-          {
-            "name": "E",
-            "type": 14
-          }
-        ],
         "path": [
-          "Result"
+          "ink_primitives",
+          "types",
+          "Hash"
         ]
       }
     },
     {
       "id": 17,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 18
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 12
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 18
+          },
+          {
+            "name": "E",
+            "type": 12
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 18,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 19
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 15
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 19
+          },
+          {
+            "name": "E",
+            "type": 15
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 19,
       "type": {
         "def": {
           "composite": {
@@ -1158,6 +2013,16 @@
                 "name": "tao_balance",
                 "type": 4,
                 "typeName": "Balance"
+              },
+              {
+                "name": "upgrade_policy",
+                "type": 9,
+                "typeName": "UpgradePolicy"
+              },
+              {
+                "name": "version",
+                "type": 3,
+                "typeName": "u16"
               }
             ]
           }
@@ -1170,7 +2035,7 @@
       }
     },
     {
-      "id": 18,
+      "id": 20,
       "type": {
         "def": {
           "variant": {
@@ -1187,7 +2052,7 @@
               {
                 "fields": [
                   {
-                    "type": 11
+                    "type": 12
                   }
                 ],
                 "index": 1,
@@ -1203,91 +2068,7 @@
           },
           {
             "name": "E",
-            "type": 11
-          }
-        ],
-        "path": [
-          "Result"
-        ]
-      }
-    },
-    {
-      "id": 19,
-      "type": {
-        "def": {
-          "variant": {
-            "variants": [
-              {
-                "fields": [
-                  {
-                    "type": 8
-                  }
-                ],
-                "index": 0,
-                "name": "Ok"
-              },
-              {
-                "fields": [
-                  {
-                    "type": 11
-                  }
-                ],
-                "index": 1,
-                "name": "Err"
-              }
-            ]
-          }
-        },
-        "params": [
-          {
-            "name": "T",
-            "type": 8
-          },
-          {
-            "name": "E",
-            "type": 11
-          }
-        ],
-        "path": [
-          "Result"
-        ]
-      }
-    },
-    {
-      "id": 20,
-      "type": {
-        "def": {
-          "variant": {
-            "variants": [
-              {
-                "fields": [
-                  {
-                    "type": 4
-                  }
-                ],
-                "index": 0,
-                "name": "Ok"
-              },
-              {
-                "fields": [
-                  {
-                    "type": 11
-                  }
-                ],
-                "index": 1,
-                "name": "Err"
-              }
-            ]
-          }
-        },
-        "params": [
-          {
-            "name": "T",
-            "type": 4
-          },
-          {
-            "name": "E",
-            "type": 11
+            "type": 12
           }
         ],
         "path": [
@@ -1304,7 +2085,7 @@
               {
                 "fields": [
                   {
-                    "type": 5
+                    "type": 8
                   }
                 ],
                 "index": 0,
@@ -1313,7 +2094,7 @@
               {
                 "fields": [
                   {
-                    "type": 11
+                    "type": 12
                   }
                 ],
                 "index": 1,
@@ -1325,11 +2106,11 @@
         "params": [
           {
             "name": "T",
-            "type": 5
+            "type": 8
           },
           {
             "name": "E",
-            "type": 11
+            "type": 12
           }
         ],
         "path": [
@@ -1346,6 +2127,174 @@
               {
                 "fields": [
                   {
+                    "type": 4
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 12
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 4
+          },
+          {
+            "name": "E",
+            "type": 12
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 23,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 9
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 12
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 9
+          },
+          {
+            "name": "E",
+            "type": 12
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 24,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 3
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 12
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 3
+          },
+          {
+            "name": "E",
+            "type": 12
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 25,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 5
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 12
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 5
+          },
+          {
+            "name": "E",
+            "type": 12
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 26,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
                     "type": 6
                   }
                 ],
@@ -1355,7 +2304,7 @@
               {
                 "fields": [
                   {
-                    "type": 11
+                    "type": 12
                   }
                 ],
                 "index": 1,
@@ -1371,7 +2320,7 @@
           },
           {
             "name": "E",
-            "type": 11
+            "type": 12
           }
         ],
         "path": [
@@ -1380,27 +2329,64 @@
       }
     },
     {
-      "id": 23,
+      "id": 27,
       "type": {
         "def": {
-          "composite": {
-            "fields": [
+          "variant": {
+            "variants": [
               {
-                "type": 1,
-                "typeName": "[u8; 32]"
+                "index": 0,
+                "name": "None"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 16
+                  }
+                ],
+                "index": 1,
+                "name": "Some"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 16
+          }
+        ],
+        "path": [
+          "Option"
+        ]
+      }
+    },
+    {
+      "id": 28,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "index": 0,
+                "name": "Owner"
+              },
+              {
+                "index": 1,
+                "name": "Guardian"
               }
             ]
           }
         },
         "path": [
-          "ink_primitives",
-          "types",
-          "Hash"
+          "code_registry",
+          "code_registry",
+          "Role"
         ]
       }
     },
     {
-      "id": 24,
+      "id": 29,
       "type": {
         "def": {
           "variant": {}

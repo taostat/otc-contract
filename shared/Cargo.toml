@@ -18,3 +18,6 @@ std = [
     "sp-io/std",
     "fixed/std",
 ]
+# The off-chain Subtensor mock for contract unit tests; enable it from
+# dev-dependencies only.
+testing = ["std"]

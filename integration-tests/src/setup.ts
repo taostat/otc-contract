@@ -14,11 +14,21 @@ import { Observable } from "rxjs";
 export type ContractSdk = ReturnType<typeof createInkSdk<TypedApi<typeof devnet>, typeof contracts.otc_contract>>;
 export type LockupListingsSdk = ReturnType<typeof createInkSdk<TypedApi<typeof devnet>, typeof contracts.lockup_listings>>;
 export type AlphaLockupSdk = ReturnType<typeof createInkSdk<TypedApi<typeof devnet>, typeof contracts.alpha_lockup>>;
+export type CodeRegistrySdk = ReturnType<typeof createInkSdk<TypedApi<typeof devnet>, typeof contracts.code_registry>>;
+
+// Code kind ids from otc-shared/src/upgrade.rs
+export const ESCROW_CODE_KIND = 2;
+// The registry's minimum delay (MIN_DELAY) in a production build: about a day.
+export const REGISTRY_DELAY = 7_200;
+
+const RELEASE_ARTIFACTS = path.join(process.cwd(), "..", "target", "ink");
+// Built by `npm run build:contracts`: an escrow with a newer storage version,
+// so tests have real code to upgrade escrows to.
+export const UPGRADE_TEST_ARTIFACTS = path.join(process.cwd(), "..", "target", "upgrade-test", "ink");
 
 // Contract address persistence files
 const CONTRACT_ADDRESS_FILE = path.join(process.cwd(), ".contract-address");
 const LOCKUP_LISTINGS_ADDRESS_FILE = path.join(process.cwd(), ".lockup-listings-address");
-const ALPHA_LOCKUP_CODE_HASH_FILE = path.join(process.cwd(), ".alpha-lockup-code-hash");
 // Deployment caching is opt-in so every run gets fresh contracts by default.
 const REUSE_DEPLOYMENT_CACHE = process.env.OTC_TEST_REUSE_DEPLOYMENTS === "1";
 // Tests move TAO amounts that depend on dynamic subnet prices, so every test account
@@ -94,38 +104,6 @@ function saveLockupListingsAddress(address: string): void {
     }
 }
 
-// Load alpha lockup code hash from file
-function loadAlphaLockupCodeHash(): string | null {
-    if (!REUSE_DEPLOYMENT_CACHE) {
-        return null;
-    }
-
-    try {
-        if (fsSync.existsSync(ALPHA_LOCKUP_CODE_HASH_FILE)) {
-            const codeHash = fsSync.readFileSync(ALPHA_LOCKUP_CODE_HASH_FILE, 'utf-8').trim();
-            console.log(`Loaded alpha lockup code hash from file: ${codeHash}`);
-            return codeHash;
-        }
-    } catch (error) {
-        console.error("Failed to load alpha lockup code hash:", error);
-    }
-    return null;
-}
-
-// Save alpha lockup code hash to file
-function saveAlphaLockupCodeHash(codeHash: string): void {
-    if (!REUSE_DEPLOYMENT_CACHE) {
-        return;
-    }
-
-    try {
-        fsSync.writeFileSync(ALPHA_LOCKUP_CODE_HASH_FILE, codeHash, 'utf-8');
-        console.log(`Saved alpha lockup code hash to file: ${codeHash}`);
-    } catch (error) {
-        console.error("Failed to save alpha lockup code hash:", error);
-    }
-}
-
 export interface TestContext {
     api: TypedApi<typeof devnet>;
     contractSdk: ContractSdk;
@@ -152,6 +130,8 @@ export interface LockupListingsContext {
     };
     contractAddress?: string;
     escrowCodeHash?: string;
+    registrySdk: CodeRegistrySdk;
+    registryAddress: string;
 }
 
 export interface TestAccount {
@@ -329,87 +309,89 @@ export class TestSetup {
     }
 
     /**
+     * Upload a contract's code unless it is already on chain, and return its code hash.
+     * The hash comes from the build's metadata, which pallet-contracts reproduces.
+     */
+    async uploadCode(
+        api: TypedApi<typeof devnet>,
+        accounts: TestContext['accounts'],
+        artifactsDir: string,
+        name: string,
+    ): Promise<string> {
+        const wasmPath = path.join(artifactsDir, name, `${name}.wasm`);
+        const metadataPath = path.join(artifactsDir, name, `${name}.json`);
+        const metadata = JSON.parse(await fs.readFile(metadataPath, "utf-8"));
+        const codeHash: string = metadata.source.hash;
+
+        if (await this.codeExistsOnChain(api, codeHash)) {
+            console.log(`${name} code already on chain: ${codeHash}`);
+            return codeHash;
+        }
+
+        console.log(`Uploading ${name} code from ${wasmPath}...`);
+        const wasmBytes = Binary.fromBytes(new Uint8Array(await fs.readFile(wasmPath)));
+        await this.trackTx(
+            api.tx.Contracts.upload_code({
+                code: wasmBytes,
+                storage_deposit_limit: undefined,
+                determinism: { type: "Enforced", value: undefined },
+            }).signSubmitAndWatch(accounts.alice.signer)
+        );
+
+        if (!(await this.codeExistsOnChain(api, codeHash))) {
+            throw new Error(`Uploaded ${name} code but ${codeHash} is not on chain`);
+        }
+        return codeHash;
+    }
+
+    /**
      * Upload alpha_lockup code and return its code hash
      */
     async uploadAlphaLockupCode(
         api: TypedApi<typeof devnet>,
         accounts: TestContext['accounts']
     ): Promise<string> {
-        const existingCodeHash = loadAlphaLockupCodeHash();
-        if (existingCodeHash) {
-            const exists = await this.codeExistsOnChain(api, existingCodeHash);
-            if (exists) {
-                console.log(`Using existing alpha_lockup code hash: ${existingCodeHash}`);
-                return existingCodeHash;
-            }
-            console.log(`Cached code hash invalid (code not on chain), re-uploading...`);
-        }
-
-        const contractPath = path.join(process.cwd(), "..", "target", "ink", "alpha_lockup", "alpha_lockup.wasm");
-        const wasmFile = await fs.readFile(contractPath);
-        const wasmBytes = Binary.fromBytes(new Uint8Array(wasmFile));
-
-        console.log("Uploading alpha_lockup code...");
-
-        const uploadTx = api.tx.Contracts.upload_code({
-            code: wasmBytes,
-            storage_deposit_limit: undefined,
-            determinism: { type: "Enforced", value: undefined },
-        });
-
-        const fin = await this.trackTx(
-            uploadTx.signSubmitAndWatch(accounts.alice.signer)
-        );
-
-        // Extract code hash from events
-        let codeHash: string | null = null;
-        for (const event of fin.events) {
-            if (event.type === "Contracts" && event.value.type === "CodeStored") {
-                codeHash = event.value.value.code_hash.asHex();
-                break;
-            }
-        }
-
-        if (!codeHash) {
-            // Try to get the code hash from the metadata
-            const alphaLockupSdk = createInkSdk(api, contracts.alpha_lockup);
-            const deployer = alphaLockupSdk.getDeployer(wasmBytes);
-
-            // The code hash is deterministic based on the WASM code
-            const dryRunResult = await deployer.dryRun("new", {
-                origin: accounts.alice.address,
-                data: {
-                    buyer: accounts.alice.address,
-                    netuid: 1,
-                    alpha_amount: 1_000_000_000n,
-                    unlock_block: 1000,
-                    hotkey: accounts.bob.address,
-                },
-            });
-
-            if (dryRunResult.success) {
-                // The code_hash should be available from the contract metadata
-                const metadata = contracts.alpha_lockup.metadata;
-                codeHash = (metadata as any).source?.hash;
-            }
-        }
-
-        if (!codeHash) {
-            throw new Error("Failed to get alpha_lockup code hash");
-        }
-
-        console.log(`Alpha lockup code hash: ${codeHash}`);
-        saveAlphaLockupCodeHash(codeHash);
-        return codeHash;
+        return this.uploadCode(api, accounts, RELEASE_ARTIFACTS, "alpha_lockup");
     }
 
     /**
-     * Deploy the lockup_listings contract
+     * Deploy a code registry. Alice is the owner and Eve the guardian.
      */
+    async deployCodeRegistry(
+        api: TypedApi<typeof devnet>,
+        accounts: TestContext['accounts'],
+        initialCodes: Array<[number, string]>,
+    ): Promise<string> {
+        const wasmPath = path.join(RELEASE_ARTIFACTS, "code_registry", "code_registry.wasm");
+        const wasmBytes = Binary.fromBytes(new Uint8Array(await fs.readFile(wasmPath)));
+        const deployer = createInkSdk(api, contracts.code_registry).getDeployer(wasmBytes);
+
+        const dryRunResult = await deployer.dryRun("new", {
+            origin: accounts.alice.address,
+            data: {
+                owner: accounts.alice.address,
+                guardian: accounts.eve.address,
+                upgrade_delay: REGISTRY_DELAY,
+                force_delay: REGISTRY_DELAY,
+                initial_codes: initialCodes.map(([kind, codeHash]) => [kind, Binary.fromHex(codeHash)]),
+            } as any,
+            options: { salt: randomDeploymentSalt() },
+        });
+        if (!dryRunResult.success) {
+            throw new Error(`Code registry dry run failed: ${JSON.stringify(dryRunResult.value, (_key, value) =>
+                typeof value === "bigint" ? value.toString() : value)}`);
+        }
+
+        await this.trackTx(dryRunResult.value.deploy().signSubmitAndWatch(accounts.alice.signer));
+        console.log(`Code registry deployed to address ${dryRunResult.value.address}`);
+        return dryRunResult.value.address;
+    }
+
     async deployLockupListingsContract(
         api: TypedApi<typeof devnet>,
         accounts: TestContext['accounts'],
-        escrowCodeHash: string
+        escrowCodeHash: string,
+        registryAddress: string,
     ): Promise<string> {
         const contractPath = path.join(process.cwd(), "..", "target", "ink", "lockup_listings", "lockup_listings.wasm");
         const wasmFile = await fs.readFile(contractPath);
@@ -425,18 +407,13 @@ export class TestSetup {
             owner: accounts.alice.address,
             hotkey: accounts.alice.address, // Use alice's hotkey for testing
             escrow_code_hash: codeHashBytes,
+            registry: registryAddress,
             fee_rate: 92233720368547758n, // 0.5% as U64F64 bits
             min_listing_amount: 1_000_000_000n, // 1 Alpha
             min_purchase_amount: 100_000_000n, // 0.1 Alpha
             min_lockup_duration: 10, // 10 blocks for testing (short lockup)
             max_lockup_duration: 1_000_000, // ~46 days
         };
-
-        const cachedAddress = loadLockupListingsAddress();
-        if (cachedAddress && await this.contractExistsOnChain(api, cachedAddress)) {
-            console.log(`Using existing lockup listings contract at ${cachedAddress}`);
-            return cachedAddress;
-        }
 
         try {
             const dryRunResult = await deployer.dryRun("new", {
@@ -460,9 +437,7 @@ export class TestSetup {
             console.log(`Lockup listings deployed to address ${dryRunResult.value.address}`);
             console.log(contractSdk.readDeploymentEvents(fin.events));
 
-            const contractAddress = dryRunResult.value.address;
-            saveLockupListingsAddress(contractAddress);
-            return contractAddress;
+            return dryRunResult.value.address;
         } catch (error) {
             console.error("Lockup listings deployment error:", error);
             throw error;
@@ -470,20 +445,46 @@ export class TestSetup {
     }
 
     /**
-     * Create test context for lockup_listings tests
+     * Deploy lockup_listings with a code registry. New escrows run the released
+     * escrow code; `registryEscrowCode` sets which escrow code the registry offers
+     * as current (the same code unless a test wants an upgrade available).
      */
-    async createLockupListingsContext(): Promise<LockupListingsContext> {
+    async createLockupListingsContext(options: { registryEscrowCode?: string } = {}): Promise<LockupListingsContext> {
         const api = await this.getApi();
         const accounts = this.createTestAccounts();
         await this.fundTestAccounts(api, accounts);
 
         // First upload the alpha_lockup code to get its code hash
         const escrowCodeHash = await this.uploadAlphaLockupCode(api, accounts);
-
-        // Deploy lockup_listings contract
-        const contractAddress = await this.deployLockupListingsContract(api, accounts, escrowCodeHash);
-
         const contractSdk = createInkSdk(api, contracts.lockup_listings);
+        const registrySdk = createInkSdk(api, contracts.code_registry);
+
+        // A custom registry gets its own deployment, outside the shared cache.
+        const useCache = options.registryEscrowCode === undefined;
+        const cachedAddress = useCache ? loadLockupListingsAddress() : null;
+        let contractAddress: string;
+        let registryAddress: string;
+        if (cachedAddress && await this.contractExistsOnChain(api, cachedAddress)) {
+            console.log(`Using existing lockup listings contract at ${cachedAddress}`);
+            contractAddress = cachedAddress;
+            const registryResult = await contractSdk.getContract(contractAddress).query("get_registry", {
+                origin: accounts.alice.address,
+                data: {},
+            });
+            if (!registryResult.success) {
+                throw new Error("Failed to read the cached lockup listings contract's registry");
+            }
+            registryAddress = registryResult.value.response;
+        } else {
+            registryAddress = await this.deployCodeRegistry(api, accounts, [
+                [ESCROW_CODE_KIND, options.registryEscrowCode ?? escrowCodeHash],
+            ]);
+            contractAddress = await this.deployLockupListingsContract(api, accounts, escrowCodeHash, registryAddress);
+            if (useCache) {
+                saveLockupListingsAddress(contractAddress);
+            }
+        }
+
         const alphaLockupSdk = createInkSdk(api, contracts.alpha_lockup);
 
         return {
@@ -493,6 +494,8 @@ export class TestSetup {
             accounts,
             contractAddress,
             escrowCodeHash,
+            registrySdk,
+            registryAddress,
         };
     }
 
@@ -558,7 +561,9 @@ export async function cleanupTestEnvironment(): Promise<void> {
     await setup.cleanup();
 }
 
-export async function setupLockupListingsEnvironment(): Promise<LockupListingsContext> {
+export async function setupLockupListingsEnvironment(
+    options: { registryEscrowCode?: string } = {}
+): Promise<LockupListingsContext> {
     const setup = TestSetup.getInstance();
-    return await setup.createLockupListingsContext();
+    return await setup.createLockupListingsContext(options);
 }

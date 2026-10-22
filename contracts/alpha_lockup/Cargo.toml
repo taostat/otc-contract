@@ -7,6 +7,10 @@ edition = "2021"
 [dependencies]
 ink = { version = "5.1.1", default-features = false }
 otc-shared = { path = "../../shared", default-features = false }
+code-registry = { path = "../code_registry", default-features = false, features = ["ink-as-dependency"] }
+
+[dev-dependencies]
+otc-shared = { path = "../../shared", features = ["testing"] }
 
 [lib]
 path = "src/lib.rs"
@@ -16,5 +20,9 @@ default = ["std"]
 std = [
     "ink/std",
     "otc-shared/std",
+    "code-registry/std",
 ]
 ink-as-dependency = []
+# Test builds only: a second escrow code with a newer storage version, so
+# integration tests have real code to upgrade escrows to.
+upgrade-test = []

@@ -69,6 +69,20 @@ export function queryOk<T = any>(result: any, label = "query"): T {
     return result.value.response as T;
 }
 
+/**
+ * Assert that a dry run reverted with a specific contract error. ink! encodes a
+ * message result as Result<Result<T, Error>, LangError>, so Ok(Err(variant)) is
+ * 0x00 0x01 followed by the variant's index in the contract's Error enum.
+ */
+export function expectContractError(result: any, errorIndex: number, label = "query"): void {
+    const expected = `0x0001${errorIndex.toString(16).padStart(2, "0")}`;
+    const message = result.value?.value?.message;
+    const actual = typeof message === "string" ? message : message?.asHex?.();
+    if (result.success || result.value?.type !== "FlagReverted" || actual !== expected) {
+        throw new Error(`${label}: expected contract error ${expected}, got ${stringifyResult(result)}`);
+    }
+}
+
 export function expectEvent<T extends string>(contract: any, txResult: any, eventType: T): any {
     const event = contract.filterEvents(txResult.events).find((item: any) => item.type === eventType);
     if (!event) {

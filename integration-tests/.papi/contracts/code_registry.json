@@ -1,0 +1,2375 @@
+{
+  "source": {
+    "hash": "0x6800456eff4f801c30235501030cd32ef8a6998ca58a77fc8657906aa09ea5ae",
+    "language": "ink! 5.1.1",
+    "compiler": "rustc 1.89.0",
+    "build_info": {
+      "build_mode": "Release",
+      "cargo_contract_version": "5.0.3",
+      "rust_toolchain": "stable-aarch64-apple-darwin",
+      "wasm_opt_settings": {
+        "keep_debug_symbols": false,
+        "optimization_passes": "Z"
+      }
+    }
+  },
+  "contract": {
+    "name": "code-registry",
+    "version": "0.1.0",
+    "authors": [
+      "taostats <dev@taostats.io>"
+    ]
+  },
+  "image": null,
+  "spec": {
+    "constructors": [
+      {
+        "args": [
+          {
+            "label": "owner",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "label": "guardian",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "label": "upgrade_delay",
+            "type": {
+              "displayName": [
+                "BlockNumber"
+              ],
+              "type": 3
+            }
+          },
+          {
+            "label": "force_delay",
+            "type": {
+              "displayName": [
+                "BlockNumber"
+              ],
+              "type": 3
+            }
+          },
+          {
+            "label": "initial_codes",
+            "type": {
+              "displayName": [
+                "Vec"
+              ],
+              "type": 29
+            }
+          }
+        ],
+        "default": false,
+        "docs": [
+          "Create the registry with each kind's initial code already current.",
+          "",
+          "The delays cannot be changed later and must be at least `MIN_DELAY`",
+          "(except in `short-delays` test builds)."
+        ],
+        "label": "new",
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink_primitives",
+            "ConstructorResult"
+          ],
+          "type": 30
+        },
+        "selector": "0x9bae9d5e"
+      }
+    ],
+    "docs": [
+      " Timelocked allowlist of the code every other contract may upgrade to.",
+      "",
+      " This is the only contract in the system that is never upgraded. It makes no",
+      " chain-extension or runtime calls, so Subtensor changes cannot break it.",
+      "",
+      " The owner proposes a code hash for a contract kind. After `upgrade_delay`",
+      " blocks anyone can activate it, making it that kind's current code, unless the",
+      " guardian vetoed it first. Position contracts may adopt the current code; once",
+      " it has been current for `force_delay` blocks, anyone may apply it to positions",
+      " that allow forced upgrades. Owner and guardian changes go through the same",
+      " delay and veto.",
+      "",
+      " Both roles should be multisigs. A compromised key can stall upgrades but never",
+      " move funds: a rogue owner can only propose code the guardian must keep vetoing",
+      " or revoking, and a rogue guardian can veto every proposal and its own",
+      " replacement. The registry has no recovery path from either; recovering means",
+      " deploying a new registry and new factories, and positions bound to this",
+      " registry keep their current code."
+    ],
+    "environment": {
+      "accountId": {
+        "displayName": [
+          "AccountId"
+        ],
+        "type": 0
+      },
+      "balance": {
+        "displayName": [
+          "Balance"
+        ],
+        "type": 4
+      },
+      "blockNumber": {
+        "displayName": [
+          "BlockNumber"
+        ],
+        "type": 3
+      },
+      "chainExtension": {
+        "displayName": [
+          "ChainExtension"
+        ],
+        "type": 46
+      },
+      "hash": {
+        "displayName": [
+          "Hash"
+        ],
+        "type": 8
+      },
+      "maxEventTopics": 4,
+      "staticBufferSize": 16384,
+      "timestamp": {
+        "displayName": [
+          "Timestamp"
+        ],
+        "type": 4
+      }
+    },
+    "events": [
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "kind",
+            "type": {
+              "displayName": [
+                "CodeKind"
+              ],
+              "type": 7
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "code_hash",
+            "type": {
+              "displayName": [
+                "Hash"
+              ],
+              "type": 8
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "activates_at",
+            "type": {
+              "displayName": [
+                "BlockNumber"
+              ],
+              "type": 3
+            }
+          }
+        ],
+        "docs": [],
+        "label": "CodeProposed",
+        "module_path": "code_registry::code_registry",
+        "signature_topic": "0xaf5d48c20412e9396c5f015a47f95fabb89ef1b58ce2477ce14f787d6f0f68eb"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "kind",
+            "type": {
+              "displayName": [
+                "CodeKind"
+              ],
+              "type": 7
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "code_hash",
+            "type": {
+              "displayName": [
+                "Hash"
+              ],
+              "type": 8
+            }
+          }
+        ],
+        "docs": [],
+        "label": "CodeVetoed",
+        "module_path": "code_registry::code_registry",
+        "signature_topic": "0x6a035b30f2dd1c3f5b9c79b36954b91f33f35f647486120f2bc1a880f574ea9e"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "kind",
+            "type": {
+              "displayName": [
+                "CodeKind"
+              ],
+              "type": 7
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "code_hash",
+            "type": {
+              "displayName": [
+                "Hash"
+              ],
+              "type": 8
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "previous",
+            "type": {
+              "displayName": [
+                "Option"
+              ],
+              "type": 39
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "activated_by",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          }
+        ],
+        "docs": [],
+        "label": "CodeActivated",
+        "module_path": "code_registry::code_registry",
+        "signature_topic": "0xf12a377c5c944ef14c6e22ee515657efe78f273649dc3a9843808e6e53e4ede2"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "kind",
+            "type": {
+              "displayName": [
+                "CodeKind"
+              ],
+              "type": 7
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "code_hash",
+            "type": {
+              "displayName": [
+                "Hash"
+              ],
+              "type": 8
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "revoked_by",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "was_current",
+            "type": {
+              "displayName": [
+                "bool"
+              ],
+              "type": 18
+            }
+          }
+        ],
+        "docs": [],
+        "label": "CodeRevoked",
+        "module_path": "code_registry::code_registry",
+        "signature_topic": "0x44bc476a161a1e96e625187859cca03b7a154835f04b117230871ccb432bf025"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "role",
+            "type": {
+              "displayName": [
+                "Role"
+              ],
+              "type": 28
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "account",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "executable_at",
+            "type": {
+              "displayName": [
+                "BlockNumber"
+              ],
+              "type": 3
+            }
+          }
+        ],
+        "docs": [],
+        "label": "RoleChangeProposed",
+        "module_path": "code_registry::code_registry",
+        "signature_topic": "0xd67c860be027cabda996d3450f58fb1c384010d8ac2042a5bffce6cd584f6d94"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "role",
+            "type": {
+              "displayName": [
+                "Role"
+              ],
+              "type": 28
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "account",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          }
+        ],
+        "docs": [],
+        "label": "RoleChangeVetoed",
+        "module_path": "code_registry::code_registry",
+        "signature_topic": "0xc9899c72e7b1c4e873e6d59943adb6018c09feed9e117ce2d20a078ac4f89e8b"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "role",
+            "type": {
+              "displayName": [
+                "Role"
+              ],
+              "type": 28
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "old_account",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "new_account",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          }
+        ],
+        "docs": [],
+        "label": "RoleChanged",
+        "module_path": "code_registry::code_registry",
+        "signature_topic": "0xb00d0c5d20113a679ea27014ce78036c7e92b7207ff9ecd9a3fb333254ddd143"
+      }
+    ],
+    "lang_error": {
+      "displayName": [
+        "ink",
+        "LangError"
+      ],
+      "type": 31
+    },
+    "messages": [
+      {
+        "args": [
+          {
+            "label": "kind",
+            "type": {
+              "displayName": [
+                "CodeKind"
+              ],
+              "type": 7
+            }
+          },
+          {
+            "label": "code_hash",
+            "type": {
+              "displayName": [
+                "Hash"
+              ],
+              "type": 8
+            }
+          }
+        ],
+        "default": false,
+        "docs": [
+          " Propose `code_hash` as the next code for `kind`. Starts the upgrade delay."
+        ],
+        "label": "propose",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 32
+        },
+        "selector": "0xcb14b5b5"
+      },
+      {
+        "args": [
+          {
+            "label": "kind",
+            "type": {
+              "displayName": [
+                "CodeKind"
+              ],
+              "type": 7
+            }
+          },
+          {
+            "label": "code_hash",
+            "type": {
+              "displayName": [
+                "Hash"
+              ],
+              "type": 8
+            }
+          }
+        ],
+        "default": false,
+        "docs": [
+          " Cancel a pending proposal. Only the guardian can veto."
+        ],
+        "label": "veto",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 32
+        },
+        "selector": "0xa4d0d941"
+      },
+      {
+        "args": [
+          {
+            "label": "kind",
+            "type": {
+              "displayName": [
+                "CodeKind"
+              ],
+              "type": 7
+            }
+          },
+          {
+            "label": "code_hash",
+            "type": {
+              "displayName": [
+                "Hash"
+              ],
+              "type": 8
+            }
+          }
+        ],
+        "default": false,
+        "docs": [
+          " Make a matured, unvetoed proposal the current code for its kind.",
+          " Anyone can call this once the upgrade delay has elapsed."
+        ],
+        "label": "activate",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 32
+        },
+        "selector": "0x5ccbfb51"
+      },
+      {
+        "args": [
+          {
+            "label": "kind",
+            "type": {
+              "displayName": [
+                "CodeKind"
+              ],
+              "type": 7
+            }
+          },
+          {
+            "label": "code_hash",
+            "type": {
+              "displayName": [
+                "Hash"
+              ],
+              "type": 8
+            }
+          }
+        ],
+        "default": false,
+        "docs": [
+          " Block `code_hash` from ever being adopted for `kind`. Clears it if it is",
+          " current, and drops any pending proposal for it. The owner or the",
+          " guardian can revoke."
+        ],
+        "label": "revoke",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 32
+        },
+        "selector": "0x0a538d12"
+      },
+      {
+        "args": [
+          {
+            "label": "role",
+            "type": {
+              "displayName": [
+                "Role"
+              ],
+              "type": 28
+            }
+          },
+          {
+            "label": "account",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          }
+        ],
+        "default": false,
+        "docs": [
+          " Propose a new owner or guardian. Starts the upgrade delay and replaces",
+          " any change already pending."
+        ],
+        "label": "propose_role_change",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 32
+        },
+        "selector": "0xdbfe257c"
+      },
+      {
+        "args": [],
+        "default": false,
+        "docs": [
+          " Cancel the pending owner or guardian change. Only the guardian can veto."
+        ],
+        "label": "veto_role_change",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 32
+        },
+        "selector": "0x4d03426b"
+      },
+      {
+        "args": [],
+        "default": false,
+        "docs": [
+          " Apply the pending owner or guardian change once its delay has elapsed.",
+          " Anyone can call this."
+        ],
+        "label": "execute_role_change",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 32
+        },
+        "selector": "0xb7691944"
+      },
+      {
+        "args": [
+          {
+            "label": "kind",
+            "type": {
+              "displayName": [
+                "CodeKind"
+              ],
+              "type": 7
+            }
+          }
+        ],
+        "default": false,
+        "docs": [
+          " The current code for `kind`, if any."
+        ],
+        "label": "current",
+        "mutates": false,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 35
+        },
+        "selector": "0xb076c6e6"
+      },
+      {
+        "args": [
+          {
+            "label": "kind",
+            "type": {
+              "displayName": [
+                "CodeKind"
+              ],
+              "type": 7
+            }
+          },
+          {
+            "label": "code_hash",
+            "type": {
+              "displayName": [
+                "Hash"
+              ],
+              "type": 8
+            }
+          }
+        ],
+        "default": false,
+        "docs": [
+          " Whether `code_hash` is the current code for `kind`."
+        ],
+        "label": "is_current",
+        "mutates": false,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 37
+        },
+        "selector": "0xa1bef96b"
+      },
+      {
+        "args": [
+          {
+            "label": "kind",
+            "type": {
+              "displayName": [
+                "CodeKind"
+              ],
+              "type": 7
+            }
+          }
+        ],
+        "default": false,
+        "docs": [
+          " The current code for `kind` once it has been current for the force",
+          " delay, so anyone may apply it to positions that allow forced upgrades."
+        ],
+        "label": "force_target",
+        "mutates": false,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 38
+        },
+        "selector": "0xb45d4b5a"
+      },
+      {
+        "args": [
+          {
+            "label": "kind",
+            "type": {
+              "displayName": [
+                "CodeKind"
+              ],
+              "type": 7
+            }
+          },
+          {
+            "label": "code_hash",
+            "type": {
+              "displayName": [
+                "Hash"
+              ],
+              "type": 8
+            }
+          }
+        ],
+        "default": false,
+        "docs": [
+          " The pending proposal for `kind` and `code_hash`, if any."
+        ],
+        "label": "proposal",
+        "mutates": false,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 40
+        },
+        "selector": "0x025aac7e"
+      },
+      {
+        "args": [
+          {
+            "label": "kind",
+            "type": {
+              "displayName": [
+                "CodeKind"
+              ],
+              "type": 7
+            }
+          },
+          {
+            "label": "code_hash",
+            "type": {
+              "displayName": [
+                "Hash"
+              ],
+              "type": 8
+            }
+          }
+        ],
+        "default": false,
+        "docs": [
+          " Whether `code_hash` was revoked for `kind`."
+        ],
+        "label": "is_revoked",
+        "mutates": false,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 37
+        },
+        "selector": "0x9abc805f"
+      },
+      {
+        "args": [],
+        "default": false,
+        "docs": [
+          " The upgrade delay and the force delay, in blocks."
+        ],
+        "label": "delays",
+        "mutates": false,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 42
+        },
+        "selector": "0x43a305a6"
+      },
+      {
+        "args": [],
+        "default": false,
+        "docs": [],
+        "label": "owner",
+        "mutates": false,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 44
+        },
+        "selector": "0xfeaea4fa"
+      },
+      {
+        "args": [],
+        "default": false,
+        "docs": [],
+        "label": "guardian",
+        "mutates": false,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 44
+        },
+        "selector": "0x3805153d"
+      },
+      {
+        "args": [],
+        "default": false,
+        "docs": [],
+        "label": "pending_role_change",
+        "mutates": false,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 45
+        },
+        "selector": "0xcb9c6663"
+      }
+    ]
+  },
+  "storage": {
+    "root": {
+      "layout": {
+        "struct": {
+          "fields": [
+            {
+              "layout": {
+                "leaf": {
+                  "key": "0x00000000",
+                  "ty": 0
+                }
+              },
+              "name": "owner"
+            },
+            {
+              "layout": {
+                "leaf": {
+                  "key": "0x00000000",
+                  "ty": 0
+                }
+              },
+              "name": "guardian"
+            },
+            {
+              "layout": {
+                "leaf": {
+                  "key": "0x00000000",
+                  "ty": 3
+                }
+              },
+              "name": "upgrade_delay"
+            },
+            {
+              "layout": {
+                "leaf": {
+                  "key": "0x00000000",
+                  "ty": 3
+                }
+              },
+              "name": "force_delay"
+            },
+            {
+              "layout": {
+                "root": {
+                  "layout": {
+                    "struct": {
+                      "fields": [
+                        {
+                          "layout": {
+                            "leaf": {
+                              "key": "0xb2bb9a7f",
+                              "ty": 3
+                            }
+                          },
+                          "name": "proposed_at"
+                        },
+                        {
+                          "layout": {
+                            "leaf": {
+                              "key": "0xb2bb9a7f",
+                              "ty": 4
+                            }
+                          },
+                          "name": "sequence"
+                        }
+                      ],
+                      "name": "Proposal"
+                    }
+                  },
+                  "root_key": "0xb2bb9a7f",
+                  "ty": 5
+                }
+              },
+              "name": "proposals"
+            },
+            {
+              "layout": {
+                "root": {
+                  "layout": {
+                    "struct": {
+                      "fields": [
+                        {
+                          "layout": {
+                            "leaf": {
+                              "key": "0xd9ef13e5",
+                              "ty": 8
+                            }
+                          },
+                          "name": "code_hash"
+                        },
+                        {
+                          "layout": {
+                            "leaf": {
+                              "key": "0xd9ef13e5",
+                              "ty": 3
+                            }
+                          },
+                          "name": "since"
+                        }
+                      ],
+                      "name": "CurrentCode"
+                    }
+                  },
+                  "root_key": "0xd9ef13e5",
+                  "ty": 14
+                }
+              },
+              "name": "current"
+            },
+            {
+              "layout": {
+                "root": {
+                  "layout": {
+                    "leaf": {
+                      "key": "0x48ce1128",
+                      "ty": 18
+                    }
+                  },
+                  "root_key": "0x48ce1128",
+                  "ty": 19
+                }
+              },
+              "name": "revoked"
+            },
+            {
+              "layout": {
+                "enum": {
+                  "dispatchKey": "0x00000000",
+                  "name": "Option",
+                  "variants": {
+                    "0": {
+                      "fields": [],
+                      "name": "None"
+                    },
+                    "1": {
+                      "fields": [
+                        {
+                          "layout": {
+                            "struct": {
+                              "fields": [
+                                {
+                                  "layout": {
+                                    "enum": {
+                                      "dispatchKey": "0x00000000",
+                                      "name": "Role",
+                                      "variants": {
+                                        "0": {
+                                          "fields": [],
+                                          "name": "Owner"
+                                        },
+                                        "1": {
+                                          "fields": [],
+                                          "name": "Guardian"
+                                        }
+                                      }
+                                    }
+                                  },
+                                  "name": "role"
+                                },
+                                {
+                                  "layout": {
+                                    "leaf": {
+                                      "key": "0x00000000",
+                                      "ty": 0
+                                    }
+                                  },
+                                  "name": "account"
+                                },
+                                {
+                                  "layout": {
+                                    "leaf": {
+                                      "key": "0x00000000",
+                                      "ty": 3
+                                    }
+                                  },
+                                  "name": "proposed_at"
+                                }
+                              ],
+                              "name": "RoleChange"
+                            }
+                          },
+                          "name": "0"
+                        }
+                      ],
+                      "name": "Some"
+                    }
+                  }
+                }
+              },
+              "name": "pending_role_change"
+            },
+            {
+              "layout": {
+                "leaf": {
+                  "key": "0x00000000",
+                  "ty": 4
+                }
+              },
+              "name": "last_sequence"
+            },
+            {
+              "layout": {
+                "root": {
+                  "layout": {
+                    "leaf": {
+                      "key": "0x9bf53ef8",
+                      "ty": 4
+                    }
+                  },
+                  "root_key": "0x9bf53ef8",
+                  "ty": 22
+                }
+              },
+              "name": "activated_sequence"
+            }
+          ],
+          "name": "CodeRegistry"
+        }
+      },
+      "root_key": "0x00000000",
+      "ty": 25
+    }
+  },
+  "types": [
+    {
+      "id": 0,
+      "type": {
+        "def": {
+          "composite": {
+            "fields": [
+              {
+                "type": 1,
+                "typeName": "[u8; 32]"
+              }
+            ]
+          }
+        },
+        "path": [
+          "ink_primitives",
+          "types",
+          "AccountId"
+        ]
+      }
+    },
+    {
+      "id": 1,
+      "type": {
+        "def": {
+          "array": {
+            "len": 32,
+            "type": 2
+          }
+        }
+      }
+    },
+    {
+      "id": 2,
+      "type": {
+        "def": {
+          "primitive": "u8"
+        }
+      }
+    },
+    {
+      "id": 3,
+      "type": {
+        "def": {
+          "primitive": "u32"
+        }
+      }
+    },
+    {
+      "id": 4,
+      "type": {
+        "def": {
+          "primitive": "u64"
+        }
+      }
+    },
+    {
+      "id": 5,
+      "type": {
+        "def": {
+          "composite": {}
+        },
+        "params": [
+          {
+            "name": "K",
+            "type": 6
+          },
+          {
+            "name": "V",
+            "type": 9
+          },
+          {
+            "name": "KeyType",
+            "type": 10
+          }
+        ],
+        "path": [
+          "ink_storage",
+          "lazy",
+          "mapping",
+          "Mapping"
+        ]
+      }
+    },
+    {
+      "id": 6,
+      "type": {
+        "def": {
+          "tuple": [
+            7,
+            8
+          ]
+        }
+      }
+    },
+    {
+      "id": 7,
+      "type": {
+        "def": {
+          "primitive": "u16"
+        }
+      }
+    },
+    {
+      "id": 8,
+      "type": {
+        "def": {
+          "composite": {
+            "fields": [
+              {
+                "type": 1,
+                "typeName": "[u8; 32]"
+              }
+            ]
+          }
+        },
+        "path": [
+          "ink_primitives",
+          "types",
+          "Hash"
+        ]
+      }
+    },
+    {
+      "id": 9,
+      "type": {
+        "def": {
+          "composite": {
+            "fields": [
+              {
+                "name": "proposed_at",
+                "type": 3,
+                "typeName": "BlockNumber"
+              },
+              {
+                "name": "sequence",
+                "type": 4,
+                "typeName": "u64"
+              }
+            ]
+          }
+        },
+        "path": [
+          "code_registry",
+          "code_registry",
+          "Proposal"
+        ]
+      }
+    },
+    {
+      "id": 10,
+      "type": {
+        "def": {
+          "composite": {}
+        },
+        "params": [
+          {
+            "name": "L",
+            "type": 11
+          },
+          {
+            "name": "R",
+            "type": 12
+          }
+        ],
+        "path": [
+          "ink_storage_traits",
+          "impls",
+          "ResolverKey"
+        ]
+      }
+    },
+    {
+      "id": 11,
+      "type": {
+        "def": {
+          "composite": {}
+        },
+        "path": [
+          "ink_storage_traits",
+          "impls",
+          "AutoKey"
+        ]
+      }
+    },
+    {
+      "id": 12,
+      "type": {
+        "def": {
+          "composite": {}
+        },
+        "params": [
+          {
+            "name": "ParentKey",
+            "type": 13
+          }
+        ],
+        "path": [
+          "ink_storage_traits",
+          "impls",
+          "ManualKey"
+        ]
+      }
+    },
+    {
+      "id": 13,
+      "type": {
+        "def": {
+          "tuple": []
+        }
+      }
+    },
+    {
+      "id": 14,
+      "type": {
+        "def": {
+          "composite": {}
+        },
+        "params": [
+          {
+            "name": "K",
+            "type": 7
+          },
+          {
+            "name": "V",
+            "type": 15
+          },
+          {
+            "name": "KeyType",
+            "type": 16
+          }
+        ],
+        "path": [
+          "ink_storage",
+          "lazy",
+          "mapping",
+          "Mapping"
+        ]
+      }
+    },
+    {
+      "id": 15,
+      "type": {
+        "def": {
+          "composite": {
+            "fields": [
+              {
+                "name": "code_hash",
+                "type": 8,
+                "typeName": "Hash"
+              },
+              {
+                "name": "since",
+                "type": 3,
+                "typeName": "BlockNumber"
+              }
+            ]
+          }
+        },
+        "path": [
+          "code_registry",
+          "code_registry",
+          "CurrentCode"
+        ]
+      }
+    },
+    {
+      "id": 16,
+      "type": {
+        "def": {
+          "composite": {}
+        },
+        "params": [
+          {
+            "name": "L",
+            "type": 11
+          },
+          {
+            "name": "R",
+            "type": 17
+          }
+        ],
+        "path": [
+          "ink_storage_traits",
+          "impls",
+          "ResolverKey"
+        ]
+      }
+    },
+    {
+      "id": 17,
+      "type": {
+        "def": {
+          "composite": {}
+        },
+        "params": [
+          {
+            "name": "ParentKey",
+            "type": 13
+          }
+        ],
+        "path": [
+          "ink_storage_traits",
+          "impls",
+          "ManualKey"
+        ]
+      }
+    },
+    {
+      "id": 18,
+      "type": {
+        "def": {
+          "primitive": "bool"
+        }
+      }
+    },
+    {
+      "id": 19,
+      "type": {
+        "def": {
+          "composite": {}
+        },
+        "params": [
+          {
+            "name": "K",
+            "type": 6
+          },
+          {
+            "name": "V",
+            "type": 18
+          },
+          {
+            "name": "KeyType",
+            "type": 20
+          }
+        ],
+        "path": [
+          "ink_storage",
+          "lazy",
+          "mapping",
+          "Mapping"
+        ]
+      }
+    },
+    {
+      "id": 20,
+      "type": {
+        "def": {
+          "composite": {}
+        },
+        "params": [
+          {
+            "name": "L",
+            "type": 11
+          },
+          {
+            "name": "R",
+            "type": 21
+          }
+        ],
+        "path": [
+          "ink_storage_traits",
+          "impls",
+          "ResolverKey"
+        ]
+      }
+    },
+    {
+      "id": 21,
+      "type": {
+        "def": {
+          "composite": {}
+        },
+        "params": [
+          {
+            "name": "ParentKey",
+            "type": 13
+          }
+        ],
+        "path": [
+          "ink_storage_traits",
+          "impls",
+          "ManualKey"
+        ]
+      }
+    },
+    {
+      "id": 22,
+      "type": {
+        "def": {
+          "composite": {}
+        },
+        "params": [
+          {
+            "name": "K",
+            "type": 7
+          },
+          {
+            "name": "V",
+            "type": 4
+          },
+          {
+            "name": "KeyType",
+            "type": 23
+          }
+        ],
+        "path": [
+          "ink_storage",
+          "lazy",
+          "mapping",
+          "Mapping"
+        ]
+      }
+    },
+    {
+      "id": 23,
+      "type": {
+        "def": {
+          "composite": {}
+        },
+        "params": [
+          {
+            "name": "L",
+            "type": 11
+          },
+          {
+            "name": "R",
+            "type": 24
+          }
+        ],
+        "path": [
+          "ink_storage_traits",
+          "impls",
+          "ResolverKey"
+        ]
+      }
+    },
+    {
+      "id": 24,
+      "type": {
+        "def": {
+          "composite": {}
+        },
+        "params": [
+          {
+            "name": "ParentKey",
+            "type": 13
+          }
+        ],
+        "path": [
+          "ink_storage_traits",
+          "impls",
+          "ManualKey"
+        ]
+      }
+    },
+    {
+      "id": 25,
+      "type": {
+        "def": {
+          "composite": {
+            "fields": [
+              {
+                "name": "owner",
+                "type": 0,
+                "typeName": "<AccountId as::ink::storage::traits::AutoStorableHint<::ink::\nstorage::traits::ManualKey<1378084960u32, ()>,>>::Type"
+              },
+              {
+                "name": "guardian",
+                "type": 0,
+                "typeName": "<AccountId as::ink::storage::traits::AutoStorableHint<::ink::\nstorage::traits::ManualKey<1817765575u32, ()>,>>::Type"
+              },
+              {
+                "name": "upgrade_delay",
+                "type": 3,
+                "typeName": "<BlockNumber as::ink::storage::traits::AutoStorableHint<::ink::\nstorage::traits::ManualKey<1952966638u32, ()>,>>::Type"
+              },
+              {
+                "name": "force_delay",
+                "type": 3,
+                "typeName": "<BlockNumber as::ink::storage::traits::AutoStorableHint<::ink::\nstorage::traits::ManualKey<4217818239u32, ()>,>>::Type"
+              },
+              {
+                "name": "proposals",
+                "type": 5,
+                "typeName": "<Mapping<(CodeKind, Hash), Proposal> as::ink::storage::traits::\nAutoStorableHint<::ink::storage::traits::ManualKey<2140847026u32,\n()>,>>::Type"
+              },
+              {
+                "name": "current",
+                "type": 14,
+                "typeName": "<Mapping<CodeKind, CurrentCode> as::ink::storage::traits::\nAutoStorableHint<::ink::storage::traits::ManualKey<3843289049u32,\n()>,>>::Type"
+              },
+              {
+                "name": "revoked",
+                "type": 19,
+                "typeName": "<Mapping<(CodeKind, Hash), bool> as::ink::storage::traits::\nAutoStorableHint<::ink::storage::traits::ManualKey<672255560u32, ()\n>,>>::Type"
+              },
+              {
+                "name": "pending_role_change",
+                "type": 26,
+                "typeName": "<Option<RoleChange> as::ink::storage::traits::AutoStorableHint<\n::ink::storage::traits::ManualKey<2194449508u32, ()>,>>::Type"
+              },
+              {
+                "name": "last_sequence",
+                "type": 4,
+                "typeName": "<u64 as::ink::storage::traits::AutoStorableHint<::ink::storage\n::traits::ManualKey<1679373648u32, ()>,>>::Type"
+              },
+              {
+                "name": "activated_sequence",
+                "type": 22,
+                "typeName": "<Mapping<CodeKind, u64> as::ink::storage::traits::AutoStorableHint\n<::ink::storage::traits::ManualKey<4164875675u32, ()>,>>::Type"
+              }
+            ]
+          }
+        },
+        "path": [
+          "code_registry",
+          "code_registry",
+          "CodeRegistry"
+        ]
+      }
+    },
+    {
+      "id": 26,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "index": 0,
+                "name": "None"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 27
+                  }
+                ],
+                "index": 1,
+                "name": "Some"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 27
+          }
+        ],
+        "path": [
+          "Option"
+        ]
+      }
+    },
+    {
+      "id": 27,
+      "type": {
+        "def": {
+          "composite": {
+            "fields": [
+              {
+                "name": "role",
+                "type": 28,
+                "typeName": "Role"
+              },
+              {
+                "name": "account",
+                "type": 0,
+                "typeName": "AccountId"
+              },
+              {
+                "name": "proposed_at",
+                "type": 3,
+                "typeName": "BlockNumber"
+              }
+            ]
+          }
+        },
+        "path": [
+          "code_registry",
+          "code_registry",
+          "RoleChange"
+        ]
+      }
+    },
+    {
+      "id": 28,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "index": 0,
+                "name": "Owner"
+              },
+              {
+                "index": 1,
+                "name": "Guardian"
+              }
+            ]
+          }
+        },
+        "path": [
+          "code_registry",
+          "code_registry",
+          "Role"
+        ]
+      }
+    },
+    {
+      "id": 29,
+      "type": {
+        "def": {
+          "sequence": {
+            "type": 6
+          }
+        }
+      }
+    },
+    {
+      "id": 30,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 13
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 31
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 13
+          },
+          {
+            "name": "E",
+            "type": 31
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 31,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "index": 1,
+                "name": "CouldNotReadInput"
+              }
+            ]
+          }
+        },
+        "path": [
+          "ink_primitives",
+          "LangError"
+        ]
+      }
+    },
+    {
+      "id": 32,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 33
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 31
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 33
+          },
+          {
+            "name": "E",
+            "type": 31
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 33,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 13
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 34
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 13
+          },
+          {
+            "name": "E",
+            "type": 34
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 34,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "index": 0,
+                "name": "Unauthorized"
+              },
+              {
+                "index": 1,
+                "name": "AlreadyProposed"
+              },
+              {
+                "index": 2,
+                "name": "AlreadyCurrent"
+              },
+              {
+                "index": 3,
+                "name": "CodeRevoked"
+              },
+              {
+                "index": 4,
+                "name": "ProposalNotFound"
+              },
+              {
+                "index": 5,
+                "name": "DelayNotElapsed"
+              },
+              {
+                "index": 6,
+                "name": "NoPendingRoleChange"
+              },
+              {
+                "index": 7,
+                "name": "RolesMustDiffer"
+              },
+              {
+                "index": 8,
+                "name": "Superseded"
+              },
+              {
+                "index": 9,
+                "name": "Overflow"
+              }
+            ]
+          }
+        },
+        "path": [
+          "code_registry",
+          "code_registry",
+          "Error"
+        ]
+      }
+    },
+    {
+      "id": 35,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 36
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 31
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 36
+          },
+          {
+            "name": "E",
+            "type": 31
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 36,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "index": 0,
+                "name": "None"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 15
+                  }
+                ],
+                "index": 1,
+                "name": "Some"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 15
+          }
+        ],
+        "path": [
+          "Option"
+        ]
+      }
+    },
+    {
+      "id": 37,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 18
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 31
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 18
+          },
+          {
+            "name": "E",
+            "type": 31
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 38,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 39
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 31
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 39
+          },
+          {
+            "name": "E",
+            "type": 31
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 39,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "index": 0,
+                "name": "None"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 8
+                  }
+                ],
+                "index": 1,
+                "name": "Some"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 8
+          }
+        ],
+        "path": [
+          "Option"
+        ]
+      }
+    },
+    {
+      "id": 40,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 41
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 31
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 41
+          },
+          {
+            "name": "E",
+            "type": 31
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 41,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "index": 0,
+                "name": "None"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 9
+                  }
+                ],
+                "index": 1,
+                "name": "Some"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 9
+          }
+        ],
+        "path": [
+          "Option"
+        ]
+      }
+    },
+    {
+      "id": 42,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 43
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 31
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 43
+          },
+          {
+            "name": "E",
+            "type": 31
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 43,
+      "type": {
+        "def": {
+          "tuple": [
+            3,
+            3
+          ]
+        }
+      }
+    },
+    {
+      "id": 44,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 0
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 31
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 0
+          },
+          {
+            "name": "E",
+            "type": 31
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 45,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 26
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 31
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 26
+          },
+          {
+            "name": "E",
+            "type": 31
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 46,
+      "type": {
+        "def": {
+          "variant": {}
+        },
+        "path": [
+          "otc_shared",
+          "chain_extension",
+          "SubtensorExtension"
+        ]
+      }
+    }
+  ],
+  "version": 5
+}

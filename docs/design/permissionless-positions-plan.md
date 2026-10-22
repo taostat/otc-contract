@@ -26,9 +26,9 @@ Every PR must pass the following before review:
 
 **Testing seam.** ink!'s off-chain test environment can't call other contracts, instantiate contracts, or run `set_code_hash` or `code_hash`. Every such call goes through a small private helper with a `#[cfg(test)]` stand-in, so unit tests cover the message logic. Localnet integration tests cover the real calls.
 
-**Upgrade-safe storage.** The root storage struct holds only fields that never change shape. Everything else lives in a `Mapping` or `Lazy` with an explicit key. Each contract stores `version: u16`, and new code runs `migrate()` before doing anything else when the stored version is older.
+**Upgrade-safe storage.** The root storage struct holds only fields that never change shape. Everything else lives in a `Mapping` or `Lazy` with an explicit key. Each contract stores `version: u16`, and new code runs `migrate()` before doing anything else when the stored version is older. Code never migrates downwards, and older code ignores storage added after it, so rolling back after a storage change means shipping new code with a higher version that restores the old behaviour, never re-proposing the old code.
 
-**Measured amounts.** On the current runtime a stake transfer can deliver a rao or two less than requested, and moving the requested amount afterwards fails with `NotEnoughStakeToWithdraw`. Contracts record the stake they actually hold after each transfer and move measured amounts, never requested ones.
+**Measured amounts.** On the current runtime a stake transfer can deliver a rao or two less than requested, and moving the requested amount afterwards fails with `NotEnoughStakeToWithdraw`. A recipient that already holds a position on the hotkey can also gain a rao more, so verification accepts deltas within `TRANSFER_TOLERANCE` either way. Contracts record the stake they actually hold after each transfer and move measured amounts, never requested ones.
 
 **Fund invariant.** A position contract only sends Alpha or TAO to its owner, to a buyer who paid in the same call, or to an escrow it creates in the same call. Each PR that touches a position includes a test for this.
 
@@ -127,7 +127,8 @@ Kinds are plain `u16` ids defined in `otc-shared` (`LISTING_VAULT = 1`, `ESCROW 
 
 | Message | Caller | Rule |
 |---|---|---|
-| `claim()` | anyone | After unlock; not claimed; no pending beneficiary; stake > 0. Transfers all stake on `hotkey` to the beneficiary; traps if more than the tolerance remains; terminates, sending any TAO to the beneficiary. |
+| `claim()` | anyone | After unlock; no pending beneficiary; stake > 0. Transfers all stake on `hotkey` to the beneficiary; traps if the transfer fails verification. Never terminates, and can run again when more stake reaches `hotkey`, for example after `resync_hotkey`. Sets `claimed`. |
+| `close()` | beneficiary | No pending beneficiary; no stake on `hotkey`. Terminates, sending the TAO balance and the storage deposit to the beneficiary. |
 | `sweep_tao()` | anyone | No pending beneficiary; balance > 0. Sends the whole balance to the beneficiary. Never terminates and never sets `claimed`. |
 | `resync_hotkey(hk)` | anyone | `hk != hotkey` and stake on `hk` is greater than stake on `hotkey` (a missing stake entry counts as 0). |
 | `propose_beneficiary`, `accept_beneficiary`, `cancel_beneficiary_proposal` | as in PR 1 | |
@@ -149,6 +150,17 @@ Kinds are plain `u16` ids defined in `otc-shared` (`LISTING_VAULT = 1`, `ESCROW 
   - `swap_hotkey`, then `resync_hotkey`, then claim;
   - an upgrade by the beneficiary, and a forced upgrade after `force_delay` (short delays on localnet).
 
+**As built**
+
+- `claim` does not terminate, and the beneficiary closes the escrow with `close`. In the first version, claim terminated, which let anyone strand stake after a hotkey swap: donate a little on the old hotkey and claim before anyone resyncs. The design doc's termination rule now covers vaults too.
+- The beneficiary field keeps its storage name `buyer`, and `get_buyer` stays next to `get_beneficiary`.
+- The escrow's `Error` enum is flat. The upgrade and registry failures are their own variants (`NoCurrentCode`, `NotCurrentCode`, `ConsentRequired`, `ForceDelayNotElapsed`, `RegistryQueryFailed`, `CodeUpgradeFailed`) rather than a wrapped `UpgradeError`. A variant that carries data trips the `cast_possible_truncation` lint that `cargo contract build` enforces.
+- Seams: `registry_code` reads `current` and `force_target` from the registry, `install_code` runs `set_code_hash`, and `transfer_tao` sends TAO, because the off-chain engine models balances as `u128` and the escrow's are `u64`.
+- The chain-extension mock is shared, as `otc_shared::testing::MockSubtensor`, behind otc-shared's `testing` feature, which contracts enable from their dev-dependencies. It also covers `transfer_stake_verified`.
+- The upgrade target on localnet is the escrow built with `--features upgrade-test`, which only bumps `STORAGE_VERSION` to 2. `npm run build:contracts` builds it into `target/upgrade-test/`. The escrow tests deploy their own registry, which offers it as the current escrow code.
+- A forced upgrade can't succeed on localnet with a release registry, since `MIN_DELAY` is 7,200 blocks. The localnet tests check that a third party is refused with `ForceDelayNotElapsed` before the delay and with `ConsentRequired` under `ConsentOnly`; unit tests cover the forced path itself. The full forced drill moves to PR 6, which runs against a `short-delays` registry.
+- Third-party claims and the beneficiary change were already covered by PR 1's integration tests, which keep running against escrow v2.
+
 ## PR 4: Listing vault and `lockup_listings` v2
 
 ### `contracts/listing_vault`
@@ -162,9 +174,10 @@ Kinds are plain `u16` ids defined in `otc-shared` (`LISTING_VAULT = 1`, `ESCROW 
 | Message | Caller | Rule |
 |---|---|---|
 | `activate()` | seller | Pending only. Stake on `hotkey` must be within the transfer tolerance of the requested amount; `total` and `remaining` record the measured stake. Best-effort `move_stake` of that amount to `validator_hotkey(netuid)`, re-measured afterwards. Status becomes Open. |
-| `take(amount, recipient)` payable | anyone | Open; factory not paused; `min_purchase <= amount <= remaining`; the remainder is 0 or at least `BITTENSOR_MIN_STAKE`; price = spot × (10000 + offset) / 10000, rejected below `min_price`; value must cover price × amount plus the fee. Spot listings transfer to `recipient`. Lockup listings instantiate an escrow from the registry's current `ESCROW` code (salt = vault address + purchase counter) and transfer into it. Pays the seller and the fee recipient and refunds the excess. On the final fill, status becomes Closed, and the vault terminates if its stake is 0 after the transfer. |
-| `cancel()` | seller | Not Closed; `now >= cancellable_after`. Status becomes Closed. Tries to transfer all stake to the seller; if that fails the listing still closes. Terminates only if the transfer succeeded and the stake is 0. |
-| `sweep_stake()` | anyone | Sends stake above `remaining` to the seller (all of it once Closed). Terminates when Closed and the stake reaches 0 in this call. |
+| `take(amount, recipient)` payable | anyone | Open; factory not paused; `min_purchase <= amount <= remaining`; the remainder is 0 or at least `BITTENSOR_MIN_STAKE`; price = spot × (10000 + offset) / 10000, rejected below `min_price`; value must cover price × amount plus the fee. Spot listings transfer to `recipient`. Lockup listings instantiate an escrow from the registry's current `ESCROW` code (salt = vault address + purchase counter) and transfer into it. Pays the seller and the fee recipient and refunds the excess. On the final fill, status becomes Closed. Never terminates. |
+| `cancel()` | seller | Not Closed; `now >= cancellable_after`. Status becomes Closed. Tries to transfer all stake to the seller; if that fails the listing still closes. Never terminates. |
+| `sweep_stake()` | anyone | Sends stake above `remaining` to the seller (all of it once Closed). Never terminates. |
+| `close()` | seller | Closed; no stake on `hotkey`. Terminates, sending the TAO balance and the storage deposit to the seller. |
 | `sweep_tao()` | anyone | Sends the whole balance to the seller. Never terminates. |
 | `resync_hotkey(hk)` | anyone | Same rule as the escrow. |
 | `consolidate()` | anyone | Open; `validator_hotkey(netuid) != hotkey`; moves all stake there with verified deltas. |

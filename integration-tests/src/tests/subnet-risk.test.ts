@@ -26,6 +26,7 @@ import {
     getStakeBalance,
     formatStakeAmount,
 } from "../utils/stake-helpers";
+import { withIntegrationGas } from "../test-helpers";
 
 const TRANSFER_TOLERANCE = 10n; // Matches contract tolerance (rao)
 
@@ -123,7 +124,7 @@ describe("Subnet Risk Controls", () => {
     const listAlphaForCharlie = async (amount: bigint, priceOffsetBps: number = MARKET_PRICE) => {
         const { accounts } = context;
 
-        const listTx = contract.send("list_alpha", {
+        const listTx = contract.send("list_alpha", withIntegrationGas({
             origin: accounts.charlie.address,
             data: {
                 hotkey: charlieHotkey.address,
@@ -131,7 +132,7 @@ describe("Subnet Risk Controls", () => {
                 amount,
                 price_offset_bps: priceOffsetBps,
             },
-        });
+        }));
 
         const result = await listTx.signAndSubmit(accounts.charlie.signer);
         if (!result.ok) {
@@ -192,14 +193,14 @@ describe("Subnet Risk Controls", () => {
         expect(reservedAfterListing).toBeGreaterThanOrEqual(listingAmount - TRANSFER_TOLERANCE);
         expect(reservedAfterListing).toBeLessThanOrEqual(listingAmount + TRANSFER_TOLERANCE);
 
-        const forceTx = contract.send("force_cancel_alpha_listing", {
+        const forceTx = contract.send("force_cancel_alpha_listing", withIntegrationGas({
             origin: accounts.alice.address,
             data: {
                 netuid,
                 seller: accounts.charlie.address,
                 listing_id: BigInt(listingId),
             },
-        });
+        }));
 
         const forceResult = await forceTx.signAndSubmit(accounts.alice.signer);
         expect(forceResult.ok).toBe(true);
@@ -242,14 +243,14 @@ describe("Subnet Risk Controls", () => {
 
         const { listingId } = await listAlphaForCharlie(taoToRao(15), MARKET_PRICE);
 
-        const unauthorizedTx = contract.send("force_cancel_alpha_listing", {
+        const unauthorizedTx = contract.send("force_cancel_alpha_listing", withIntegrationGas({
             origin: accounts.charlie.address,
             data: {
                 netuid,
                 seller: accounts.charlie.address,
                 listing_id: BigInt(listingId),
             },
-        });
+        }));
 
         const unauthorizedResult = await unauthorizedTx.signAndSubmit(accounts.charlie.signer);
         expect(unauthorizedResult.ok).toBe(false);
@@ -263,14 +264,14 @@ describe("Subnet Risk Controls", () => {
         expect(listingsAfterFailure).toContain(listingId);
 
         // Clean up by cancelling as owner
-        const ownerCancelTx = contract.send("force_cancel_alpha_listing", {
+        const ownerCancelTx = contract.send("force_cancel_alpha_listing", withIntegrationGas({
             origin: accounts.alice.address,
             data: {
                 netuid,
                 seller: accounts.charlie.address,
                 listing_id: BigInt(listingId),
             },
-        });
+        }));
         const ownerCancelResult = await ownerCancelTx.signAndSubmit(accounts.alice.signer);
         expect(ownerCancelResult.ok).toBe(true);
         await waitForBlocks(context.api, 1);
@@ -283,14 +284,14 @@ describe("Subnet Risk Controls", () => {
 
         const { listingId, createdAt } = await listAlphaForCharlie(taoToRao(10), MARKET_PRICE);
 
-        const cancelTx = contract.send("force_cancel_alpha_listing", {
+        const cancelTx = contract.send("force_cancel_alpha_listing", withIntegrationGas({
             origin: accounts.alice.address,
             data: {
                 netuid,
                 seller: accounts.charlie.address,
                 listing_id: BigInt(listingId),
             },
-        });
+        }));
 
         const cancelResult = await cancelTx.signAndSubmit(accounts.alice.signer);
         expect(cancelResult.ok).toBe(true);
@@ -342,7 +343,7 @@ describe("Subnet Risk Controls", () => {
         const listingsBefore = await getUserListings();
         const reservedBefore = await fetchReservedAlpha();
 
-        const blockedTx = contract.send("list_alpha", {
+        const blockedTx = contract.send("list_alpha", withIntegrationGas({
             origin: accounts.charlie.address,
             data: {
                 hotkey: charlieHotkey.address,
@@ -350,7 +351,7 @@ describe("Subnet Risk Controls", () => {
                 amount: taoToRao(5),
                 price_offset_bps: MARKET_PRICE,
             },
-        });
+        }));
 
         const blockedResult = await blockedTx.signAndSubmit(accounts.charlie.signer);
         expect(blockedResult.ok).toBe(false);
@@ -390,14 +391,14 @@ describe("Subnet Risk Controls", () => {
         const { listingId } = await listAlphaForCharlie(taoToRao(8), MARKET_PRICE);
 
         // Clean up listing so later tests start fresh
-        const cleanupTx = contract.send("force_cancel_alpha_listing", {
+        const cleanupTx = contract.send("force_cancel_alpha_listing", withIntegrationGas({
             origin: accounts.alice.address,
             data: {
                 netuid,
                 seller: accounts.charlie.address,
                 listing_id: BigInt(listingId),
             },
-        });
+        }));
         const cleanupResult = await cleanupTx.signAndSubmit(accounts.alice.signer);
         expect(cleanupResult.ok).toBe(true);
         await waitForBlocks(context.api, 1);
@@ -426,14 +427,14 @@ describe("Subnet Risk Controls", () => {
 
         // Forced unwind of all active listings
         for (const listingId of listingsBefore) {
-            const cancelTx = contract.send("force_cancel_alpha_listing", {
+            const cancelTx = contract.send("force_cancel_alpha_listing", withIntegrationGas({
                 origin: accounts.alice.address,
                 data: {
                     netuid,
                     seller: accounts.charlie.address,
                     listing_id: BigInt(listingId),
                 },
-            });
+            }));
             const cancelResult = await cancelTx.signAndSubmit(accounts.alice.signer);
             expect(cancelResult.ok).toBe(true);
             await waitForBlocks(context.api, 1);
@@ -464,14 +465,14 @@ describe("Subnet Risk Controls", () => {
         const { listingId } = await listAlphaForCharlie(taoToRao(9), MARKET_PRICE);
 
         // Final cleanup
-        const finalCancelTx = contract.send("force_cancel_alpha_listing", {
+        const finalCancelTx = contract.send("force_cancel_alpha_listing", withIntegrationGas({
             origin: accounts.alice.address,
             data: {
                 netuid,
                 seller: accounts.charlie.address,
                 listing_id: BigInt(listingId),
             },
-        });
+        }));
         const finalCancelResult = await finalCancelTx.signAndSubmit(accounts.alice.signer);
         expect(finalCancelResult.ok).toBe(true);
         await waitForBlocks(context.api, 1);
