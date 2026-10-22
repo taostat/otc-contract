@@ -272,7 +272,11 @@ guardian() -> AccountId
 pending_role_change() -> Option<RoleChange>
 ```
 
-The registry tracks one current code hash per contract kind (`otc-shared` defines the kinds: listing vault, escrow, lockup factory and otc). The owner proposes a code hash. Once `upgrade_delay` blocks have passed, anyone can `activate` it, unless the guardian vetoed it first. Code that has been current for `force_delay` blocks becomes the `force_target`, which anyone may apply to positions that allow forced upgrades. The owner or the guardian can `revoke` a code hash, which clears it if it is current and blocks it from ever being proposed or activated again for that kind. Owner and guardian changes go through the same delay and guardian veto, and the two roles must always be different accounts. Both delays are fixed at deployment.
+The registry tracks one current code hash per contract kind (`otc-shared` defines the kinds: listing vault, escrow, lockup factory and otc). The owner proposes a code hash. Once `upgrade_delay` blocks have passed, anyone can `activate` it, unless the guardian vetoed it first. Proposals are numbered, and only a proposal newer than the kind's last activated one can be activated, so a stale proposal can never roll the code back; rolling back on purpose means proposing the old code again. Code that has been current for `force_delay` blocks becomes the `force_target`, which anyone may apply to positions that allow forced upgrades. The owner or the guardian can `revoke` a code hash, which clears it if it is current and blocks it from ever being proposed or activated again for that kind.
+
+Owner and guardian changes go through the same delay and guardian veto, and the two roles must always be different accounts. Both delays are fixed at deployment and must be at least `MIN_DELAY` (7,200 blocks, about a day). Build with `--features short-delays` only for localnet tests, which need shorter delays.
+
+Both roles should be multisigs. A compromised key can stall upgrades but cannot move funds: a rogue owner can only propose code that the guardian then has to veto or revoke, and a rogue guardian can veto every proposal, including its own replacement. The registry has no way to recover from either. Recovering means deploying a new registry and new factories, and positions bound to the old registry keep their current code.
 
 ## Owner Controls
 
