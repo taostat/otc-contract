@@ -1,6 +1,6 @@
 {
   "source": {
-    "hash": "0xf6d72ab255c27ad6db566c02abd09001e6c5441dc8ca51f393f7598b098e6f8f",
+    "hash": "0xcf7958b7048e0999a807b505c841cc2784c9b0521e2681d5e45254ea5c0b37a7",
     "language": "ink! 5.1.1",
     "compiler": "rustc 1.89.0",
     "build_info": {
@@ -50,6 +50,15 @@
                 "Hash"
               ],
               "type": 28
+            }
+          },
+          {
+            "label": "registry",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
             }
           },
           {
@@ -136,7 +145,7 @@
         "displayName": [
           "ChainExtension"
         ],
-        "type": 54
+        "type": 58
       },
       "hash": {
         "displayName": [
@@ -314,6 +323,486 @@
         "label": "BeneficiaryTransferred",
         "module_path": "alpha_lockup::alpha_lockup",
         "signature_topic": "0xa8b0cfcc2435f490ef0ce7be9c36a671cb2f6fc0610e7c89be015b735509db24"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "beneficiary",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "tao_balance",
+            "type": {
+              "displayName": [
+                "Balance"
+              ],
+              "type": 0
+            }
+          }
+        ],
+        "docs": [
+          "Event emitted when the beneficiary closes the escrow"
+        ],
+        "label": "EscrowClosed",
+        "module_path": "alpha_lockup::alpha_lockup",
+        "signature_topic": "0xd89cad1e3758e604f130db0a81079a5041711ee7e348b817860735477e5c4517"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "beneficiary",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "initiated_by",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "amount",
+            "type": {
+              "displayName": [
+                "Balance"
+              ],
+              "type": 0
+            }
+          }
+        ],
+        "docs": [
+          "Event emitted when the escrow's TAO balance is sent to the beneficiary"
+        ],
+        "label": "TaoSwept",
+        "module_path": "alpha_lockup::alpha_lockup",
+        "signature_topic": "0xffc83658b8556616ae18d6071f1e37c10fce38e2c3cca12fb3e96d171cdedb5b"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "old_hotkey",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "new_hotkey",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "initiated_by",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "new_hotkey_stake",
+            "type": {
+              "displayName": [
+                "AlphaAmount"
+              ],
+              "type": 0
+            }
+          }
+        ],
+        "docs": [
+          "Event emitted when the escrow follows its stake to another hotkey"
+        ],
+        "label": "HotkeyResynced",
+        "module_path": "alpha_lockup::alpha_lockup",
+        "signature_topic": "0x1f6a05115faf2230ea59c7e181eb3704d16bd8f9a3c35263c0253c25b3ecb792"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "code_hash",
+            "type": {
+              "displayName": [
+                "Hash"
+              ],
+              "type": 28
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "initiated_by",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          }
+        ],
+        "docs": [
+          "Event emitted when the escrow installs new code"
+        ],
+        "label": "Upgraded",
+        "module_path": "alpha_lockup::alpha_lockup",
+        "signature_topic": "0xf948c495403d7387e6f1f54500e0e501588d596b53989c6fc8859c2c6f58fbf0"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "beneficiary",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "policy",
+            "type": {
+              "displayName": [
+                "UpgradePolicy"
+              ],
+              "type": 54
+            }
+          }
+        ],
+        "docs": [
+          "Event emitted when the beneficiary changes who may upgrade the escrow"
+        ],
+        "label": "UpgradePolicyChanged",
+        "module_path": "alpha_lockup::alpha_lockup",
+        "signature_topic": "0xcdc998b3b364356a7bf35e0b542fc5c04520623c33a9e8e92c18289dde90ba93"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "kind",
+            "type": {
+              "displayName": [
+                "CodeKind"
+              ],
+              "type": 1
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "code_hash",
+            "type": {
+              "displayName": [
+                "Hash"
+              ],
+              "type": 28
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "activates_at",
+            "type": {
+              "displayName": [
+                "BlockNumber"
+              ],
+              "type": 6
+            }
+          }
+        ],
+        "docs": [],
+        "label": "CodeProposed",
+        "module_path": "code_registry::code_registry",
+        "signature_topic": "0xaf5d48c20412e9396c5f015a47f95fabb89ef1b58ce2477ce14f787d6f0f68eb"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "kind",
+            "type": {
+              "displayName": [
+                "CodeKind"
+              ],
+              "type": 1
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "code_hash",
+            "type": {
+              "displayName": [
+                "Hash"
+              ],
+              "type": 28
+            }
+          }
+        ],
+        "docs": [],
+        "label": "CodeVetoed",
+        "module_path": "code_registry::code_registry",
+        "signature_topic": "0x6a035b30f2dd1c3f5b9c79b36954b91f33f35f647486120f2bc1a880f574ea9e"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "kind",
+            "type": {
+              "displayName": [
+                "CodeKind"
+              ],
+              "type": 1
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "code_hash",
+            "type": {
+              "displayName": [
+                "Hash"
+              ],
+              "type": 28
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "previous",
+            "type": {
+              "displayName": [
+                "Option"
+              ],
+              "type": 55
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "activated_by",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          }
+        ],
+        "docs": [],
+        "label": "CodeActivated",
+        "module_path": "code_registry::code_registry",
+        "signature_topic": "0xf12a377c5c944ef14c6e22ee515657efe78f273649dc3a9843808e6e53e4ede2"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "kind",
+            "type": {
+              "displayName": [
+                "CodeKind"
+              ],
+              "type": 1
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "code_hash",
+            "type": {
+              "displayName": [
+                "Hash"
+              ],
+              "type": 28
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "revoked_by",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "was_current",
+            "type": {
+              "displayName": [
+                "bool"
+              ],
+              "type": 56
+            }
+          }
+        ],
+        "docs": [],
+        "label": "CodeRevoked",
+        "module_path": "code_registry::code_registry",
+        "signature_topic": "0x44bc476a161a1e96e625187859cca03b7a154835f04b117230871ccb432bf025"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "role",
+            "type": {
+              "displayName": [
+                "Role"
+              ],
+              "type": 57
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "account",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "executable_at",
+            "type": {
+              "displayName": [
+                "BlockNumber"
+              ],
+              "type": 6
+            }
+          }
+        ],
+        "docs": [],
+        "label": "RoleChangeProposed",
+        "module_path": "code_registry::code_registry",
+        "signature_topic": "0xd67c860be027cabda996d3450f58fb1c384010d8ac2042a5bffce6cd584f6d94"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "role",
+            "type": {
+              "displayName": [
+                "Role"
+              ],
+              "type": 57
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "account",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          }
+        ],
+        "docs": [],
+        "label": "RoleChangeVetoed",
+        "module_path": "code_registry::code_registry",
+        "signature_topic": "0xc9899c72e7b1c4e873e6d59943adb6018c09feed9e117ce2d20a078ac4f89e8b"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "role",
+            "type": {
+              "displayName": [
+                "Role"
+              ],
+              "type": 57
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "old_account",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "new_account",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          }
+        ],
+        "docs": [],
+        "label": "RoleChanged",
+        "module_path": "code_registry::code_registry",
+        "signature_topic": "0xb00d0c5d20113a679ea27014ce78036c7e92b7207ff9ecd9a3fb333254ddd143"
       },
       {
         "args": [
@@ -1387,6 +1876,22 @@
         "args": [],
         "default": false,
         "docs": [],
+        "label": "get_registry",
+        "mutates": false,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 44
+        },
+        "selector": "0x15a5d20a"
+      },
+      {
+        "args": [],
+        "default": false,
+        "docs": [],
         "label": "get_escrow_code_hash",
         "mutates": false,
         "payable": false,
@@ -2007,6 +2512,15 @@
                 }
               },
               "name": "escrow_code_hash"
+            },
+            {
+              "layout": {
+                "leaf": {
+                  "key": "0x00000000",
+                  "ty": 2
+                }
+              },
+              "name": "registry"
             },
             {
               "layout": {
@@ -2672,6 +3186,11 @@
                 "name": "escrow_code_hash",
                 "type": 28,
                 "typeName": "<Hash as::ink::storage::traits::AutoStorableHint<::ink::storage\n::traits::ManualKey<1178659921u32, ()>,>>::Type"
+              },
+              {
+                "name": "registry",
+                "type": 2,
+                "typeName": "<AccountId as::ink::storage::traits::AutoStorableHint<::ink::\nstorage::traits::ManualKey<1398072330u32, ()>,>>::Type"
               },
               {
                 "name": "fee_rate",
@@ -3633,6 +4152,95 @@
     },
     {
       "id": 54,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "index": 0,
+                "name": "Auto"
+              },
+              {
+                "index": 1,
+                "name": "ConsentOnly"
+              }
+            ]
+          }
+        },
+        "path": [
+          "otc_shared",
+          "upgrade",
+          "UpgradePolicy"
+        ]
+      }
+    },
+    {
+      "id": 55,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "index": 0,
+                "name": "None"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 28
+                  }
+                ],
+                "index": 1,
+                "name": "Some"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 28
+          }
+        ],
+        "path": [
+          "Option"
+        ]
+      }
+    },
+    {
+      "id": 56,
+      "type": {
+        "def": {
+          "primitive": "bool"
+        }
+      }
+    },
+    {
+      "id": 57,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "index": 0,
+                "name": "Owner"
+              },
+              {
+                "index": 1,
+                "name": "Guardian"
+              }
+            ]
+          }
+        },
+        "path": [
+          "code_registry",
+          "code_registry",
+          "Role"
+        ]
+      }
+    },
+    {
+      "id": 58,
       "type": {
         "def": {
           "variant": {}

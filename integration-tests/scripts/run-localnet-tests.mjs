@@ -32,6 +32,7 @@ const DEFAULT_TEST_FILES = [
   "src/lockup-listings/claim.test.ts",
   "src/lockup-listings/create-listing.test.ts",
   "src/lockup-listings/deployment.test.ts",
+  "src/lockup-listings/escrow.test.ts",
   "src/lockup-listings/pause.test.ts",
   "src/lockup-listings/take-listing.test.ts",
   "src/tests/alpha-listing.test.ts",
