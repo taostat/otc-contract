@@ -58,6 +58,9 @@ mod lockup_listings {
         /// Code hash of the alpha_lockup escrow contract
         pub escrow_code_hash: Hash,
 
+        /// Code registry that approves escrow upgrades; passed to every new escrow
+        pub registry: AccountId,
+
         /// Fee rate charged on trades (as decimal, e.g., 0.005 = 0.5%)
         pub fee_rate: FixedDecimal,
 
@@ -84,6 +87,7 @@ mod lockup_listings {
             owner: AccountId,
             hotkey: AccountId,
             escrow_code_hash: Hash,
+            registry: AccountId,
             fee_rate: u128,
             min_listing_amount: AlphaAmount,
             min_purchase_amount: AlphaAmount,
@@ -102,6 +106,7 @@ mod lockup_listings {
                 owner,
                 hotkey,
                 escrow_code_hash,
+                registry,
                 fee_rate,
                 min_listing_amount,
                 min_purchase_amount,
@@ -345,11 +350,18 @@ mod lockup_listings {
             // Instantiate escrow contract
             let escrow_salt = Self::generate_escrow_salt(listing_id, purchase_id);
 
-            let escrow = AlphaLockupRef::new(buyer, netuid, amount, unlock_block, self.hotkey)
-                .code_hash(self.escrow_code_hash)
-                .endowment(0)
-                .salt_bytes(escrow_salt)
-                .instantiate();
+            let escrow = AlphaLockupRef::new(
+                buyer,
+                netuid,
+                amount,
+                unlock_block,
+                self.hotkey,
+                self.registry,
+            )
+            .code_hash(self.escrow_code_hash)
+            .endowment(0)
+            .salt_bytes(escrow_salt)
+            .instantiate();
 
             let escrow_account = escrow.account_id();
             let contract_account = self.env().account_id();
@@ -543,6 +555,11 @@ mod lockup_listings {
         #[ink(message)]
         pub fn get_fee_rate(&self) -> FixedDecimal {
             self.fee_rate
+        }
+
+        #[ink(message)]
+        pub fn get_registry(&self) -> AccountId {
+            self.registry
         }
 
         #[ink(message)]
@@ -1003,6 +1020,7 @@ mod lockup_listings {
                 accounts.alice, // owner
                 accounts.bob,   // hotkey
                 escrow_code_hash,
+                accounts.django, // registry
                 fee_rate,
                 1_000_000_000, // min_listing_amount (1 Alpha)
                 100_000_000,   // min_purchase_amount (0.1 Alpha)
