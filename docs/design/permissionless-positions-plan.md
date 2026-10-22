@@ -136,6 +136,8 @@ Kinds are plain `u16` ids defined in `otc-shared` (`LISTING_VAULT = 1`, `ESCROW 
 
 `lockup_listings` (still `main`'s pooled version until PR 4) gains a `registry` constructor argument and passes it to new escrows.
 
+`otc-shared` gains a `transfer_stake_verified` helper that wraps the read, transfer, re-read and verify steps. Escrow v2 and the vault use it, instead of repeating that sequence at every transfer as the pooled contracts do.
+
 **Tests**
 
 - Unit tests for each rule, using the chain-extension mock and the registry seam.

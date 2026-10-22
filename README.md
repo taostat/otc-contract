@@ -208,7 +208,7 @@ force_cancel_lockup_listing(netuid, seller, listing_id) -> Result<()>
 
 `create_lockup_listing` moves Alpha from the seller through the Bittensor proxy flow. The seller must have authorized the contract as a proxy first.
 
-`take_lockup_listing` can partially fill a listing. Each purchase instantiates a new `alpha_lockup` escrow and returns its purchase id. If a partial fill leaves a nonzero remainder below Bittensor's minimum stake amount of `2_000_000` rao, the purchase is rejected.
+`take_lockup_listing` can partially fill a listing. Each purchase instantiates a new `alpha_lockup` escrow and returns its purchase id. If a partial fill leaves a nonzero remainder below Bittensor's minimum stake amount of `2_000_000` rao, the purchase is rejected. Purchases below `min_purchase_amount` are rejected too, except a purchase of the entire remainder: stake transfers can round down by a rao, so a listing can hold slightly less than it was created with.
 
 ### Queries
 
@@ -278,7 +278,7 @@ Pause states are shared:
 - The contracts depend on Bittensor runtime calls and chain extension behavior for stake movement, stake queries, and live Alpha pricing.
 - Stake-moving seller flows require proxy authorization from the user before they can succeed.
 - Market-relative prices are evaluated at execution time, not listing creation time.
-- State is updated before external transfers in trade and claim flows.
+- Trade flows update listing state before paying out. Escrow claims mark the escrow claimed only after the stake transfer is verified. Any failure reverts the whole call, so no partial state is kept.
 - Every stake transfer is verified against the stake actually moved, allowing up to 10 rao less for Subtensor rounding. A transfer that fails verification traps, reverting the whole call. Listings record the stake that actually arrived, so later moves never ask for stake the contract does not hold.
 - Keep owner keys and upgrade authority operationally separate from test keys and development accounts.
 
