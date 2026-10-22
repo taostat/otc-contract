@@ -2,6 +2,9 @@
 
 pub mod chain_extension;
 pub mod errors;
+pub mod events;
+pub mod factory;
+pub mod pricing;
 pub mod runtime;
 pub mod stake;
 #[cfg(all(feature = "std", any(test, feature = "testing")))]
@@ -20,8 +23,13 @@ pub use runtime::{AlphaCurrency, ProxyCall, ProxyType, RuntimeCall, SubtensorCal
 
 // Re-export stake transfer verification helpers
 pub use stake::{
-    stake_delta_verified, stake_of, transfer_stake_verified, TransferError, TRANSFER_TOLERANCE,
+    move_stake_verified, stake_delta_verified, stake_of, transfer_stake_verified, TransferError,
+    TRANSFER_TOLERANCE,
 };
+
+// Re-export listing pricing and the interface vaults use to read their factory
+pub use factory::VaultFactory;
+pub use pricing::{quote, PricingError, Quote, BITTENSOR_MIN_STAKE};
 
 // Re-export code registry kinds and the position upgrade rule
 pub use upgrade::{check_upgrade, CodeKind, UpgradeError, UpgradePolicy};
