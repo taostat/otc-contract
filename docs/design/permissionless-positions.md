@@ -125,10 +125,10 @@ Messages:
 | `sweep_stake()` | anyone | Sends stake above `remaining` to the seller, when it's at least the chain minimum. Once the listing is closed, `remaining` is 0, so this returns everything left. |
 | `resync_hotkey(hk)` | anyone | Re-points `hotkey` to `hk` if the vault holds more stake on `hk` than on the recorded hotkey. Moves nothing. |
 | `consolidate()` | anyone | Optional. Moves stake to the factory's current validator hotkey. |
-| `close()` | seller | Closed, and no stake on `hotkey`. Terminates, sending the TAO balance and the storage deposit to the seller. |
+| `close()` | seller | Closed. Sends any stake left on `hotkey` to the seller, leaving only dust below Subtensor's minimum transfer, then terminates, sending the TAO balance and the storage deposit to the seller. |
 | `upgrade(hash)`, `set_upgrade_policy(p)` | see [Upgrades](#upgrades) | |
 
-**Termination.** Only the owner terminates a position, with `close()`, and only once it holds no stake on its recorded hotkey. No permissionless call terminates. After a validator hotkey swap, the stake sits on the new hotkey until someone calls `resync_hotkey`. If a permissionless call terminated a position whose recorded hotkey was empty, anyone could strand the swapped stake for good: donate a little on the old hotkey, then trigger the payout that drains it. The owner can still close too early, but that is their own call. The TAO sweep never terminates either (see [Deregistration](#deregistration)).
+**Termination.** Only the owner terminates a position, with `close()`: a vault first sends any stake left on its recorded hotkey to the seller, and an escrow must be claimed empty first. No permissionless call terminates. After a validator hotkey swap, the stake sits on the new hotkey until someone calls `resync_hotkey`. If a permissionless call terminated a position whose recorded hotkey was empty, anyone could strand the swapped stake for good: donate a little on the old hotkey, then trigger the payout that drains it. The owner can still close too early, but that is their own call. The TAO sweep never terminates either (see [Deregistration](#deregistration)).
 
 **Funding without a proxy:**
 
@@ -212,6 +212,8 @@ With one coldkey per position, the TAO a vault or escrow receives is exactly its
 ### Conviction locks
 
 In the current runtime, a same-subnet `transfer_stake` moves any locked portion with the stake. But accounts reject incoming locked Alpha unless they opt in (`AccountFlags`, `ensure_can_receive_locked_alpha`), and contracts can neither opt in nor create locks. So a vault or escrow never holds locked Alpha, and a buyer never receives it from one. The function 36 pre-checks are therefore unnecessary.
+
+A lock is a mass over the coldkey's whole position on the subnet, not over particular stake. A transfer carries locked Alpha only when it exceeds the coldkey's unlocked part, so a seller with enough unlocked stake on other hotkeys can still fund a vault from a hotkey that holds locked stake. The vault still receives only unlocked Alpha.
 
 If Subtensor later lets locked Alpha into accounts that haven't opted in, add a vault-side availability check using function 36 in an upgrade.
 
