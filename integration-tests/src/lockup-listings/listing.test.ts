@@ -1,8 +1,10 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { Binary } from "polkadot-api";
 import {
     setupLockupListingsEnvironment,
     cleanupTestEnvironment,
     TestSetup,
+    SPOT_LISTING_AGE,
     type LockupListingsContext,
     type TestAccount,
 } from "../setup";
@@ -43,11 +45,13 @@ const TRANSFER_TOLERANCE = 10n;
 const PAYMENT_BUFFER = taoToRao(10);
 
 // Variant indexes of the vault's and the factory's Error enums.
+const VAULT_CANCEL_TOO_EARLY = 7;
 const VAULT_TRADING_PAUSED = 8;
 const VAULT_PRICE_BELOW_MINIMUM = 12;
 const FACTORY_TRADING_PAUSED = 1;
 const FACTORY_LISTING_NOT_FOUND = 16;
 const FACTORY_LISTING_STILL_OPEN = 17;
+const FACTORY_SUBNET_FROZEN = 19;
 
 describe("Lockup listings v2 - vaults", () => {
     let context: LockupListingsContext;
@@ -71,13 +75,13 @@ describe("Lockup listings v2 - vaults", () => {
         await cleanupTestEnvironment();
     });
 
-    function listBobs(terms: { amount?: bigint; lockup_duration?: number; min_price?: bigint } = {}) {
+    function listBobs(terms: { amount?: bigint; lockup_duration?: number; spot?: boolean; min_price?: bigint } = {}) {
         return createLockupListing(context, bob, {
             hotkey: sellerHotkey.address,
             netuid,
             amount: terms.amount ?? LISTING_AMOUNT,
             price_offset_bps: MARKET_PRICE,
-            lockup_duration: terms.lockup_duration ?? SHORT_LOCKUP_DURATION,
+            lockup_duration: terms.spot ? undefined : terms.lockup_duration ?? SHORT_LOCKUP_DURATION,
             min_price: terms.min_price,
         });
     }
@@ -200,6 +204,72 @@ describe("Lockup listings v2 - vaults", () => {
         expect(await stakeOn(alice.address, dave.address) - daveStakeBefore)
             .toBeGreaterThanOrEqual(claimedAmount - TRANSFER_TOLERANCE);
     }, 600000);
+
+    it("sells a spot listing straight to the buyer's recipient", async () => {
+        const { vault, listedAmount } = await listBobs({ spot: true });
+        expect((await vaultInfo(vault)).lockup_duration).toBeUndefined();
+        const quote = await quoteVault(vault, charlie.address, TAKE_AMOUNT);
+        const daveStakeBefore = await stakeOn(alice.address, dave.address);
+
+        const { event, escrowAccount } = await takeLockupListing(vault, charlie, {
+            amount: TAKE_AMOUNT,
+            recipient: dave.address,
+        }, quote.total + PAYMENT_BUFFER);
+
+        expect(escrowAccount).toBeUndefined();
+        expect(event.value.recipient).toBe(dave.address);
+        expect(BigInt(event.value.remaining)).toBe(listedAmount - TAKE_AMOUNT);
+        expect(await stakeOn(alice.address, dave.address) - daveStakeBefore)
+            .toBeGreaterThanOrEqual(TAKE_AMOUNT - TRANSFER_TOLERANCE);
+    }, 300000);
+
+    it("keeps a spot listing open for the minimum age before the seller can cancel", async () => {
+        const { vault } = await listBobs({ spot: true });
+        const info = await vaultInfo(vault);
+        expect(info.cancel_delay).toBe(SPOT_LISTING_AGE);
+        const cancellableAfter = Number(info.cancellable_after);
+        expect(cancellableAfter).toBeGreaterThan(0);
+
+        expect(Number(await context.api.query.System.Number.getValue())).toBeLessThan(cancellableAfter);
+        expectContractError(await vault.query("cancel", {
+            origin: bob.address,
+            data: {},
+        }), VAULT_CANCEL_TOO_EARLY, "cancel before the minimum age");
+        await waitUntilBlock(context.api, cancellableAfter);
+        const result = await submitOk(vault.send("cancel", withIntegrationGas({
+            origin: bob.address,
+            data: {},
+        })), bob.signer, "cancel after the minimum age");
+        expectEvent(vault, result, "Cancelled");
+    }, 300000);
+
+    it("lets the owner freeze new listings on a subnet", async () => {
+        await submitOk(factory.send("set_subnet_frozen", {
+            origin: alice.address,
+            data: { netuid, frozen: true, reason: Binary.fromText("subnet at risk") },
+        }), alice.signer, "freeze");
+        expect(queryOk<boolean>(await factory.query("is_subnet_frozen", {
+            origin: alice.address,
+            data: { netuid },
+        }), "is_subnet_frozen")).toBe(true);
+
+        expectContractError(await factory.query("create_listing", {
+            origin: bob.address,
+            data: {
+                netuid,
+                hotkey: sellerHotkey.address,
+                amount: LISTING_AMOUNT,
+                price_offset_bps: MARKET_PRICE,
+                min_price: 0n,
+                lockup_duration: undefined,
+            },
+        }), FACTORY_SUBNET_FROZEN, "create on a frozen subnet");
+
+        await submitOk(factory.send("set_subnet_frozen", {
+            origin: alice.address,
+            data: { netuid, frozen: false, reason: Binary.fromText("") },
+        }), alice.signer, "unfreeze");
+    }, 300000);
 
     it("closes the listing on the final take, and the seller closes the empty vault", async () => {
         const { listingId, vaultAddress, vault, listedAmount } = await listBobs();

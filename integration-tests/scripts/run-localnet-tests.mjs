@@ -30,13 +30,8 @@ const DEFAULT_TEST_FILES = [
   "src/lockup-listings/escrow.test.ts",
   "src/lockup-listings/factory.test.ts",
   "src/lockup-listings/listing.test.ts",
-  "src/tests/alpha-listing.test.ts",
-  "src/tests/claim-dividends.test.ts",
-  "src/tests/deployment.test.ts",
-  "src/tests/pause.test.ts",
-  "src/tests/subnet-risk.test.ts",
-  "src/tests/tao-offers.test.ts",
-  "src/tests/trading.test.ts",
+  "src/tests/offers.test.ts",
+  "src/tests/otc.test.ts",
 ];
 
 function parseArgs(argv) {
@@ -102,8 +97,8 @@ Options:
                            Test runs never rebuild it; set BUILD_BINARY=1 to override.
 
 Examples:
-  npm run test:localnet -- src/tests/trading.test.ts --repeat 3
-  npm run test:localnet -- --restart all src/tests/deployment.test.ts src/tests/pause.test.ts
+  npm run test:localnet -- src/tests/offers.test.ts --repeat 3
+  npm run test:localnet -- --restart all src/tests/otc.test.ts src/tests/offers.test.ts
 `);
 }
 

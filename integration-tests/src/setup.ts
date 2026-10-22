@@ -22,6 +22,10 @@ export type ListingVault = ReturnType<ListingVaultSdk["getContract"]>;
 export const LISTING_VAULT_CODE_KIND = 1;
 export const ESCROW_CODE_KIND = 2;
 export const LOCKUP_FACTORY_CODE_KIND = 3;
+export const OTC_CODE_KIND = 4;
+// How long spot listings must stay open before the seller can cancel, in blocks:
+// long enough to check a cancel is refused right after funding.
+export const SPOT_LISTING_AGE = 30;
 // 0.5%, as U64F64 bits
 export const FACTORY_FEE_RATE = 92233720368547758n;
 // The registry's minimum delay (MIN_DELAY) in a production build: about a day.
@@ -135,6 +139,7 @@ export interface TestContext {
         eve: TestAccount;
     };
     contractAddress?: string;
+    registryAddress?: string;
 }
 
 export interface LockupListingsContext {
@@ -241,61 +246,54 @@ export class TestSetup {
     /**
      * Deploy the OTC contract
      */
-    async deployContract(api: TypedApi<typeof devnet>, accounts: TestContext['accounts']): Promise<string> {
-        const contractPath = path.join(process.cwd(), "..", "target", "ink", "otc_contract", "otc_contract.wasm");
-        const wasmFile = await fs.readFile(contractPath);
-        const wasmBytes = Binary.fromBytes(new Uint8Array(wasmFile));
-
+    /**
+     * Deploy otc with a code registry offering its code. Alice owns it and
+     * receives its fees.
+     */
+    async deployContract(
+        api: TypedApi<typeof devnet>,
+        accounts: TestContext['accounts'],
+    ): Promise<{ contractAddress: string; registryAddress: string }> {
         const contractSdk = createInkSdk(api, contracts.otc_contract);
-        const deployer = contractSdk.getDeployer(wasmBytes);
-
-        const constructorArgs = {
-            owner: accounts.alice.address,
-            hotkey: accounts.eve.address,
-            fee_rate: 92233720368547758n, // 0.5% as U64F64 bits (0.005 * 2^64)
-            min_listing_amount: 1_000_000_000n, // 1 Alpha
-            min_offer_amount: 1_000_000_000n, // 1 TAO
-            min_listing_age: 100, // 100 blocks
-        };
-
         const cachedAddress = loadContractAddress();
         if (cachedAddress && await this.contractExistsOnChain(api, cachedAddress)) {
             console.log(`Using existing contract at ${cachedAddress}`);
-            return cachedAddress;
-        }
-
-        try {
-            const dryRunResult = await deployer.dryRun("new", {
+            const registry = await contractSdk.getContract(cachedAddress).query("get_registry", {
                 origin: accounts.alice.address,
-                data: constructorArgs,
-                options: { salt: randomDeploymentSalt() },
+                data: {},
             });
-
-            if (!dryRunResult.success) {
-                const errorType = dryRunResult.value?.value?.value?.type;
-                console.log("Dry run failed with error:", errorType);
-                console.log("Full dry run result:", JSON.stringify(dryRunResult, null, 2));
-                console.log("Dry run did not succeed", dryRunResult.value)
-                return Promise.reject(new Error(`Dry run failed: ${errorType || 'Unknown'}`));
+            if (!registry.success) {
+                throw new Error("Failed to read the cached otc contract's registry");
             }
-
-            // Deploy the contract
-            console.log(`Deploying new contract...`)
-            const fin = await this.trackTx(
-                dryRunResult.value.deploy().signSubmitAndWatch(accounts.alice.signer),
-            )
-            console.log(`Deployed to address ${dryRunResult.value.address}`)
-            console.log(contractSdk.readDeploymentEvents(fin.events))
-
-            const contractAddress = dryRunResult.value.address;
-            saveContractAddress(contractAddress);
-            return contractAddress;
-        } catch (error) {
-            console.error("Deployment error:", error);
-            throw error;
+            return { contractAddress: cachedAddress, registryAddress: registry.value.response };
         }
-    }
 
+        const registryAddress = await this.deployCodeRegistry(api, accounts, [
+            [OTC_CODE_KIND, await this.buildCodeHash(RELEASE_ARTIFACTS, "otc_contract")],
+        ]);
+        const wasmPath = path.join(RELEASE_ARTIFACTS, "otc_contract", "otc_contract.wasm");
+        const wasmBytes = Binary.fromBytes(new Uint8Array(await fs.readFile(wasmPath)));
+        const dryRunResult = await contractSdk.getDeployer(wasmBytes).dryRun("new", {
+            origin: accounts.alice.address,
+            data: {
+                owner: accounts.alice.address,
+                registry: registryAddress,
+                fee_rate: FACTORY_FEE_RATE,
+                fee_recipient: accounts.alice.address,
+                min_offer_amount: 1_000_000_000n, // 1 TAO
+            },
+            options: { salt: randomDeploymentSalt() },
+        });
+        if (!dryRunResult.success) {
+            throw new Error(`otc dry run failed: ${JSON.stringify(dryRunResult.value, (_key, value) =>
+                typeof value === "bigint" ? value.toString() : value)}`);
+        }
+
+        await this.trackTx(dryRunResult.value.deploy().signSubmitAndWatch(accounts.alice.signer));
+        console.log(`otc deployed to address ${dryRunResult.value.address}`);
+        saveContractAddress(dryRunResult.value.address);
+        return { contractAddress: dryRunResult.value.address, registryAddress };
+    }
 
     async trackTx(obs: Observable<TxEvent>): Promise<TxFinalized> {
         return new Promise<TxFinalized>((resolve, reject) =>
@@ -442,6 +440,7 @@ export class TestSetup {
                 min_purchase_amount: 100_000_000n, // 0.1 Alpha
                 min_lockup_duration: 10, // 10 blocks for testing (short lockup)
                 max_lockup_duration: 1_000_000, // ~46 days
+                min_listing_age: SPOT_LISTING_AGE,
             },
             options: { salt: randomDeploymentSalt() },
         });
@@ -544,8 +543,9 @@ export class TestSetup {
             accounts,
         };
 
-        const contractAddress = await this.deployContract(api, accounts);
+        const { contractAddress, registryAddress } = await this.deployContract(api, accounts);
         context.contractAddress = contractAddress;
+        context.registryAddress = registryAddress;
 
         return context;
     }

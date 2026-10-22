@@ -1,6 +1,6 @@
 {
   "source": {
-    "hash": "0x8bc4e2b381b8cd669ce27ee259f1444c4441d1ded96ce98fe0afe7ba80b3490a",
+    "hash": "0x2d5bbdcce551ec1f8b270548ca02878f70ca0e39a68644dce1df0555148b1707",
     "language": "ink! 5.1.1",
     "compiler": "rustc 1.89.0",
     "build_info": {
@@ -105,6 +105,15 @@
               ],
               "type": 26
             }
+          },
+          {
+            "label": "min_listing_age",
+            "type": {
+              "displayName": [
+                "BlockAge"
+              ],
+              "type": 26
+            }
           }
         ],
         "default": false,
@@ -116,14 +125,15 @@
             "ink_primitives",
             "ConstructorResult"
           ],
-          "type": 30
+          "type": 33
         },
         "selector": "0x9bae9d5e"
       }
     ],
     "docs": [
-      " Factory for lockup listings. Each listing is its own `listing_vault`, created",
-      " from the code registry's current vault code; the factory holds no Alpha.",
+      " Factory for spot and lockup listings. Each listing is its own `listing_vault`,",
+      " created from the code registry's current vault code; the factory holds no",
+      " Alpha. (TAO offers, which are pooled, live in `otc`.)",
       "",
       " The factory keeps the `(netuid, seller, listing_id) -> vault` index and the",
       " settings vaults read: the validator hotkey per subnet, the fee recipient and",
@@ -154,13 +164,13 @@
         "displayName": [
           "ChainExtension"
         ],
-        "type": 54
+        "type": 59
       },
       "hash": {
         "displayName": [
           "Hash"
         ],
-        "type": 47
+        "type": 54
       },
       "maxEventTopics": 4,
       "staticBufferSize": 16384,
@@ -386,7 +396,7 @@
               "displayName": [
                 "Hash"
               ],
-              "type": 47
+              "type": 54
             }
           },
           {
@@ -427,7 +437,7 @@
               "displayName": [
                 "Hash"
               ],
-              "type": 47
+              "type": 54
             }
           }
         ],
@@ -457,7 +467,7 @@
               "displayName": [
                 "Hash"
               ],
-              "type": 47
+              "type": 54
             }
           },
           {
@@ -468,7 +478,7 @@
               "displayName": [
                 "Option"
               ],
-              "type": 51
+              "type": 56
             }
           },
           {
@@ -509,7 +519,7 @@
               "displayName": [
                 "Hash"
               ],
-              "type": 47
+              "type": 54
             }
           },
           {
@@ -550,7 +560,7 @@
               "displayName": [
                 "Role"
               ],
-              "type": 52
+              "type": 57
             }
           },
           {
@@ -591,7 +601,7 @@
               "displayName": [
                 "Role"
               ],
-              "type": 52
+              "type": 57
             }
           },
           {
@@ -621,7 +631,7 @@
               "displayName": [
                 "Role"
               ],
-              "type": 52
+              "type": 57
             }
           },
           {
@@ -771,7 +781,7 @@
               "displayName": [
                 "Option"
               ],
-              "type": 28
+              "type": 31
             }
           },
           {
@@ -1062,7 +1072,7 @@
               "displayName": [
                 "PriceOffsetBps"
               ],
-              "type": 34
+              "type": 37
             }
           },
           {
@@ -1077,14 +1087,16 @@
             }
           },
           {
-            "docs": [],
+            "docs": [
+              "`None` for a spot listing"
+            ],
             "indexed": false,
             "label": "lockup_duration",
             "type": {
               "displayName": [
-                "BlockAge"
+                "Option"
               ],
-              "type": 26
+              "type": 38
             }
           }
         ],
@@ -1093,7 +1105,7 @@
         ],
         "label": "ListingCreated",
         "module_path": "lockup_listings::events",
-        "signature_topic": "0xfdc16fe1f9fed9b219858c5c585d30336f434c80e53874108b6285e183103a7c"
+        "signature_topic": "0x9e490e68889c9253775c2dffe5eb9c3f5743ce9d3dca19a03605bc2300aabf0e"
       },
       {
         "args": [
@@ -1159,7 +1171,7 @@
               "displayName": [
                 "Option"
               ],
-              "type": 28
+              "type": 31
             }
           }
         ],
@@ -1251,7 +1263,7 @@
               "displayName": [
                 "Option"
               ],
-              "type": 28
+              "type": 31
             }
           }
         ],
@@ -1272,7 +1284,7 @@
               "displayName": [
                 "FixedDecimal"
               ],
-              "type": 29
+              "type": 32
             }
           },
           {
@@ -1283,7 +1295,7 @@
               "displayName": [
                 "FixedDecimal"
               ],
-              "type": 29
+              "type": 32
             }
           }
         ],
@@ -1411,6 +1423,79 @@
         "label": "LockupDurationLimitsChanged",
         "module_path": "lockup_listings::events",
         "signature_topic": "0xfa5f35e6c061462a6569c45679bf723a2f93a6ca55640facb5816331bba8b1f6"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "old_age",
+            "type": {
+              "displayName": [
+                "BlockAge"
+              ],
+              "type": 26
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "new_age",
+            "type": {
+              "displayName": [
+                "BlockAge"
+              ],
+              "type": 26
+            }
+          }
+        ],
+        "docs": [],
+        "label": "MinListingAgeChanged",
+        "module_path": "lockup_listings::events",
+        "signature_topic": "0x19f13cb7f224d798d4bcec3cce90b8cfd4814eb0772cdcf28af32f7d4d2b1074"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "netuid",
+            "type": {
+              "displayName": [
+                "NetUid"
+              ],
+              "type": 3
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "frozen",
+            "type": {
+              "displayName": [
+                "bool"
+              ],
+              "type": 50
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "reason",
+            "type": {
+              "displayName": [
+                "Vec"
+              ],
+              "type": 53
+            }
+          }
+        ],
+        "docs": [
+          "New listings on `netuid` were frozen or unfrozen"
+        ],
+        "label": "SubnetFrozenChanged",
+        "module_path": "lockup_listings::events",
+        "signature_topic": "0x77ec2cd970ff8814b9c6fdb1f42e213c5bcf5b529ee76721e64e4dfc15eacecb"
       },
       {
         "args": [
@@ -1570,7 +1655,7 @@
               "displayName": [
                 "Hash"
               ],
-              "type": 47
+              "type": 54
             }
           },
           {
@@ -1613,7 +1698,7 @@
               "displayName": [
                 "UpgradePolicy"
               ],
-              "type": 53
+              "type": 58
             }
           }
         ],
@@ -1630,7 +1715,7 @@
         "ink",
         "LangError"
       ],
-      "type": 33
+      "type": 36
     },
     "messages": [
       {
@@ -1668,7 +1753,7 @@
               "displayName": [
                 "PriceOffsetBps"
               ],
-              "type": 34
+              "type": 37
             }
           },
           {
@@ -1684,18 +1769,23 @@
             "label": "lockup_duration",
             "type": {
               "displayName": [
-                "BlockAge"
+                "Option"
               ],
-              "type": 26
+              "type": 38
             }
           }
         ],
         "default": false,
         "docs": [
-          " Create a Pending lockup listing for `amount` Alpha on `hotkey` and return",
-          " its id and vault. The seller pays the vault's storage deposit, then funds",
-          " it by transferring the stake to the vault and calling `activate`, in one",
-          " batch.",
+          " Create a Pending listing for `amount` Alpha on `hotkey` and return its id",
+          " and vault. The seller pays the vault's storage deposit, then funds it by",
+          " transferring the stake to the vault and calling `activate`, in one batch.",
+          "",
+          " With a `lockup_duration`, buyers receive the Alpha in an escrow that",
+          " locks it for that many blocks; within the factory's limits, and the",
+          " seller can cancel at any time. Without one it is a spot listing: buyers",
+          " receive the Alpha directly, and the seller can cancel only once the",
+          " listing has been open for `min_listing_age`.",
           "",
           " `min_price` is the seller's floor (TAO per Alpha, scaled by 1e9; 0 for",
           " none): takes below it fail, which limits spot-price manipulation."
@@ -1708,7 +1798,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 35
+          "type": 39
         },
         "selector": "0xcc5af4a7"
       },
@@ -1756,7 +1846,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 30
+          "type": 33
         },
         "selector": "0xff7bd04e"
       },
@@ -1802,7 +1892,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 38
+          "type": 42
         },
         "selector": "0xfd34226e"
       },
@@ -1830,7 +1920,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 39
+          "type": 43
         },
         "selector": "0xcb4309e2"
       },
@@ -1867,7 +1957,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 41
+          "type": 45
         },
         "selector": "0x24011d31"
       },
@@ -1896,7 +1986,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 42
+          "type": 46
         },
         "selector": "0xffb3430b"
       },
@@ -1912,9 +2002,35 @@
             "ink",
             "MessageResult"
           ],
-          "type": 43
+          "type": 47
         },
         "selector": "0xd0707806"
+      },
+      {
+        "args": [
+          {
+            "label": "netuid",
+            "type": {
+              "displayName": [
+                "NetUid"
+              ],
+              "type": 3
+            }
+          }
+        ],
+        "default": false,
+        "docs": [],
+        "label": "is_subnet_frozen",
+        "mutates": false,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 49
+        },
+        "selector": "0x6e5825f4"
       },
       {
         "args": [],
@@ -1928,7 +2044,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 45
+          "type": 51
         },
         "selector": "0x07fcd0b1"
       },
@@ -1944,7 +2060,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 38
+          "type": 42
         },
         "selector": "0x78a510ce"
       },
@@ -1960,7 +2076,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 45
+          "type": 51
         },
         "selector": "0x15a5d20a"
       },
@@ -1976,7 +2092,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 46
+          "type": 52
         },
         "selector": "0x0c1a1d77"
       },
@@ -1988,7 +2104,7 @@
               "displayName": [
                 "Option"
               ],
-              "type": 28
+              "type": 31
             }
           }
         ],
@@ -2005,7 +2121,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 30
+          "type": 33
         },
         "selector": "0x107e33ea"
       },
@@ -2021,7 +2137,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 30
+          "type": 33
         },
         "selector": "0xb55be9f0"
       },
@@ -2050,7 +2166,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 30
+          "type": 33
         },
         "selector": "0x779a68c8"
       },
@@ -2071,7 +2187,7 @@
               "displayName": [
                 "Option"
               ],
-              "type": 28
+              "type": 31
             }
           }
         ],
@@ -2088,7 +2204,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 30
+          "type": 33
         },
         "selector": "0x1fc7e7a0"
       },
@@ -2117,7 +2233,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 30
+          "type": 33
         },
         "selector": "0x07ac7d83"
       },
@@ -2143,7 +2259,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 30
+          "type": 33
         },
         "selector": "0x0b52269a"
       },
@@ -2169,7 +2285,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 30
+          "type": 33
         },
         "selector": "0xafba052d"
       },
@@ -2197,7 +2313,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 30
+          "type": 33
         },
         "selector": "0x7a32cc63"
       },
@@ -2232,9 +2348,85 @@
             "ink",
             "MessageResult"
           ],
-          "type": 30
+          "type": 33
         },
         "selector": "0x6add61eb"
+      },
+      {
+        "args": [
+          {
+            "label": "new_age",
+            "type": {
+              "displayName": [
+                "BlockAge"
+              ],
+              "type": 26
+            }
+          }
+        ],
+        "default": false,
+        "docs": [
+          " Set how long new spot listings must stay open before the seller can",
+          " cancel them, at most `MAX_LISTING_AGE`"
+        ],
+        "label": "set_min_listing_age",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 33
+        },
+        "selector": "0x0bad5e6c"
+      },
+      {
+        "args": [
+          {
+            "label": "netuid",
+            "type": {
+              "displayName": [
+                "NetUid"
+              ],
+              "type": 3
+            }
+          },
+          {
+            "label": "frozen",
+            "type": {
+              "displayName": [
+                "bool"
+              ],
+              "type": 50
+            }
+          },
+          {
+            "label": "reason",
+            "type": {
+              "displayName": [
+                "Vec"
+              ],
+              "type": 53
+            }
+          }
+        ],
+        "default": false,
+        "docs": [
+          " Freeze or unfreeze new listings on `netuid`, for example while the subnet",
+          " is at risk of deregistration. Open listings are not affected."
+        ],
+        "label": "set_subnet_frozen",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 33
+        },
+        "selector": "0xe9bb9fd8"
       },
       {
         "args": [
@@ -2262,7 +2454,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 30
+          "type": 33
         },
         "selector": "0x81e0c604"
       },
@@ -2278,7 +2470,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 30
+          "type": 33
         },
         "selector": "0xc3a8f39e"
       },
@@ -2290,7 +2482,7 @@
               "displayName": [
                 "Hash"
               ],
-              "type": 47
+              "type": 54
             }
           }
         ],
@@ -2308,7 +2500,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 30
+          "type": 33
         },
         "selector": "0x9852f7b0"
       },
@@ -2328,7 +2520,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 48
+          "type": 55
         },
         "selector": "0x060d3f50"
       },
@@ -2360,7 +2552,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 45
+          "type": 51
         },
         "selector": "0x023cabc5"
       },
@@ -2386,7 +2578,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 45
+          "type": 51
         },
         "selector": "0xe8ba841f"
       },
@@ -2402,7 +2594,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 48
+          "type": 55
         },
         "selector": "0xc92b9397"
       }
@@ -2661,6 +2853,30 @@
                   "ty": 26
                 }
               },
+              "name": "min_listing_age"
+            },
+            {
+              "layout": {
+                "root": {
+                  "layout": {
+                    "leaf": {
+                      "key": "0x11a4b556",
+                      "ty": 9
+                    }
+                  },
+                  "root_key": "0x11a4b556",
+                  "ty": 27
+                }
+              },
+              "name": "frozen_subnets"
+            },
+            {
+              "layout": {
+                "leaf": {
+                  "key": "0x00000000",
+                  "ty": 26
+                }
+              },
               "name": "paused_until"
             }
           ],
@@ -2668,7 +2884,7 @@
         }
       },
       "root_key": "0x00000000",
-      "ty": 27
+      "ty": 30
     }
   },
   "types": [
@@ -3151,6 +3367,76 @@
       "id": 27,
       "type": {
         "def": {
+          "composite": {}
+        },
+        "params": [
+          {
+            "name": "K",
+            "type": 3
+          },
+          {
+            "name": "V",
+            "type": 9
+          },
+          {
+            "name": "KeyType",
+            "type": 28
+          }
+        ],
+        "path": [
+          "ink_storage",
+          "lazy",
+          "mapping",
+          "Mapping"
+        ]
+      }
+    },
+    {
+      "id": 28,
+      "type": {
+        "def": {
+          "composite": {}
+        },
+        "params": [
+          {
+            "name": "L",
+            "type": 7
+          },
+          {
+            "name": "R",
+            "type": 29
+          }
+        ],
+        "path": [
+          "ink_storage_traits",
+          "impls",
+          "ResolverKey"
+        ]
+      }
+    },
+    {
+      "id": 29,
+      "type": {
+        "def": {
+          "composite": {}
+        },
+        "params": [
+          {
+            "name": "ParentKey",
+            "type": 9
+          }
+        ],
+        "path": [
+          "ink_storage_traits",
+          "impls",
+          "ManualKey"
+        ]
+      }
+    },
+    {
+      "id": 30,
+      "type": {
+        "def": {
           "composite": {
             "fields": [
               {
@@ -3160,7 +3446,7 @@
               },
               {
                 "name": "pending_owner",
-                "type": 28,
+                "type": 31,
                 "typeName": "<Option<AccountId> as::ink::storage::traits::AutoStorableHint<::\nink::storage::traits::ManualKey<2848086813u32, ()>,>>::Type"
               },
               {
@@ -3210,7 +3496,7 @@
               },
               {
                 "name": "fee_rate",
-                "type": 29,
+                "type": 32,
                 "typeName": "<FixedDecimal as::ink::storage::traits::AutoStorableHint<::ink::\nstorage::traits::ManualKey<4188961581u32, ()>,>>::Type"
               },
               {
@@ -3239,6 +3525,16 @@
                 "typeName": "<BlockAge as::ink::storage::traits::AutoStorableHint<::ink::\nstorage::traits::ManualKey<986476276u32, ()>,>>::Type"
               },
               {
+                "name": "min_listing_age",
+                "type": 26,
+                "typeName": "<BlockAge as::ink::storage::traits::AutoStorableHint<::ink::\nstorage::traits::ManualKey<3272797947u32, ()>,>>::Type"
+              },
+              {
+                "name": "frozen_subnets",
+                "type": 27,
+                "typeName": "<Mapping<NetUid, ()> as::ink::storage::traits::AutoStorableHint<\n::ink::storage::traits::ManualKey<1454744593u32, ()>,>>::Type"
+              },
+              {
                 "name": "paused_until",
                 "type": 26,
                 "typeName": "<BlockNumber as::ink::storage::traits::AutoStorableHint<::ink::\nstorage::traits::ManualKey<4148906077u32, ()>,>>::Type"
@@ -3254,7 +3550,7 @@
       }
     },
     {
-      "id": 28,
+      "id": 31,
       "type": {
         "def": {
           "variant": {
@@ -3287,7 +3583,7 @@
       }
     },
     {
-      "id": 29,
+      "id": 32,
       "type": {
         "def": {
           "composite": {
@@ -3308,7 +3604,7 @@
       }
     },
     {
-      "id": 30,
+      "id": 33,
       "type": {
         "def": {
           "variant": {
@@ -3316,7 +3612,7 @@
               {
                 "fields": [
                   {
-                    "type": 31
+                    "type": 34
                   }
                 ],
                 "index": 0,
@@ -3325,7 +3621,7 @@
               {
                 "fields": [
                   {
-                    "type": 33
+                    "type": 36
                   }
                 ],
                 "index": 1,
@@ -3337,11 +3633,11 @@
         "params": [
           {
             "name": "T",
-            "type": 31
+            "type": 34
           },
           {
             "name": "E",
-            "type": 33
+            "type": 36
           }
         ],
         "path": [
@@ -3350,7 +3646,7 @@
       }
     },
     {
-      "id": 31,
+      "id": 34,
       "type": {
         "def": {
           "variant": {
@@ -3367,7 +3663,7 @@
               {
                 "fields": [
                   {
-                    "type": 32
+                    "type": 35
                   }
                 ],
                 "index": 1,
@@ -3383,7 +3679,7 @@
           },
           {
             "name": "E",
-            "type": 32
+            "type": 35
           }
         ],
         "path": [
@@ -3392,7 +3688,7 @@
       }
     },
     {
-      "id": 32,
+      "id": 35,
       "type": {
         "def": {
           "variant": {
@@ -3472,6 +3768,14 @@
               {
                 "index": 18,
                 "name": "VaultQueryFailed"
+              },
+              {
+                "index": 19,
+                "name": "SubnetFrozen"
+              },
+              {
+                "index": 20,
+                "name": "ListingAgeTooLong"
               }
             ]
           }
@@ -3484,7 +3788,7 @@
       }
     },
     {
-      "id": 33,
+      "id": 36,
       "type": {
         "def": {
           "variant": {
@@ -3503,105 +3807,10 @@
       }
     },
     {
-      "id": 34,
-      "type": {
-        "def": {
-          "primitive": "i32"
-        }
-      }
-    },
-    {
-      "id": 35,
-      "type": {
-        "def": {
-          "variant": {
-            "variants": [
-              {
-                "fields": [
-                  {
-                    "type": 36
-                  }
-                ],
-                "index": 0,
-                "name": "Ok"
-              },
-              {
-                "fields": [
-                  {
-                    "type": 33
-                  }
-                ],
-                "index": 1,
-                "name": "Err"
-              }
-            ]
-          }
-        },
-        "params": [
-          {
-            "name": "T",
-            "type": 36
-          },
-          {
-            "name": "E",
-            "type": 33
-          }
-        ],
-        "path": [
-          "Result"
-        ]
-      }
-    },
-    {
-      "id": 36,
-      "type": {
-        "def": {
-          "variant": {
-            "variants": [
-              {
-                "fields": [
-                  {
-                    "type": 37
-                  }
-                ],
-                "index": 0,
-                "name": "Ok"
-              },
-              {
-                "fields": [
-                  {
-                    "type": 32
-                  }
-                ],
-                "index": 1,
-                "name": "Err"
-              }
-            ]
-          }
-        },
-        "params": [
-          {
-            "name": "T",
-            "type": 37
-          },
-          {
-            "name": "E",
-            "type": 32
-          }
-        ],
-        "path": [
-          "Result"
-        ]
-      }
-    },
-    {
       "id": 37,
       "type": {
         "def": {
-          "tuple": [
-            4,
-            0
-          ]
+          "primitive": "i32"
         }
       }
     },
@@ -3612,22 +3821,17 @@
           "variant": {
             "variants": [
               {
-                "fields": [
-                  {
-                    "type": 28
-                  }
-                ],
                 "index": 0,
-                "name": "Ok"
+                "name": "None"
               },
               {
                 "fields": [
                   {
-                    "type": 33
+                    "type": 26
                   }
                 ],
                 "index": 1,
-                "name": "Err"
+                "name": "Some"
               }
             ]
           }
@@ -3635,15 +3839,11 @@
         "params": [
           {
             "name": "T",
-            "type": 28
-          },
-          {
-            "name": "E",
-            "type": 33
+            "type": 26
           }
         ],
         "path": [
-          "Result"
+          "Option"
         ]
       }
     },
@@ -3665,7 +3865,7 @@
               {
                 "fields": [
                   {
-                    "type": 33
+                    "type": 36
                   }
                 ],
                 "index": 1,
@@ -3681,7 +3881,7 @@
           },
           {
             "name": "E",
-            "type": 33
+            "type": 36
           }
         ],
         "path": [
@@ -3691,6 +3891,143 @@
     },
     {
       "id": 40,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 41
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 35
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 41
+          },
+          {
+            "name": "E",
+            "type": 35
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 41,
+      "type": {
+        "def": {
+          "tuple": [
+            4,
+            0
+          ]
+        }
+      }
+    },
+    {
+      "id": 42,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 31
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 36
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 31
+          },
+          {
+            "name": "E",
+            "type": 36
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 43,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 44
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 36
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 44
+          },
+          {
+            "name": "E",
+            "type": 36
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 44,
       "type": {
         "def": {
           "variant": {
@@ -3723,7 +4060,7 @@
       }
     },
     {
-      "id": 41,
+      "id": 45,
       "type": {
         "def": {
           "variant": {
@@ -3740,7 +4077,7 @@
               {
                 "fields": [
                   {
-                    "type": 33
+                    "type": 36
                   }
                 ],
                 "index": 1,
@@ -3756,7 +4093,7 @@
           },
           {
             "name": "E",
-            "type": 33
+            "type": 36
           }
         ],
         "path": [
@@ -3765,7 +4102,7 @@
       }
     },
     {
-      "id": 42,
+      "id": 46,
       "type": {
         "def": {
           "variant": {
@@ -3782,7 +4119,7 @@
               {
                 "fields": [
                   {
-                    "type": 33
+                    "type": 36
                   }
                 ],
                 "index": 1,
@@ -3798,7 +4135,7 @@
           },
           {
             "name": "E",
-            "type": 33
+            "type": 36
           }
         ],
         "path": [
@@ -3807,7 +4144,7 @@
       }
     },
     {
-      "id": 43,
+      "id": 47,
       "type": {
         "def": {
           "variant": {
@@ -3815,7 +4152,7 @@
               {
                 "fields": [
                   {
-                    "type": 44
+                    "type": 48
                   }
                 ],
                 "index": 0,
@@ -3824,7 +4161,7 @@
               {
                 "fields": [
                   {
-                    "type": 33
+                    "type": 36
                   }
                 ],
                 "index": 1,
@@ -3836,11 +4173,11 @@
         "params": [
           {
             "name": "T",
-            "type": 44
+            "type": 48
           },
           {
             "name": "E",
-            "type": 33
+            "type": 36
           }
         ],
         "path": [
@@ -3849,7 +4186,7 @@
       }
     },
     {
-      "id": 44,
+      "id": 48,
       "type": {
         "def": {
           "composite": {
@@ -3871,7 +4208,7 @@
               },
               {
                 "name": "fee_rate",
-                "type": 29,
+                "type": 32,
                 "typeName": "FixedDecimal"
               },
               {
@@ -3900,6 +4237,11 @@
                 "typeName": "BlockAge"
               },
               {
+                "name": "min_listing_age",
+                "type": 26,
+                "typeName": "BlockAge"
+              },
+              {
                 "name": "paused_until",
                 "type": 26,
                 "typeName": "BlockNumber"
@@ -3911,152 +4253,6 @@
           "lockup_listings",
           "types",
           "Config"
-        ]
-      }
-    },
-    {
-      "id": 45,
-      "type": {
-        "def": {
-          "variant": {
-            "variants": [
-              {
-                "fields": [
-                  {
-                    "type": 0
-                  }
-                ],
-                "index": 0,
-                "name": "Ok"
-              },
-              {
-                "fields": [
-                  {
-                    "type": 33
-                  }
-                ],
-                "index": 1,
-                "name": "Err"
-              }
-            ]
-          }
-        },
-        "params": [
-          {
-            "name": "T",
-            "type": 0
-          },
-          {
-            "name": "E",
-            "type": 33
-          }
-        ],
-        "path": [
-          "Result"
-        ]
-      }
-    },
-    {
-      "id": 46,
-      "type": {
-        "def": {
-          "variant": {
-            "variants": [
-              {
-                "fields": [
-                  {
-                    "type": 3
-                  }
-                ],
-                "index": 0,
-                "name": "Ok"
-              },
-              {
-                "fields": [
-                  {
-                    "type": 33
-                  }
-                ],
-                "index": 1,
-                "name": "Err"
-              }
-            ]
-          }
-        },
-        "params": [
-          {
-            "name": "T",
-            "type": 3
-          },
-          {
-            "name": "E",
-            "type": 33
-          }
-        ],
-        "path": [
-          "Result"
-        ]
-      }
-    },
-    {
-      "id": 47,
-      "type": {
-        "def": {
-          "composite": {
-            "fields": [
-              {
-                "type": 1,
-                "typeName": "[u8; 32]"
-              }
-            ]
-          }
-        },
-        "path": [
-          "ink_primitives",
-          "types",
-          "Hash"
-        ]
-      }
-    },
-    {
-      "id": 48,
-      "type": {
-        "def": {
-          "variant": {
-            "variants": [
-              {
-                "fields": [
-                  {
-                    "type": 9
-                  }
-                ],
-                "index": 0,
-                "name": "Ok"
-              },
-              {
-                "fields": [
-                  {
-                    "type": 33
-                  }
-                ],
-                "index": 1,
-                "name": "Err"
-              }
-            ]
-          }
-        },
-        "params": [
-          {
-            "name": "T",
-            "type": 9
-          },
-          {
-            "name": "E",
-            "type": 33
-          }
-        ],
-        "path": [
-          "Result"
         ]
       }
     },
@@ -4078,7 +4274,7 @@
               {
                 "fields": [
                   {
-                    "type": 33
+                    "type": 36
                   }
                 ],
                 "index": 1,
@@ -4094,7 +4290,7 @@
           },
           {
             "name": "E",
-            "type": 33
+            "type": 36
           }
         ],
         "path": [
@@ -4117,13 +4313,169 @@
           "variant": {
             "variants": [
               {
+                "fields": [
+                  {
+                    "type": 0
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 36
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 0
+          },
+          {
+            "name": "E",
+            "type": 36
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 52,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 3
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 36
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 3
+          },
+          {
+            "name": "E",
+            "type": 36
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 53,
+      "type": {
+        "def": {
+          "sequence": {
+            "type": 2
+          }
+        }
+      }
+    },
+    {
+      "id": 54,
+      "type": {
+        "def": {
+          "composite": {
+            "fields": [
+              {
+                "type": 1,
+                "typeName": "[u8; 32]"
+              }
+            ]
+          }
+        },
+        "path": [
+          "ink_primitives",
+          "types",
+          "Hash"
+        ]
+      }
+    },
+    {
+      "id": 55,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 9
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 36
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 9
+          },
+          {
+            "name": "E",
+            "type": 36
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 56,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
                 "index": 0,
                 "name": "None"
               },
               {
                 "fields": [
                   {
-                    "type": 47
+                    "type": 54
                   }
                 ],
                 "index": 1,
@@ -4135,7 +4487,7 @@
         "params": [
           {
             "name": "T",
-            "type": 47
+            "type": 54
           }
         ],
         "path": [
@@ -4144,7 +4496,7 @@
       }
     },
     {
-      "id": 52,
+      "id": 57,
       "type": {
         "def": {
           "variant": {
@@ -4168,7 +4520,7 @@
       }
     },
     {
-      "id": 53,
+      "id": 58,
       "type": {
         "def": {
           "variant": {
@@ -4192,7 +4544,7 @@
       }
     },
     {
-      "id": 54,
+      "id": 59,
       "type": {
         "def": {
           "variant": {}
