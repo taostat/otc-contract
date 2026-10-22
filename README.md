@@ -89,7 +89,7 @@ npm run test:localnet:flaky
 
 - `--reuse-deployments` (or `OTC_TEST_REUSE_DEPLOYMENTS=1`) keeps the deployment cache.
 - `npm run test:localnet:combined -- ...` runs all files against one node. Use it only to diagnose coupling between suites: subnets registered later on a long-lived localnet can have different economics.
-- `BUILD_BINARY=0` skips rebuilding the node when it is already built.
+- Test runs use the node binary that is already built. Build or rebuild it with `npm run test:localnet -- --build-only`, or set `BUILD_BINARY=1` to rebuild before every restart.
 
 ## Deployment Order
 

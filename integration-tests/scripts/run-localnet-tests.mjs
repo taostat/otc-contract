@@ -22,6 +22,10 @@ const shutdownTimeoutMs = Number(process.env.OTC_TEST_SHUTDOWN_TIMEOUT_MS ?? "30
 const verboseLocalnet = process.env.OTC_TEST_VERBOSE_LOCALNET === "1";
 const localnetLogTailBytes = Number(process.env.OTC_TEST_LOCALNET_LOG_TAIL_BYTES ?? "24000");
 
+// The localnet runs in its own process group, so Ctrl-C never reaches it. Track it
+// here so a signal handler can stop it before the runner exits.
+let activeLocalnet = null;
+
 const DEFAULT_TEST_FILES = [
   "src/lockup-listings/admin.test.ts",
   "src/lockup-listings/cancel-listing.test.ts",
@@ -98,7 +102,8 @@ Options:
   --restart file|all       Restart localnet per file (default) or once per repeat.
   --reuse-deployments      Opt in to integration deployment cache reuse.
   --subtensor-dir <path>   Path to subtensor-fork. Defaults to ../subtensor-fork.
-  --build-only             Run localnet.sh --build-only before tests.
+  --build-only             Build the node (localnet.sh --build-only) before tests.
+                           Test runs never rebuild it; set BUILD_BINARY=1 to override.
 
 Examples:
   npm run test:localnet -- src/tests/trading.test.ts --repeat 3
@@ -280,9 +285,12 @@ async function startLocalnet(subtensorDir) {
   const child = spawn(scriptPath, [], {
     cwd: subtensorDir,
     detached: true,
-    env: process.env,
+    // Rebuilding the node on every restart can outlast the readiness timeout, so
+    // test runs use the existing binary; build it with --build-only.
+    env: { ...process.env, BUILD_BINARY: process.env.BUILD_BINARY ?? "0" },
     stdio: ["ignore", "pipe", "pipe"],
   });
+  activeLocalnet = child;
   const outputTail = createOutputTail();
 
   child.stdout.on("data", (chunk) => outputTail.add("[localnet] ", chunk, process.stdout));
@@ -315,6 +323,7 @@ async function startLocalnet(subtensorDir) {
     } catch (stopError) {
       console.error(`[localnet-runner] failed to stop localnet after startup failure: ${stopError}`);
     }
+    console.error("[localnet-runner] if the node is not built yet, run with --build-only first");
     throw error;
   }
   return child;
@@ -377,8 +386,21 @@ async function runLocalnetTestBatch(files, options) {
         throw stopError;
       }
       console.error(`[localnet-runner] failed to stop localnet after batch failure: ${stopError}`);
+    } finally {
+      activeLocalnet = null;
     }
   }
+}
+
+function handleTermination(signal) {
+  if (handleTermination.started) {
+    return;
+  }
+  handleTermination.started = true;
+  console.log(`[localnet-runner] received ${signal}, stopping localnet`);
+  stopLocalnet(activeLocalnet)
+    .catch((error) => console.error(`[localnet-runner] failed to stop localnet: ${error}`))
+    .finally(() => process.exit(signal === "SIGINT" ? 130 : 143));
 }
 
 async function main() {
@@ -401,6 +423,9 @@ async function main() {
     }
   }
 }
+
+process.on("SIGINT", handleTermination);
+process.on("SIGTERM", handleTermination);
 
 main().catch((error) => {
   console.error(error);
