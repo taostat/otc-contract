@@ -247,6 +247,12 @@ export class TestSetup {
             min_listing_age: 100, // 100 blocks
         };
 
+        const cachedAddress = loadContractAddress();
+        if (cachedAddress && await this.contractExistsOnChain(api, cachedAddress)) {
+            console.log(`Using existing contract at ${cachedAddress}`);
+            return cachedAddress;
+        }
+
         try {
             const dryRunResult = await deployer.dryRun("new", {
                 origin: accounts.alice.address,
@@ -255,22 +261,9 @@ export class TestSetup {
             });
 
             if (!dryRunResult.success) {
-                // Check if it's a DuplicateContract error
                 const errorType = dryRunResult.value?.value?.value?.type;
                 console.log("Dry run failed with error:", errorType);
                 console.log("Full dry run result:", JSON.stringify(dryRunResult, null, 2));
-
-                if (errorType === 'DuplicateContract') {
-                    console.log("Contract already deployed, attempting to find and use it");
-                    const contractAddress = loadContractAddress();
-                    if (contractAddress) {
-                        console.log(`Using existing contract at ${contractAddress}`);
-                        return contractAddress;
-                    } else {
-                        return Promise.reject(new Error("Contract already deployed but address not found"));
-                    }
-                }
-
                 console.log("Dry run did not succeed", dryRunResult.value)
                 return Promise.reject(new Error(`Dry run failed: ${errorType || 'Unknown'}`));
             }
@@ -310,6 +303,18 @@ export class TestSetup {
     /**
      * Check if contract code exists on-chain
      */
+    async contractExistsOnChain(
+        api: TypedApi<typeof devnet>,
+        address: string
+    ): Promise<boolean> {
+        try {
+            const contractInfo = await api.query.Contracts.ContractInfoOf.getValue(address);
+            return contractInfo !== undefined;
+        } catch {
+            return false;
+        }
+    }
+
     async codeExistsOnChain(
         api: TypedApi<typeof devnet>,
         codeHash: string
@@ -427,6 +432,12 @@ export class TestSetup {
             max_lockup_duration: 1_000_000, // ~46 days
         };
 
+        const cachedAddress = loadLockupListingsAddress();
+        if (cachedAddress && await this.contractExistsOnChain(api, cachedAddress)) {
+            console.log(`Using existing lockup listings contract at ${cachedAddress}`);
+            return cachedAddress;
+        }
+
         try {
             const dryRunResult = await deployer.dryRun("new", {
                 origin: accounts.alice.address,
@@ -438,18 +449,6 @@ export class TestSetup {
                 const errorType = dryRunResult.value?.value?.value?.type;
                 console.log("Dry run failed with error:", errorType);
                 console.log("Full dry run result:", JSON.stringify(dryRunResult, null, 2));
-
-                if (errorType === 'DuplicateContract') {
-                    console.log("Lockup listings contract already deployed");
-                    const contractAddress = loadLockupListingsAddress();
-                    if (contractAddress) {
-                        console.log(`Using existing lockup listings contract at ${contractAddress}`);
-                        return contractAddress;
-                    } else {
-                        return Promise.reject(new Error("Lockup listings contract already deployed but address not found"));
-                    }
-                }
-
                 console.log("Dry run did not succeed", dryRunResult.value);
                 return Promise.reject(new Error(`Dry run failed: ${errorType || 'Unknown'}`));
             }
