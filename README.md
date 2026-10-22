@@ -8,8 +8,8 @@ The repository currently contains four deployable contracts:
 | --- | --- |
 | `otc_contract` | Spot Alpha listings and TAO offers with market-relative pricing, fee collection, subnet listing freezes, pause controls, and owner-controlled upgrades. |
 | `lockup_listings` | Alpha listings that sell into per-purchase lockup escrows. Supports partial fills, configurable lockup duration bounds, fee collection, pause controls, and owner-controlled upgrades. |
-| `alpha_lockup` | Per-purchase escrow contract instantiated by `lockup_listings`. It holds purchased Alpha until `unlock_block`, then lets the buyer claim the Alpha plus any staking rewards. |
-| `code_registry` | Timelocked allowlist of the code each contract kind may upgrade to, with a guardian veto. It is never upgraded itself. Not yet used by the other contracts; see the [design](docs/design/permissionless-positions.md). |
+| `alpha_lockup` | Per-purchase escrow contract instantiated by `lockup_listings`. It holds purchased Alpha until `unlock_block`, then lets anyone claim the Alpha plus any staking rewards for the beneficiary. It upgrades only to the code the registry allows. |
+| `code_registry` | Timelocked allowlist of the code each contract kind may upgrade to, with a guardian veto. It is never upgraded itself. Escrows use it today; the other contracts move to it next, see the [design](docs/design/permissionless-positions.md). |
 
 Shared Bittensor environment types, runtime calls, chain extensions, and fixed-point helpers live in `shared`.
 
@@ -47,12 +47,13 @@ cargo fmt -- --check
 cargo clippy --all-targets --all-features -- -D warnings
 cargo test
 
+cargo contract build --release --manifest-path contracts/code_registry/Cargo.toml
 cargo contract build --release --manifest-path contracts/alpha_lockup/Cargo.toml
 cargo contract build --release --manifest-path contracts/otc/Cargo.toml
 cargo contract build --release --manifest-path contracts/lockup_listings/Cargo.toml
 ```
 
-Contract artifacts are written under `target/ink/<contract_name>/`.
+Contract artifacts are written under `target/ink/<contract_name>/`. `npm run build:contracts` in `integration-tests` builds all of them, plus the test-only escrow upgrade target described below.
 
 The workspace keeps `Cargo.lock` tracked on purpose. These are deployable smart contracts, so reproducible dependency resolution is more important than treating the workspace like a reusable library crate.
 
@@ -63,20 +64,22 @@ The integration test suite expects a local contracts node at `ws://127.0.0.1:994
 ```bash
 cd integration-tests
 npm install
+npm run build:contracts
 CONTRACTS_NODE_URL=ws://127.0.0.1:9944 npm test -- --run
 ```
 
 The suite deploys local artifacts from:
 
+- `target/ink/code_registry/code_registry.wasm`
 - `target/ink/alpha_lockup/alpha_lockup.wasm`
 - `target/ink/lockup_listings/lockup_listings.wasm`
 - `target/ink/otc_contract/otc_contract.wasm`
+- `target/upgrade-test/ink/alpha_lockup/alpha_lockup.wasm`: the escrow built with `--features upgrade-test`, which only bumps its storage version. The escrow tests offer it as the registry's current code to exercise upgrades and migration.
 
 Each run deploys fresh contracts. To reuse deployments across runs, set `OTC_TEST_REUSE_DEPLOYMENTS=1`; the cached addresses are stored in these files, which Git ignores:
 
 - `integration-tests/.contract-address`
 - `integration-tests/.lockup-listings-address`
-- `integration-tests/.alpha-lockup-code-hash`
 
 ### Localnet Runner
 
@@ -96,9 +99,10 @@ npm run test:localnet:flaky
 ## Deployment Order
 
 1. Build and upload `alpha_lockup`; keep its code hash.
-2. Instantiate `lockup_listings` with the `alpha_lockup` code hash.
-3. Instantiate `otc_contract` for spot listings and offers.
-4. Before using listing or selling flows that move stake from a user, that user must authorize the marketplace contract as a proxy on the chain.
+2. Instantiate `code_registry` with the `alpha_lockup` code hash as the initial escrow code (kind `2`).
+3. Instantiate `lockup_listings` with the `alpha_lockup` code hash and the registry address.
+4. Instantiate `otc_contract` for spot listings and offers.
+5. Before using listing or selling flows that move stake from a user, that user must authorize the marketplace contract as a proxy on the chain.
 
 ### `otc_contract` Constructor
 
@@ -120,6 +124,7 @@ new(
     owner: AccountId,
     hotkey: AccountId,
     escrow_code_hash: Hash,
+    registry: AccountId,
     fee_rate: u128,
     min_listing_amount: u64,
     min_purchase_amount: u64,
@@ -137,10 +142,11 @@ new(
     alpha_amount: u64,
     unlock_block: u32,
     hotkey: AccountId,
+    registry: AccountId,
 )
 ```
 
-`alpha_lockup` is normally instantiated by `lockup_listings` when a buyer takes a lockup listing.
+`alpha_lockup` is normally instantiated by `lockup_listings` when a buyer takes a lockup listing, and binds to the lockup contract's registry for life.
 
 ## Units And Pricing
 
@@ -221,6 +227,7 @@ get_escrow(netuid, listing_id, purchase_id) -> Option<AccountId>
 estimate_lockup_price(netuid, seller, listing_id, amount) -> Result<u64>
 get_reserved_alpha(netuid) -> u64
 get_escrow_code_hash() -> Hash
+get_registry() -> AccountId
 get_lockup_duration_limits() -> (u32, u32)
 get_pause_state() -> PauseState
 ```
@@ -231,24 +238,40 @@ Users are limited to 25 active lockup listings per subnet.
 
 ```rust
 claim() -> Result<()>
+close() -> Result<()>
+sweep_tao() -> Result<()>
+resync_hotkey(new_hotkey) -> Result<()>
 propose_beneficiary(new_beneficiary) -> Result<()>
 accept_beneficiary() -> Result<()>
 cancel_beneficiary_proposal() -> Result<()>
+upgrade(code_hash) -> Result<()>
+set_upgrade_policy(policy) -> Result<()>
+migrate()
 get_info() -> Result<LockupInfo>
 get_buyer() -> AccountId
 get_beneficiary() -> AccountId
 get_pending_beneficiary() -> Option<AccountId>
 get_tao_balance() -> Balance
 get_hotkey() -> AccountId
+get_registry() -> AccountId
+get_upgrade_policy() -> UpgradePolicy
+get_version() -> u16
 get_unlock_block() -> u32
 is_claimed() -> bool
 blocks_until_unlock() -> u32
 account_id() -> AccountId
 ```
 
-Anyone can call `claim` once `unlock_block` is reached; claiming earlier fails. The Alpha always goes to the current beneficiary, never to the caller. A successful claim transfers all current escrow stake, including any staking rewards, emits `AlphaClaimed`, and terminates the escrow contract, sending any TAO balance to the beneficiary.
+Anyone can call `claim` once `unlock_block` is reached; claiming earlier fails. The Alpha always goes to the current beneficiary, never to the caller. A claim transfers all the escrow's stake on its hotkey, including any staking rewards, and emits `AlphaClaimed`. Claiming never closes the escrow, so stake that reaches its hotkey later, for example after `resync_hotkey`, can be claimed too. The beneficiary terminates an empty escrow with `close`, which sends its TAO balance and storage deposit to the beneficiary and fails while the escrow holds stake on its hotkey. Anything sent to a closed escrow is lost, so close only once nothing else is on its way.
 
-Beneficiary changes, for example after a coldkey swap, take two steps: the current beneficiary calls `propose_beneficiary`, and the proposed account calls `accept_beneficiary`. The current beneficiary can withdraw a proposal with `cancel_beneficiary_proposal`. While a proposal is pending, `claim` fails with `BeneficiaryTransferPending`, so a payout can't race a handoff away from a key that is being retired.
+Beneficiary changes, for example after a coldkey swap, take two steps: the current beneficiary calls `propose_beneficiary`, and the proposed account calls `accept_beneficiary`. The current beneficiary can withdraw a proposal with `cancel_beneficiary_proposal`. While a proposal is pending, `claim`, `sweep_tao` and `close` fail with `BeneficiaryTransferPending`, so a payout can't race a handoff away from a key that is being retired.
+
+Anyone can also call:
+
+- `sweep_tao`, which sends the escrow's TAO balance, for example from a subnet liquidation, to the beneficiary. The escrow stays open.
+- `resync_hotkey`, which points the escrow at a new hotkey after its stake moved there, for example in a validator hotkey swap. It moves nothing, and it is accepted only when the escrow holds more stake on the new hotkey than on its current one.
+
+`upgrade` installs only the registry's current escrow code. The beneficiary can upgrade at any time. Anyone else can apply the code once it has been the registry's current code for the force delay, unless the beneficiary called `set_upgrade_policy(ConsentOnly)`; the default is `Auto`. The new code migrates storage on its next call, or when anyone calls `migrate`.
 
 ## Code Registry Interface
 
@@ -309,7 +332,7 @@ Pause states are shared:
 - Stake-moving seller flows require proxy authorization from the user before they can succeed.
 - Market-relative prices are evaluated at execution time, not listing creation time.
 - Trade flows update listing state before paying out. Escrow claims mark the escrow claimed only after the stake transfer is verified. Any failure reverts the whole call, so no partial state is kept.
-- Every stake transfer is verified against the stake actually moved, allowing up to 10 rao less for Subtensor rounding. A transfer that fails verification traps, reverting the whole call. Listings record the stake that actually arrived, so later moves never ask for stake the contract does not hold.
+- Every stake transfer is verified against the stake actually moved, within 10 rao either way: stake is a share of a hotkey's pool, and Subtensor's rounding can shave a rao off a transfer or add one to a recipient that already stakes on the hotkey. A transfer that fails verification traps, reverting the whole call. Listings record the stake that actually arrived, so later moves never ask for stake the contract does not hold.
 - Keep owner keys and upgrade authority operationally separate from test keys and development accounts.
 
 Report suspected vulnerabilities privately using the instructions in `SECURITY.md`.

@@ -125,9 +125,10 @@ Messages:
 | `sweep_stake()` | anyone | Sends stake above `remaining` to the seller, when it's at least the chain minimum. Once the listing is closed, `remaining` is 0, so this returns everything left. |
 | `resync_hotkey(hk)` | anyone | Re-points `hotkey` to `hk` if the vault holds more stake on `hk` than on the recorded hotkey. Moves nothing. |
 | `consolidate()` | anyone | Optional. Moves stake to the factory's current validator hotkey. |
+| `close()` | seller | Closed, and no stake on `hotkey`. Terminates, sending the TAO balance and the storage deposit to the seller. |
 | `upgrade(hash)`, `set_upgrade_policy(p)` | see [Upgrades](#upgrades) | |
 
-**Termination.** A vault terminates only in the call that successfully transferred out its last stake: a `cancel`, the final fill, or a `sweep_stake` after closing. A successful transfer proves the subnet was alive, so no liquidation TAO can still be on its way. The TAO sweep never terminates (see [Deregistration](#deregistration)).
+**Termination.** Only the owner terminates a position, with `close()`, and only once it holds no stake on its recorded hotkey. No permissionless call terminates. After a validator hotkey swap, the stake sits on the new hotkey until someone calls `resync_hotkey`. If a permissionless call terminated a position whose recorded hotkey was empty, anyone could strand the swapped stake for good: donate a little on the old hotkey, then trigger the payout that drains it. The owner can still close too early, but that is their own call. The TAO sweep never terminates either (see [Deregistration](#deregistration)).
 
 **Funding without a proxy:**
 
@@ -146,6 +147,7 @@ Changes from today:
 - Replace `recover_tao_after_deregistration` with `sweep_tao()`. Anyone can call it at any time. It sends the whole TAO balance to the beneficiary, never terminates, and never sets `claimed`. It is blocked while a beneficiary transfer is pending, as today.
 - Drop the subnet-generation check and the availability pre-check from `claim`. Isolated custody makes both unnecessary (see [Deregistration](#deregistration) and [Conviction locks](#conviction-locks)).
 - Add `upgrade(hash)`, and `set_upgrade_policy(p)` controlled by the beneficiary.
+- `claim` no longer terminates. It pays out whatever stake is on the recorded hotkey and can run again, for example after `resync_hotkey`. The beneficiary terminates an empty escrow with `close()` (see the termination rule above).
 
 Unchanged:
 
