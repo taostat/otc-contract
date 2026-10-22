@@ -39,4 +39,8 @@ pub enum Error {
     ListingStillOpen,
     /// Failed to query the listing's vault
     VaultQueryFailed,
+    /// New listings are frozen on this subnet
+    SubnetFrozen,
+    /// The minimum listing age exceeds `MAX_LISTING_AGE`
+    ListingAgeTooLong,
 }

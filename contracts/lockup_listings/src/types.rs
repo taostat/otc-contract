@@ -25,5 +25,6 @@ pub struct Config {
     pub min_purchase_amount: AlphaAmount,
     pub min_lockup_duration: BlockAge,
     pub max_lockup_duration: BlockAge,
+    pub min_listing_age: BlockAge,
     pub paused_until: BlockNumber,
 }
