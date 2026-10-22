@@ -1,21 +1,6 @@
-use crate::types::{AlphaListingId, TaoOfferId};
-use ink::prelude::vec::Vec;
+use crate::types::TaoOfferId;
 use ink::primitives::AccountId;
-use otc_shared::{
-    AlphaAmount, Balance, BlockAge, FixedDecimal, NetUid, PauseState, PriceOffsetBps, TaoAmount,
-};
-
-#[ink::event]
-pub struct AlphaListed {
-    #[ink(topic)]
-    pub seller: AccountId,
-    pub hotkey: AccountId,
-    #[ink(topic)]
-    pub netuid: NetUid,
-    pub alpha_listing_id: AlphaListingId,
-    pub amount: AlphaAmount,
-    pub price_offset_bps: PriceOffsetBps,
-}
+use otc_shared::{AlphaAmount, BlockNumber, FixedDecimal, NetUid, PriceOffsetBps, TaoAmount};
 
 #[ink::event]
 pub struct TaoOfferCreated {
@@ -26,28 +11,7 @@ pub struct TaoOfferCreated {
     pub tao_offer_id: TaoOfferId,
     pub amount: TaoAmount,
     pub price_offset_bps: PriceOffsetBps,
-}
-
-#[ink::event]
-pub struct AlphaListingCancelled {
-    #[ink(topic)]
-    pub seller: AccountId,
-    #[ink(topic)]
-    pub netuid: NetUid,
-    pub listing_id: AlphaListingId,
-    pub amount_returned: AlphaAmount,
-}
-
-#[ink::event]
-pub struct AlphaListingForceCancelled {
-    #[ink(topic)]
-    pub seller: AccountId,
-    #[ink(topic)]
-    pub initiated_by: AccountId,
-    #[ink(topic)]
-    pub netuid: NetUid,
-    pub listing_id: AlphaListingId,
-    pub amount_returned: AlphaAmount,
+    pub max_price: u64,
 }
 
 #[ink::event]
@@ -56,24 +20,8 @@ pub struct TaoOfferCancelled {
     pub buyer: AccountId,
     #[ink(topic)]
     pub netuid: NetUid,
-    pub offer_id: TaoOfferId,
+    pub tao_offer_id: TaoOfferId,
     pub amount_returned: TaoAmount,
-}
-
-#[ink::event]
-pub struct AlphaListingTaken {
-    #[ink(topic)]
-    pub seller: AccountId,
-    #[ink(topic)]
-    pub buyer: AccountId,
-    #[ink(topic)]
-    pub netuid: NetUid,
-    pub alpha_amount: AlphaAmount,
-    pub tao_amount: TaoAmount,
-    pub price_offset_bps: PriceOffsetBps,
-    pub executed_price: u64, // Market price at execution (price * 1e9)
-    pub fee: Balance,
-    pub alpha_listing_id: Option<AlphaListingId>,
 }
 
 #[ink::event]
@@ -84,78 +32,52 @@ pub struct TaoOfferTaken {
     pub buyer: AccountId,
     #[ink(topic)]
     pub netuid: NetUid,
+    pub tao_offer_id: TaoOfferId,
     pub alpha_amount: AlphaAmount,
+    /// TAO the seller received
     pub tao_amount: TaoAmount,
-    pub price_offset_bps: PriceOffsetBps,
-    pub executed_price: u64, // Market price at execution (price * 1e9)
-    pub fee: Balance,
-    pub tao_offer_id: Option<TaoOfferId>,
+    pub executed_price: u64,
+    pub fee: TaoAmount,
+}
+
+/// The owner proposed a new owner, or withdrew the proposal with `None`
+#[ink::event]
+pub struct OwnershipTransferProposed {
+    pub new_owner: Option<AccountId>,
 }
 
 #[ink::event]
-pub struct OwnerUpdated {
+pub struct OwnerChanged {
     pub old_owner: AccountId,
     pub new_owner: AccountId,
 }
 
 #[ink::event]
-pub struct HotkeyUpdated {
-    pub old_hotkey: AccountId,
-    pub new_hotkey: AccountId,
-}
-
-#[ink::event]
-pub struct FeeRateUpdated {
+pub struct FeeRateChanged {
     pub old_rate: FixedDecimal,
     pub new_rate: FixedDecimal,
 }
 
 #[ink::event]
-pub struct MinOfferAmountUpdated {
+pub struct FeeRecipientChanged {
+    pub old_recipient: AccountId,
+    pub new_recipient: AccountId,
+}
+
+#[ink::event]
+pub struct MinOfferAmountChanged {
     pub old_amount: TaoAmount,
     pub new_amount: TaoAmount,
 }
 
+/// New offers and fills are paused until `until`
 #[ink::event]
-pub struct MinListingAmountUpdated {
-    pub old_amount: AlphaAmount,
-    pub new_amount: AlphaAmount,
-}
-
-#[ink::event]
-pub struct MinListingAgeUpdated {
-    pub old_age: BlockAge,
-    pub new_age: BlockAge,
-}
-
-#[ink::event]
-pub struct ContractPaused {
-    #[ink(topic)]
-    pub pause_state: PauseState,
-    pub reason: Vec<u8>,
+pub struct TradingPaused {
+    pub until: BlockNumber,
     pub paused_by: AccountId,
 }
 
 #[ink::event]
-pub struct ContractResumed {
+pub struct TradingResumed {
     pub resumed_by: AccountId,
-}
-
-#[ink::event]
-pub struct DividendsClaimed {
-    #[ink(topic)]
-    pub owner: AccountId,
-    #[ink(topic)]
-    pub netuid: NetUid,
-    pub amount: AlphaAmount,
-    pub reserved_after: AlphaAmount,
-}
-
-#[ink::event]
-pub struct SubnetListingStatusChanged {
-    #[ink(topic)]
-    pub netuid: NetUid,
-    pub frozen: bool,
-    pub reason: Vec<u8>,
-    pub changed_by: AccountId,
 }

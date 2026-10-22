@@ -36,8 +36,8 @@ pub use upgrade::{check_upgrade, CodeKind, UpgradeError, UpgradePolicy};
 
 // Re-export common types (type aliases and FixedDecimal)
 pub use types::{
-    AlphaAmount, Balance, BlockAge, BlockNumber, FixedDecimal, NetUid, PauseState, PriceOffsetBps,
-    TaoAmount, MAX_PAUSE,
+    AlphaAmount, Balance, BlockAge, BlockNumber, FixedDecimal, NetUid, PriceOffsetBps, TaoAmount,
+    MAX_PAUSE,
 };
 
 /// Custom environment for Bittensor contracts

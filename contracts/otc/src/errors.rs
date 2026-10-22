@@ -1,60 +1,44 @@
 #[derive(Debug, PartialEq, Eq)]
 #[ink::scale_derive(Encode, Decode, TypeInfo)]
 pub enum Error {
-    /// Insufficient Alpha balance
-    InsufficientAlphaBalance,
-    /// Insufficient TAO balance
-    InsufficientTaoBalance,
-    /// Listing not found
-    ListingNotFound,
-    /// Offer not found
-    OfferNotFound,
-    /// Not the owner of the listing/offer
-    NotOwner,
-    /// Amount below minimum threshold
-    AmountTooSmall,
-    /// Invalid price
-    InvalidPrice,
-    /// Unauthorized access
+    /// Caller is not allowed to perform this action
     Unauthorized,
-    /// Listing too young to cancel
-    ListingTooYoung,
-    /// Division by zero error
-    DivisionByZero,
+    /// New offers and fills are paused
+    TradingPaused,
+    /// Amount is below the minimum, or rounds to nothing
+    AmountTooSmall,
+    /// The price offset prices Alpha at or below zero
+    InvalidPriceOffset,
+    /// The buyer already has the maximum number of offers on this subnet
+    TooManyOffers,
+    /// No such offer
+    OfferNotFound,
     /// Arithmetic overflow
     Overflow,
-    /// Runtime call failed
-    RuntimeCallFailed,
-    /// Transfer failed
-    TransferFailed,
-    /// Invalid hotkey
-    InvalidHotkey,
-    /// Invalid netuid
-    InvalidNetuid,
-    /// Chain extension query failed
-    StakeQueryFailed,
-    /// Insufficient stake for operation
-    InsufficientStake,
-    /// TAO balance query failed
-    TaoBalanceQueryFailed,
-    /// Code upgrade failed
-    CodeUpgradeFailed,
-    /// No dividends available to claim
-    NoDividendsAvailable,
-    /// Contract is fully paused
-    ContractFullyPaused,
-    /// Trading is paused
-    TradingPaused,
-    /// Maximum active listings reached
-    TooManyListings,
-    /// Maximum active offers reached
-    TooManyOffers,
-    /// Listings are frozen for the subnet
-    SubnetListingsFrozen,
-    /// Failed to fetch market price from chain extension
+    /// Failed to fetch the market price
     MarketPriceFetchFailed,
-    /// Invalid price offset (e.g., <= -100%)
-    InvalidPriceOffset,
-    /// Insufficient payment (buyer sent less TAO than required)
-    InsufficientPayment,
+    /// The executed price is above the buyer's ceiling
+    PriceAboveMaximum,
+    /// Filling the offer would take more Alpha than the seller allowed
+    AlphaAboveMaximum,
+    /// Failed to query stake
+    StakeQueryFailed,
+    /// The seller holds less stake than the fill needs
+    InsufficientStake,
+    /// The proxied stake transfer failed; the seller may not have added the proxy
+    RuntimeCallFailed,
+    /// Failed to transfer TAO
+    TransferFailed,
+    /// The fee rate exceeds `MAX_FEE_RATE`
+    FeeRateTooHigh,
+    /// A pause must last between 1 block and `MAX_PAUSE`
+    InvalidPauseDuration,
+    /// The code registry has no current code for this contract
+    NoCurrentCode,
+    /// The requested code is not the registry's current otc code
+    NotCurrentCode,
+    /// Failed to query the code registry
+    RegistryQueryFailed,
+    /// Failed to replace the contract code
+    CodeUpgradeFailed,
 }

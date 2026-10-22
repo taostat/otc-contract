@@ -21,18 +21,6 @@ pub type TaoAmount = u64; // Amount of TAO tokens in rao
 /// Range: -10000 to i32::MAX (cannot go below -100%)
 pub type PriceOffsetBps = i32;
 
-// Pause state for emergency control
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[ink::scale_derive(Encode, Decode, TypeInfo)]
-#[cfg_attr(feature = "std", derive(ink::storage::traits::StorageLayout))]
-#[derive(Default)]
-pub enum PauseState {
-    #[default]
-    NotPaused, // Normal operation
-    TradingPaused, // No trading, but cancellations allowed
-    FullyPaused,   // All operations frozen except admin functions
-}
-
 /// Fixed-point decimal representation with 64 bits integer, 64 bits fraction
 /// Used for prices (TAO per Alpha ratios) and rates (fee percentages)
 /// Uses U64F64 to handle large rao values (1 TAO = 10^9 rao) and precise percentages
