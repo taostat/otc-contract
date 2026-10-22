@@ -1,4 +1,5 @@
 use crate::types::ListingId;
+use ink::prelude::vec::Vec;
 use ink::primitives::AccountId;
 use otc_shared::{AlphaAmount, BlockAge, BlockNumber, FixedDecimal, NetUid, PriceOffsetBps};
 
@@ -16,7 +17,8 @@ pub struct ListingCreated {
     pub amount: AlphaAmount,
     pub price_offset_bps: PriceOffsetBps,
     pub min_price: u64,
-    pub lockup_duration: BlockAge,
+    /// `None` for a spot listing
+    pub lockup_duration: Option<BlockAge>,
 }
 
 /// A vault reported that its listing filled or was cancelled
@@ -85,6 +87,21 @@ pub struct MinPurchaseAmountChanged {
 pub struct LockupDurationLimitsChanged {
     pub min: BlockAge,
     pub max: BlockAge,
+}
+
+#[ink::event]
+pub struct MinListingAgeChanged {
+    pub old_age: BlockAge,
+    pub new_age: BlockAge,
+}
+
+/// New listings on `netuid` were frozen or unfrozen
+#[ink::event]
+pub struct SubnetFrozenChanged {
+    #[ink(topic)]
+    pub netuid: NetUid,
+    pub frozen: bool,
+    pub reason: Vec<u8>,
 }
 
 /// New listings and takes are paused until `until`

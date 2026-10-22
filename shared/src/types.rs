@@ -6,6 +6,11 @@ pub type NetUid = u16;
 pub type BlockNumber = u32;
 pub type BlockAge = u32; // Age/duration in blocks
 
+/// The longest single trading pause: about a week of 12-second blocks. The owner
+/// can renew a pause, but it always expires unless renewed, and it never blocks
+/// exits.
+pub const MAX_PAUSE: BlockAge = 50_400;
+
 // Balance and amount types
 pub type Balance = u64; // Generic balance/amount type
 pub type AlphaAmount = u64; // Amount of Alpha tokens in rao
@@ -15,18 +20,6 @@ pub type TaoAmount = u64; // Amount of TAO tokens in rao
 /// -500 = -5% below market, 1000 = +10% above market
 /// Range: -10000 to i32::MAX (cannot go below -100%)
 pub type PriceOffsetBps = i32;
-
-// Pause state for emergency control
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[ink::scale_derive(Encode, Decode, TypeInfo)]
-#[cfg_attr(feature = "std", derive(ink::storage::traits::StorageLayout))]
-#[derive(Default)]
-pub enum PauseState {
-    #[default]
-    NotPaused, // Normal operation
-    TradingPaused, // No trading, but cancellations allowed
-    FullyPaused,   // All operations frozen except admin functions
-}
 
 /// Fixed-point decimal representation with 64 bits integer, 64 bits fraction
 /// Used for prices (TAO per Alpha ratios) and rates (fee percentages)
@@ -169,5 +162,40 @@ mod tests {
         let zero = FixedDecimal::from_bits(0);
         let result = zero.as_divisor_of(100);
         assert_eq!(result, Err(SharedError::DivisionByZero));
+    }
+
+    #[test]
+    fn fixed_decimal_mul_reports_overflow() {
+        let large = FixedDecimal::from_bits(U64F64::from_num(u64::MAX / 2).to_bits());
+        assert_eq!(large.mul(3), Err(SharedError::Overflow));
+
+        let thousand = FixedDecimal::from_bits(U64F64::from_num(1000u64).to_bits());
+        assert_eq!(thousand.mul(1_000_000), Ok(1_000_000_000));
+        assert_eq!(
+            FixedDecimal::from_bits(U64F64::from_num(1u64).to_bits()).mul(u64::MAX),
+            Ok(u64::MAX)
+        );
+    }
+
+    #[test]
+    fn fixed_decimal_divisions_report_overflow() {
+        let tiny = FixedDecimal::from_bits(U64F64::from_num(0.0000000000001).to_bits());
+        assert_eq!(tiny.div_by(u64::MAX), Err(SharedError::Overflow));
+        assert_eq!(tiny.as_divisor_of(u64::MAX), Err(SharedError::Overflow));
+
+        let ten = FixedDecimal::from_bits(U64F64::from_num(10u64).to_bits());
+        assert_eq!(ten.div_by(1000), Ok(100));
+    }
+
+    #[test]
+    fn fee_rates_apply_to_rao_amounts() {
+        // 1/64 and 1/16 are exact in binary fixed point.
+        let one_64th = FixedDecimal::from_bits((U64F64::from_num(1) / 64).to_bits());
+        let one_16th = FixedDecimal::from_bits((U64F64::from_num(1) / 16).to_bits());
+        let ten_tao = 10_000_000_000u64;
+
+        assert_eq!(one_64th.mul(ten_tao), Ok(156_250_000));
+        assert_eq!(one_16th.mul(ten_tao), Ok(625_000_000));
+        assert_eq!(FixedDecimal::default().mul(ten_tao), Ok(0));
     }
 }

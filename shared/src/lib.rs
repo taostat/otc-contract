@@ -29,15 +29,15 @@ pub use stake::{
 
 // Re-export listing pricing and the interface vaults use to read their factory
 pub use factory::VaultFactory;
-pub use pricing::{quote, PricingError, Quote, BITTENSOR_MIN_STAKE};
+pub use pricing::{quote, PricingError, Quote, BITTENSOR_MIN_STAKE, MAX_FEE_RATE};
 
 // Re-export code registry kinds and the position upgrade rule
 pub use upgrade::{check_upgrade, CodeKind, UpgradeError, UpgradePolicy};
 
 // Re-export common types (type aliases and FixedDecimal)
 pub use types::{
-    AlphaAmount, Balance, BlockAge, BlockNumber, FixedDecimal, NetUid, PauseState, PriceOffsetBps,
-    TaoAmount,
+    AlphaAmount, Balance, BlockAge, BlockNumber, FixedDecimal, NetUid, PriceOffsetBps, TaoAmount,
+    MAX_PAUSE,
 };
 
 /// Custom environment for Bittensor contracts

@@ -7,11 +7,12 @@ edition = "2021"
 [dependencies]
 ink = { version = "5.1.1", default-features = false }
 otc-shared = { path = "../../shared", default-features = false }
+code-registry = { path = "../code_registry", default-features = false, features = ["ink-as-dependency"] }
 sp-runtime = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-stable2503-6", default-features = false }
-fixed = { version = "=1.27.0", default-features = false }
 
 [dev-dependencies]
-ink_e2e = { version = "5.1.1" }
+otc-shared = { path = "../../shared", features = ["testing"] }
+fixed = { version = "=1.27.0", default-features = false }
 
 [lib]
 path = "src/lib.rs"
@@ -21,8 +22,7 @@ default = ["std"]
 std = [
     "ink/std",
     "otc-shared/std",
+    "code-registry/std",
     "sp-runtime/std",
-    "fixed/std",
 ]
 ink-as-dependency = []
-e2e-tests = []

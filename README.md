@@ -6,11 +6,11 @@ The repository currently contains five deployable contracts:
 
 | Contract | Purpose |
 | --- | --- |
-| `otc_contract` | Spot Alpha listings and TAO offers with market-relative pricing, fee collection, subnet listing freezes, pause controls, and owner-controlled upgrades. |
-| `lockup_listings` | Factory for lockup listings. Each listing is its own `listing_vault`; the factory holds no Alpha. It keeps the listing index and the settings vaults read (validator hotkey per subnet, fee recipient, trading pause), and upgrades through the registry. |
+| `otc_contract` | TAO offers: buyers deposit TAO to buy Alpha at a market-relative price, and sellers fill them. TAO isn't tied to a subnet, so offers stay pooled here. Upgrades through the registry. |
+| `lockup_listings` | Factory for all Alpha listings, spot and lockup. Each listing is its own `listing_vault`; the factory holds no Alpha. It keeps the listing index and the settings vaults read (validator hotkey per subnet, fee recipient, trading pause), and upgrades through the registry. |
 | `listing_vault` | One listing's Alpha, on the vault's own coldkey. Sellers fund it without a proxy, buyers take from it directly, and lockup takes create an escrow. Anyone can sweep its TAO and staking rewards to the seller. It upgrades only to the code the registry allows. |
 | `alpha_lockup` | Per-purchase escrow created by a listing vault. It holds purchased Alpha until `unlock_block`, then lets anyone claim the Alpha plus any staking rewards for the beneficiary. It upgrades only to the code the registry allows. |
-| `code_registry` | Timelocked allowlist of the code each contract kind may upgrade to, with a guardian veto. It is never upgraded itself. Vaults, escrows and the lockup factory use it; `otc_contract` moves to it next, see the [design](docs/design/permissionless-positions.md). |
+| `code_registry` | Timelocked allowlist of the code each contract kind may upgrade to, with a guardian veto. It is never upgraded itself, and every other contract upgrades through it; see the [design](docs/design/permissionless-positions.md). |
 
 Shared Bittensor environment types, runtime calls, chain extensions, and fixed-point helpers live in `shared`.
 
@@ -22,8 +22,8 @@ Shared Bittensor environment types, runtime calls, chain extensions, and fixed-p
 |   |-- alpha_lockup/        # Escrow contract created by lockup takes
 |   |-- code_registry/       # Timelocked allowlist of upgrade code
 |   |-- listing_vault/       # One contract per listing, holding its Alpha
-|   |-- lockup_listings/     # Lockup listing factory
-|   `-- otc/                 # Spot OTC marketplace
+|   |-- lockup_listings/     # Listing factory, spot and lockup
+|   `-- otc/                 # TAO offers
 |-- integration-tests/       # TypeScript integration tests for a local contracts node
 |-- shared/                  # Shared ink! environment, runtime types, and helpers
 `-- Cargo.toml               # Rust workspace
@@ -104,23 +104,24 @@ npm run test:localnet:flaky
 ## Deployment Order
 
 1. Build all contracts, and upload the `alpha_lockup` and `listing_vault` code; keep their code hashes.
-2. Instantiate `code_registry` with the initial codes: `listing_vault` (kind `1`), `alpha_lockup` (kind `2`) and the `lockup_listings` code hash (kind `3`).
-3. Instantiate `lockup_listings` with the registry address.
-4. Instantiate `otc_contract` for spot listings and offers.
-5. Before using `otc_contract` flows that move stake from a user, that user must authorize the contract as a proxy on the chain. Lockup listings need no proxy.
+2. Instantiate `code_registry` with the initial codes: `listing_vault` (kind `1`), `alpha_lockup` (kind `2`), and the code hashes of `lockup_listings` (kind `3`) and `otc_contract` (kind `4`).
+3. Instantiate `lockup_listings` and `otc_contract` with the registry address.
+
+Listings need no proxy. Filling a TAO offer moves the seller's stake through a proxy, which frontends add and remove in the seller's own batch (see below).
 
 ### `otc_contract` Constructor
 
 ```rust
 new(
     owner: AccountId,
-    hotkey: AccountId,
+    registry: AccountId,
     fee_rate: u128,
-    min_listing_amount: u64,
+    fee_recipient: AccountId,
     min_offer_amount: u64,
-    min_listing_age: u32,
-)
+) -> Result<Self>
 ```
+
+It fails if `fee_rate` exceeds `MAX_FEE_RATE` (5%).
 
 ### `lockup_listings` Constructor
 
@@ -135,10 +136,11 @@ new(
     min_purchase_amount: u64,
     min_lockup_duration: u32,
     max_lockup_duration: u32,
+    min_listing_age: u32,
 ) -> Result<Self>
 ```
 
-It fails if `fee_rate` exceeds `MAX_FEE_RATE` (5%) or the minimum lockup exceeds the maximum. `default_hotkey` is the validator hotkey vaults delegate to on subnets without an override.
+It fails if `fee_rate` exceeds `MAX_FEE_RATE` (5%) or the minimum lockup exceeds the maximum. `default_hotkey` is the validator hotkey vaults delegate to on subnets without an override. `min_listing_age` is how long a spot listing must stay open before the seller can cancel it.
 
 ### `listing_vault` Constructor
 
@@ -153,12 +155,12 @@ new(
     fee_rate: FixedDecimal,
     min_purchase: u64,
     lockup_duration: Option<u32>,
-    cancellable_after: u32,
+    cancel_delay: u32,
     registry: AccountId,
 )
 ```
 
-Vaults are created by a factory, which becomes the vault's `factory` and keeps the listing's id. `lockup_duration` is `None` for spot listings. Lockup listings pass `cancellable_after = 0`: the seller can cancel at any time.
+Vaults are created by a factory, which becomes the vault's `factory` and keeps the listing's id. `lockup_duration` is `None` for spot listings. `cancel_delay` counts from activation: spot listings use the factory's `min_listing_age`, and lockup listings pass 0, so the seller can cancel at any time.
 
 ### `alpha_lockup` Constructor
 
@@ -193,50 +195,38 @@ Execution price is calculated at execution time:
 executed_price = market_price * (10000 + price_offset_bps) / 10000
 ```
 
-## Spot OTC Interface
-
-### Trading
+## TAO Offers Interface
 
 ```rust
-list_alpha(hotkey, netuid, amount, price_offset_bps) -> Result<u64>
-#[payable] create_tao_offer(netuid, price_offset_bps) -> Result<u64>
-#[payable] take_alpha_listing(netuid, seller, listing_id) -> Result<()>
-take_tao_offer(netuid, buyer, offer_id, hotkey) -> Result<()>
-cancel_alpha_listing(netuid, listing_id) -> Result<()>
+#[payable] create_tao_offer(netuid, price_offset_bps, max_price) -> Result<u64>
+take_tao_offer(netuid, buyer, offer_id, hotkey, max_alpha) -> Result<u64>
 cancel_tao_offer(netuid, offer_id) -> Result<()>
-force_cancel_alpha_listing(netuid, seller, listing_id) -> Result<()>
-claim_dividends(netuid) -> Result<()>
-```
-
-`list_alpha` and `take_tao_offer` move Alpha from the caller through the Bittensor proxy flow. The caller must have authorized the contract as a proxy first.
-
-`take_alpha_listing` accepts overpayment and refunds excess TAO after the trade executes.
-
-`claim_dividends` is owner-only. It claims stake held by the contract above the Alpha reserved for open listings.
-
-### Queries
-
-```rust
-get_listing(netuid, seller, listing_id) -> Option<AlphaListing>
-get_user_listings(seller, netuid) -> Vec<u64>
+quote_offer_fill(netuid, buyer, offer_id) -> Result<OfferQuote>
 get_offer(netuid, buyer, offer_id) -> Option<TaoOffer>
 get_user_offers(buyer, netuid) -> Vec<u64>
-estimate_listing_price(netuid, seller, listing_id) -> Result<u64>
-estimate_offer_price(netuid, buyer, offer_id) -> Result<u64>
-get_reserved_alpha(netuid) -> u64
-is_subnet_frozen(netuid) -> bool
-get_pause_state() -> PauseState
+get_config() -> Config
+is_trading_paused() -> bool
 ```
 
-Users are limited to 25 active Alpha listings and 25 active TAO offers per subnet.
+A buyer deposits TAO with `create_tao_offer`, at the market price moved by `price_offset_bps`. `max_price` is the buyer's ceiling, in TAO per Alpha scaled by 1e9 (0 for none): fills above it fail, so a seller can't push the price up and fill at it. Users are limited to 25 open offers per subnet, and buyers can cancel at any time, even while trading is paused.
 
-## Lockup Listings Interface
+A seller fills a whole offer with `take_tao_offer`. The fee comes out of the offer, and the rest buys Alpha at the current price; `quote_offer_fill` shows the numbers. The `TaoOfferTaken` event's `tao_amount` is what the seller received, so `tao_amount + fee` is the offer. `max_alpha` is the seller's cap: the fill fails if the price has fallen far enough to need more Alpha than that. The Alpha moves straight from the seller's stake on `hotkey` to the buyer through a `Transfer` proxy, which frontends add and remove within the seller's own transaction:
 
-Each lockup listing is its own `listing_vault`, holding the seller's Alpha on the vault's own coldkey. The `lockup_listings` factory creates vaults and keeps the index; it never holds Alpha.
+```text
+utility.batch_all([
+  proxy.add_proxy(otc, Transfer, 0),
+  contracts.call(otc.take_tao_offer(..)),
+  proxy.remove_proxy(otc, Transfer, 0),
+])
+```
+
+## Listings Interface
+
+Each listing, spot or lockup, is its own `listing_vault`, holding the seller's Alpha on the vault's own coldkey. The `lockup_listings` factory creates vaults and keeps the index; it never holds Alpha.
 
 ### Selling
 
-1. The seller calls `create_listing(netuid, hotkey, amount, price_offset_bps, min_price, lockup_duration)` on the factory. It creates a Pending vault and returns the listing id and the vault's address; the seller pays the vault's storage deposit.
+1. The seller calls `create_listing(netuid, hotkey, amount, price_offset_bps, min_price, lockup_duration)` on the factory. It creates a Pending vault and returns the listing id and the vault's address; the seller pays the vault's storage deposit. With a `lockup_duration`, buyers receive the Alpha in an escrow that locks it for that long, within the factory's limits. With `None` it is a spot listing: buyers receive the Alpha directly, and the seller can cancel only once the listing has been open for `min_listing_age`.
 2. The seller funds and opens the vault in one batch, with no proxy:
 
    ```text
@@ -288,12 +278,13 @@ get_version() -> u16
 ### Factory
 
 ```rust
-create_listing(netuid, hotkey, amount, price_offset_bps, min_price, lockup_duration) -> Result<(u64, AccountId)>
+create_listing(netuid, hotkey, amount, price_offset_bps, min_price, lockup_duration: Option<u32>) -> Result<(u64, AccountId)>
 prune_listing(netuid, seller, listing_id) -> Result<()>
 get_listing(netuid, seller, listing_id) -> Option<AccountId>
 get_vault_listing(vault) -> Option<(u16, AccountId, u64)>
 get_user_listings(seller, netuid) -> Vec<u64>
 get_seller_nonce(seller) -> u64
+is_subnet_frozen(netuid) -> bool
 get_config() -> Config
 get_owner() -> AccountId
 get_pending_owner() -> Option<AccountId>
@@ -305,7 +296,7 @@ VaultFactory::validator_hotkey(netuid) -> AccountId
 VaultFactory::listing_closed()
 ```
 
-The index holds open listings; a vault removes its listing when it fills or is cancelled. That report is best effort, so if it ever fails, anyone can `prune_listing` once the vault is closed or gone. Users are limited to 25 open listings per subnet. Vaults copy the fee rate and minimum purchase when they are created, and read the fee recipient, validator hotkey and pause from the factory.
+The index holds open listings; a vault removes its listing when it fills or is cancelled. A seller can have 25 open listings per subnet, spot and lockup together. That report is best effort, so if it ever fails, anyone can `prune_listing` once the vault is closed or gone. Users are limited to 25 open listings per subnet. Vaults copy the fee rate and minimum purchase when they are created, and read the fee recipient, validator hotkey and pause from the factory.
 
 ## Alpha Lockup Interface
 
@@ -376,38 +367,26 @@ Both roles should be multisigs. A compromised key can stall upgrades but cannot 
 
 ## Owner Controls
 
-`otc_contract` has owner-only controls for:
-
-- owner transfer
-- hotkey updates
-- fee rate updates
-- minimum listing and offer amount updates
-- pause and resume
-- `set_subnet_listing_status(netuid, frozen)`, which prevents new Alpha listings on a subnet while preserving cancellation and other allowed maintenance flows
-- `set_code` upgrades
-
-Its pause states:
-
-| State | Effect |
-| --- | --- |
-| `NotPaused` | Normal operation. |
-| `TradingPaused` | New trading actions are blocked while maintenance and cancellation flows remain available where implemented. |
-| `FullyPaused` | Trading and most state-changing flows are blocked except owner recovery actions such as `resume`. |
-
-The `lockup_listings` owner's controls only shape future listings and takes; none can reach a seller's Alpha:
+Owner settings only shape future listings, offers and trades, and none can block an exit. Upgrades are the one power that reaches funds: listings and escrows only take code the owner proposed through the registry's delay and guardian veto (and escrows can refuse forced upgrades), while TAO offers sit in `otc_contract` itself, so a buyer's protection there is the registry's delay, during which they can cancel. Both `lockup_listings` and `otc_contract` have:
 
 - `transfer_ownership(new_owner)`, which the new owner completes with `accept_ownership()`; `None` withdraws a proposal
+- `set_fee_rate`, for new listings or offers only and at most `MAX_FEE_RATE` (5%), and `set_fee_recipient`
+- `pause(blocks)` for at most `MAX_PAUSE` (50,400 blocks, about a week), renewable, and `resume()`. A pause blocks new listings, offers and trades, never cancels, sweeps or claims.
+- `upgrade(code_hash)` to the registry's current code for the contract; the new code migrates on its next call, or through `migrate()`.
+
+`lockup_listings` also has:
+
 - `set_default_hotkey` and `set_validator_hotkey(netuid, hotkey)`, where `None` removes a subnet's override
-- `set_fee_rate`, for new listings only and at most `MAX_FEE_RATE` (5%), and `set_fee_recipient`
-- `set_min_listing_amount`, `set_min_purchase_amount` (new listings only) and `set_lockup_duration_limits`
-- `pause(blocks)` for at most `MAX_PAUSE` (50,400 blocks, about a week), renewable, and `resume()`. A pause blocks new listings and takes, never cancels, sweeps or claims.
-- `upgrade(code_hash)` to the registry's current factory code; the new code migrates on its next call, or through `migrate()`.
+- `set_min_listing_amount`, `set_min_purchase_amount` (new listings only), `set_lockup_duration_limits`, and `set_min_listing_age` (at most `MAX_LISTING_AGE`, 50,400 blocks, since sellers don't choose it)
+- `set_subnet_frozen(netuid, frozen, reason)`, which stops new listings on a subnet, for example while it is at risk of deregistration; open listings are unaffected
+
+`otc_contract` also has `set_min_offer_amount`.
 
 ## Security Notes
 
 - These contracts are not presented here as externally audited.
 - The contracts depend on Bittensor runtime calls and chain extension behavior for stake movement, stake queries, and live Alpha pricing.
-- `otc_contract`'s stake-moving seller flows require proxy authorization from the user before they can succeed. Lockup listings are funded without a proxy.
+- Listings are funded without a proxy. Filling a TAO offer is the one flow that needs one: frontends add it and remove it again in the seller's own batch, so it never outlives the fill. A seller who adds the proxy on its own leaves `otc_contract` able to move their stake until they remove it.
 - Market-relative prices are evaluated at execution time, not listing creation time.
 - A listing vault or escrow only ever sends Alpha or TAO to its owner, a buyer who paid in the same call, or an escrow it creates in the same call; fees go to the factory's fee recipient out of the buyer's payment.
 - Anyone can deploy the vault code with themselves as the "factory" and a registry of their own, which would let them charge any fee and create escrows from code they control. Before a buyer pays a vault, frontends must check that `get_factory()` is the official factory, that the factory's `get_vault_listing(vault)` returns the listing, that `get_registry()` is the official registry, and that the vault runs the registry's vault code.

@@ -9,7 +9,7 @@
         "test:run": "vitest run --no-file-parallelism --maxWorkers=1",
         "test:localnet": "node scripts/run-localnet-tests.mjs",
         "test:localnet:combined": "node scripts/run-localnet-tests.mjs --restart all",
-        "test:localnet:flaky": "node scripts/run-localnet-tests.mjs --restart file --repeat 3 src/tests/alpha-listing.test.ts src/tests/trading.test.ts src/tests/claim-dividends.test.ts src/tests/subnet-risk.test.ts src/lockup-listings/listing.test.ts",
+        "test:localnet:flaky": "node scripts/run-localnet-tests.mjs --restart file --repeat 3 src/tests/offers.test.ts src/lockup-listings/listing.test.ts",
         "test:watch": "vitest watch",
         "build:contracts": "bash scripts/build-contracts.sh",
         "generate-api-types": "papi add devnet -w ws://localhost:9944",

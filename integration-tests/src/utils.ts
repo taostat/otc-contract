@@ -1,4 +1,4 @@
-import { Enum, type TypedApi } from "polkadot-api";
+import { type TypedApi } from "polkadot-api";
 import { devnet, MultiAddress } from "@polkadot-api/descriptors";
 import { sr25519CreateDerive } from "@polkadot-labs/hdkd";
 import { DEV_PHRASE, entropyToMiniSecret, mnemonicToEntropy, ss58Address, type KeyPair } from "@polkadot-labs/hdkd-helpers";
@@ -323,26 +323,6 @@ export async function elevateRegistrationLimits(
 }
 
 /**
- * Add contract as proxy for an account
- * This is required for the contract to transfer stake on behalf of the user
- */
-export async function addContractAsProxy(
-    api: TypedApi<typeof devnet>,
-    contractAddress: string,
-    signer: PolkadotSigner
-): Promise<void> {
-    // Add the contract as a proxy with appropriate permissions
-    const tx = api.tx.Proxy.add_proxy({
-        delegate: MultiAddress.Id(contractAddress),
-        proxy_type: Enum("Transfer"),
-        delay: 0
-    });
-
-    await tx.signAndSubmit(signer);
-    console.log(`Added contract ${contractAddress.slice(0, 10)}... as proxy`);
-}
-
-/**
  * Helper to format addresses for display
  */
 export function formatAddress(address: string): string {
@@ -412,143 +392,6 @@ export async function getCurrentAlphaPrice(
     return price;
 }
 
-/**
- * Apply a basis points offset to a market price
- * Formula: executed_price = market_price * (10000 + offset_bps) / 10000
- */
-export function applyPriceOffset(marketPrice: bigint, offsetBps: number): bigint {
-    const base = 10000n;
-    const multiplier = base + BigInt(offsetBps);
-    if (multiplier <= 0n) {
-        throw new Error(`Invalid offset: ${offsetBps} would result in zero or negative price`);
-    }
-    return (marketPrice * multiplier) / base;
-}
-
-/**
- * Convert a scaled price (price * 1e9) to U64F64 fixed-point representation
- * This is the format used internally by the contract for calculations
- */
-export function scaledPriceToFixedPoint(scaledPrice: bigint): bigint {
-    // scaledPrice is TAO_per_Alpha * 1e9
-    // We need to convert to U64F64 (multiply by 2^64, divide by 1e9)
-    const one = 1n << 64n;
-    const divisor = 1_000_000_000n;
-    return (scaledPrice * one) / divisor;
-}
-
-/**
- * Get the executed price for a listing/offer given the market price and offset
- * Returns the price in U64F64 format ready for calculations
- */
-export async function getExecutedPriceFixed(
-    api: TypedApi<typeof devnet>,
-    netuid: number,
-    priceOffsetBps: number
-): Promise<bigint> {
-    const marketPrice = await getCurrentAlphaPrice(api, netuid);
-    const executedPrice = applyPriceOffset(marketPrice, priceOffsetBps);
-    return scaledPriceToFixedPoint(executedPrice);
-}
-
-/**
- * Convert U64F64 fixed-point to a readable price
- */
-export function fixedPointToPrice(fixedPoint: bigint): number {
-    const one = 1n << 64n;
-    return Number(fixedPoint) / Number(one);
-}
-
-/**
- * Calculate total TAO required for taking an Alpha listing
- * Includes the fee
- */
-export function calculateTotalTaoForListing(
-    alphaAmount: bigint,
-    pricePerAlpha: bigint,
-    feeRate: bigint
-): { taoAmount: bigint; feeAmount: bigint; totalRequired: bigint } {
-    // price * amount
-    const taoAmount = multiplyFixedByAmount(pricePerAlpha, alphaAmount);
-
-    // fee_rate * tao_amount
-    const feeAmount = multiplyFixedByAmount(feeRate, taoAmount);
-
-    const totalRequired = taoAmount + feeAmount;
-
-    return { taoAmount, feeAmount, totalRequired };
-}
-
-/**
- * Calculate Alpha amount needed for taking a TAO offer
- * Accounts for the fee that the seller pays
- */
-export function calculateAlphaForOffer(
-    taoAmount: bigint,
-    pricePerAlpha: bigint,
-    feeRate: bigint
-): { alphaAmount: bigint; feeAmount: bigint; taoForSeller: bigint } {
-    // fee_amount = fee_rate * tao_amount
-    const feeAmount = multiplyFixedByAmount(feeRate, taoAmount);
-
-    // tao_for_seller = tao_amount - fee_amount
-    const taoForSeller = taoAmount - feeAmount;
-
-    // alpha_amount = tao_for_seller / price
-    const alphaAmount = divideByFixed(taoForSeller, pricePerAlpha);
-
-    return { alphaAmount, feeAmount, taoForSeller };
-}
-
-/**
- * Multiply a U64F64 fixed-point number by an integer amount
- * Used for price * amount calculations
- */
-function multiplyFixedByAmount(fixed: bigint, amount: bigint): bigint {
-    const one = 1n << 64n;
-    return (fixed * amount) / one;
-}
-
-/**
- * Divide an integer by a U64F64 fixed-point number
- * Used for amount / price calculations
- */
-function divideByFixed(amount: bigint, fixed: bigint): bigint {
-    const one = 1n << 64n;
-    return (amount * one) / fixed;
-}
-
-/**
- * Check if a contract query resulted in an error
- */
-export function hasContractError(result: any): boolean {
-    // For query results
-    if (!result.success && result.value?.value?.value) {
-        return true;
-    }
-    // Legacy check
-    return result?.value?.value?.type === "Err" ||
-        result?.dispatchError !== undefined ||
-        result?.success === false;
-}
-
-/**
- * Get the error message from a contract query result
- */
-export function getContractError(result: any): string {
-    // For query results with contract errors
-    if (!result.success && result.value?.value?.value) {
-        return result.value.value.value.type || "Unknown error";
-    }
-    if (result?.value?.value?.value) {
-        return result.value.value.value.type || "Unknown error";
-    }
-    if (result?.dispatchError) {
-        return JSON.stringify(result.dispatchError);
-    }
-    return "Contract call failed";
-}
-
 // ============================================================================
 // Lockup Listings Helpers
 // ============================================================================
@@ -591,20 +434,3 @@ export const SHORT_LOCKUP_DURATION = 10;
 export const MEDIUM_LOCKUP_DURATION = 50;
 export const LONG_LOCKUP_DURATION = 100;
 
-/**
- * Calculate TAO required for taking a lockup listing
- * Similar to calculateTotalTaoForListing but uses the dynamic pricing model
- */
-export function calculateLockupListingTao(
-    alphaAmount: bigint,
-    executedPrice: bigint,
-    feeRate: bigint
-): { taoAmount: bigint; feeAmount: bigint; totalRequired: bigint } {
-    // price is scaled by 1e9, need to apply properly
-    const priceDecimal = scaledPriceToFixedPoint(executedPrice);
-    const taoAmount = multiplyFixedByAmount(priceDecimal, alphaAmount);
-    const feeAmount = multiplyFixedByAmount(feeRate, taoAmount);
-    const totalRequired = taoAmount + feeAmount;
-
-    return { taoAmount, feeAmount, totalRequired };
-}

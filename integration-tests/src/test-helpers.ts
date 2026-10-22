@@ -109,7 +109,8 @@ export interface LockupListingTerms {
     netuid: number;
     amount: bigint;
     price_offset_bps: number;
-    lockup_duration: number;
+    /** Leave out for a spot listing */
+    lockup_duration?: number;
     /** TAO per Alpha scaled by 1e9; 0 for no floor */
     min_price?: bigint;
 }
@@ -219,56 +220,6 @@ export async function quoteVault(vault: any, origin: string, amount: bigint) {
     );
 }
 
-export async function createAlphaListing(
-    contract: any,
-    signer: PolkadotSigner,
-    origin: string,
-    data: {
-        hotkey: string;
-        netuid: number;
-        amount: bigint;
-        price_offset_bps: number;
-    },
-) {
-    const result = await submitOk(contract.send("list_alpha", withIntegrationGas({ origin, data })), signer, "list_alpha");
-    const event = expectEvent(contract, result, "AlphaListed");
-    return {
-        result,
-        event,
-        listingId: BigInt(event.value.alpha_listing_id),
-    };
-}
-
-export async function createTaoOffer(
-    contract: any,
-    signer: PolkadotSigner,
-    origin: string,
-    data: {
-        netuid: number;
-        price_offset_bps: number;
-    },
-    value: bigint,
-) {
-    const result = await submitOk(contract.send("create_tao_offer", withIntegrationGas({ origin, data, value })), signer, "create_tao_offer");
-    const event = expectEvent(contract, result, "TaoOfferCreated");
-    return {
-        result,
-        event,
-        offerId: BigInt(event.value.tao_offer_id),
-    };
-}
-
-export async function getAlphaListingAmount(
-    contract: any,
-    origin: string,
-    data: { netuid: number; seller: string; listing_id: bigint },
-): Promise<bigint> {
-    const listing = queryOk<any>(await contract.query("get_listing", { origin, data }), "get_listing");
-    if (!listing) {
-        throw new Error(`Alpha listing ${data.listing_id} not found`);
-    }
-    return BigInt(listing.amount);
-}
 
 /**
  * A fresh subnet for lockup tests: alice, the factory's default validator hotkey,

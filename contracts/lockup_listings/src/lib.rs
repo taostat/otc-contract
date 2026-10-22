@@ -6,8 +6,9 @@ pub mod types;
 
 pub use otc_shared::BittensorEnvironment;
 
-/// Factory for lockup listings. Each listing is its own `listing_vault`, created
-/// from the code registry's current vault code; the factory holds no Alpha.
+/// Factory for spot and lockup listings. Each listing is its own `listing_vault`,
+/// created from the code registry's current vault code; the factory holds no
+/// Alpha. (TAO offers, which are pooled, live in `otc`.)
 ///
 /// The factory keeps the `(netuid, seller, listing_id) -> vault` index and the
 /// settings vaults read: the validator hotkey per subnet, the fee recipient and
@@ -24,21 +25,20 @@ mod lockup_listings {
     use otc_shared::events::Upgraded;
     use otc_shared::{
         check_upgrade, AlphaAmount, BlockAge, FixedDecimal, NetUid, PriceOffsetBps, UpgradeError,
-        UpgradePolicy, VaultFactory,
+        UpgradePolicy, VaultFactory, MAX_FEE_RATE, MAX_PAUSE,
     };
 
     /// Storage layout version this code expects; see `ensure_migrated`.
     pub const STORAGE_VERSION: u16 = 1;
 
-    /// Maximum number of open listings a seller can have per subnet
+    /// Maximum number of open listings, spot and lockup together, a seller can
+    /// have per subnet
     pub const MAX_LISTINGS_PER_USER_PER_NETUID: usize = 25;
 
-    /// Highest fee rate the owner can set: 5%, as U64F64 bits
-    pub const MAX_FEE_RATE: u128 = 922_337_203_685_477_580;
-
-    /// Longest single pause: about a week of 12-second blocks. The owner can renew
-    /// it, but a pause always expires unless renewed.
-    pub const MAX_PAUSE: BlockAge = 50_400;
+    /// Longest the owner can make spot listings wait before their seller can
+    /// cancel: about a week of 12-second blocks. The seller doesn't choose this
+    /// delay, so it is bounded like a pause.
+    pub const MAX_LISTING_AGE: BlockAge = 50_400;
 
     /// Root storage. Upgrades keep this struct exactly as it is; add new state in
     /// `Lazy` or `Mapping` fields with explicit storage keys instead.
@@ -67,6 +67,11 @@ mod lockup_listings {
         min_purchase_amount: AlphaAmount,
         min_lockup_duration: BlockAge,
         max_lockup_duration: BlockAge,
+        /// How long a spot listing must stay open after activation before the
+        /// seller can cancel it
+        min_listing_age: BlockAge,
+        /// Subnets where new listings are frozen
+        frozen_subnets: Mapping<NetUid, ()>,
         /// New listings and takes are paused before this block
         paused_until: BlockNumber,
     }
@@ -81,7 +86,8 @@ mod lockup_listings {
         amount: AlphaAmount,
         price_offset_bps: PriceOffsetBps,
         min_price: u64,
-        lockup_duration: BlockAge,
+        lockup_duration: Option<BlockAge>,
+        cancel_delay: BlockAge,
     }
 
     impl LockupListings {
@@ -97,9 +103,11 @@ mod lockup_listings {
             min_purchase_amount: AlphaAmount,
             min_lockup_duration: BlockAge,
             max_lockup_duration: BlockAge,
+            min_listing_age: BlockAge,
         ) -> Result<Self, Error> {
             Self::validate_fee_rate(fee_rate)?;
             Self::validate_lockup_limits(min_lockup_duration, max_lockup_duration)?;
+            Self::validate_listing_age(min_listing_age)?;
 
             Ok(Self {
                 owner,
@@ -119,14 +127,21 @@ mod lockup_listings {
                 min_purchase_amount,
                 min_lockup_duration,
                 max_lockup_duration,
+                min_listing_age,
+                frozen_subnets: Mapping::default(),
                 paused_until: 0,
             })
         }
 
-        /// Create a Pending lockup listing for `amount` Alpha on `hotkey` and return
-        /// its id and vault. The seller pays the vault's storage deposit, then funds
-        /// it by transferring the stake to the vault and calling `activate`, in one
-        /// batch.
+        /// Create a Pending listing for `amount` Alpha on `hotkey` and return its id
+        /// and vault. The seller pays the vault's storage deposit, then funds it by
+        /// transferring the stake to the vault and calling `activate`, in one batch.
+        ///
+        /// With a `lockup_duration`, buyers receive the Alpha in an escrow that
+        /// locks it for that many blocks; within the factory's limits, and the
+        /// seller can cancel at any time. Without one it is a spot listing: buyers
+        /// receive the Alpha directly, and the seller can cancel only once the
+        /// listing has been open for `min_listing_age`.
         ///
         /// `min_price` is the seller's floor (TAO per Alpha, scaled by 1e9; 0 for
         /// none): takes below it fail, which limits spot-price manipulation.
@@ -138,7 +153,7 @@ mod lockup_listings {
             amount: AlphaAmount,
             price_offset_bps: PriceOffsetBps,
             min_price: u64,
-            lockup_duration: BlockAge,
+            lockup_duration: Option<BlockAge>,
         ) -> Result<(ListingId, AccountId), Error> {
             use otc_shared::upgrade::LISTING_VAULT;
 
@@ -153,12 +168,21 @@ mod lockup_listings {
             if price_offset_bps <= -10_000 {
                 return Err(Error::InvalidPriceOffset);
             }
-            if lockup_duration < self.min_lockup_duration {
-                return Err(Error::LockupDurationTooShort);
+            if self.frozen_subnets.contains(netuid) {
+                return Err(Error::SubnetFrozen);
             }
-            if lockup_duration > self.max_lockup_duration {
-                return Err(Error::LockupDurationTooLong);
-            }
+            let cancel_delay = match lockup_duration {
+                Some(duration) => {
+                    if duration < self.min_lockup_duration {
+                        return Err(Error::LockupDurationTooShort);
+                    }
+                    if duration > self.max_lockup_duration {
+                        return Err(Error::LockupDurationTooLong);
+                    }
+                    0
+                }
+                None => self.min_listing_age,
+            };
 
             let seller = self.env().caller();
             let mut seller_listings = self.user_listings.get((seller, netuid)).unwrap_or_default();
@@ -186,6 +210,7 @@ mod lockup_listings {
                     price_offset_bps,
                     min_price,
                     lockup_duration,
+                    cancel_delay,
                 },
                 Self::vault_salt(seller, nonce),
             )?;
@@ -278,8 +303,14 @@ mod lockup_listings {
                 min_purchase_amount: self.min_purchase_amount,
                 min_lockup_duration: self.min_lockup_duration,
                 max_lockup_duration: self.max_lockup_duration,
+                min_listing_age: self.min_listing_age,
                 paused_until: self.paused_until,
             }
+        }
+
+        #[ink(message)]
+        pub fn is_subnet_frozen(&self, netuid: NetUid) -> bool {
+            self.frozen_subnets.contains(netuid)
         }
 
         #[ink(message)]
@@ -441,6 +472,44 @@ mod lockup_listings {
             Ok(())
         }
 
+        /// Set how long new spot listings must stay open before the seller can
+        /// cancel them, at most `MAX_LISTING_AGE`
+        #[ink(message)]
+        pub fn set_min_listing_age(&mut self, new_age: BlockAge) -> Result<(), Error> {
+            self.ensure_owner()?;
+            Self::validate_listing_age(new_age)?;
+
+            let old_age = self.min_listing_age;
+            self.min_listing_age = new_age;
+            self.env()
+                .emit_event(MinListingAgeChanged { old_age, new_age });
+            Ok(())
+        }
+
+        /// Freeze or unfreeze new listings on `netuid`, for example while the subnet
+        /// is at risk of deregistration. Open listings are not affected.
+        #[ink(message)]
+        pub fn set_subnet_frozen(
+            &mut self,
+            netuid: NetUid,
+            frozen: bool,
+            reason: Vec<u8>,
+        ) -> Result<(), Error> {
+            self.ensure_owner()?;
+
+            if frozen {
+                self.frozen_subnets.insert(netuid, &());
+            } else {
+                self.frozen_subnets.remove(netuid);
+            }
+            self.env().emit_event(SubnetFrozenChanged {
+                netuid,
+                frozen,
+                reason,
+            });
+            Ok(())
+        }
+
         /// Pause new listings and takes for `blocks` blocks, at most `MAX_PAUSE`.
         /// Calling it again restarts the pause from now. Cancels, sweeps and claims
         /// are never paused.
@@ -539,6 +608,13 @@ mod lockup_listings {
             Ok(())
         }
 
+        fn validate_listing_age(age: BlockAge) -> Result<(), Error> {
+            if age > MAX_LISTING_AGE {
+                return Err(Error::ListingAgeTooLong);
+            }
+            Ok(())
+        }
+
         fn validate_lockup_limits(min: BlockAge, max: BlockAge) -> Result<(), Error> {
             if min > max {
                 return Err(Error::InvalidLockupDurationLimits);
@@ -605,9 +681,8 @@ mod lockup_listings {
             use ink::ToAccountId;
             use listing_vault::ListingVaultRef;
 
-            // Lockup listings can be cancelled at any time. The arguments are
-            // part of the vault's address, so they hold nothing the seller can't
-            // predict: no listing id, and no block number.
+            // The arguments are part of the vault's address, so they hold nothing
+            // the seller can't predict: no listing id, and no block number.
             let vault = ListingVaultRef::new(
                 terms.seller,
                 terms.netuid,
@@ -617,8 +692,8 @@ mod lockup_listings {
                 terms.min_price,
                 self.fee_rate,
                 self.min_purchase_amount,
-                Some(terms.lockup_duration),
-                0,
+                terms.lockup_duration,
+                terms.cancel_delay,
                 self.registry,
             )
             .code_hash(code_hash)
@@ -734,6 +809,7 @@ mod lockup_listings {
         const MIN_PURCHASE: AlphaAmount = 100_000_000;
         const MIN_LOCKUP: BlockAge = 10;
         const MAX_LOCKUP: BlockAge = 1_000;
+        const MIN_AGE: BlockAge = 30;
         /// 0.5%, as U64F64 bits
         const FEE_RATE: u128 = 92_233_720_368_547_758;
         const NOW: BlockNumber = 100;
@@ -833,6 +909,7 @@ mod lockup_listings {
                 MIN_PURCHASE,
                 min_lockup,
                 max_lockup,
+                MIN_AGE,
             )
         }
 
@@ -853,7 +930,7 @@ mod lockup_listings {
         fn create(factory: &mut LockupListings) -> Result<(ListingId, AccountId), Error> {
             let accounts = accounts();
             set_caller(accounts.bob);
-            factory.create_listing(NETUID, accounts.eve, MIN_LISTING, 100, 7, 20)
+            factory.create_listing(NETUID, accounts.eve, MIN_LISTING, 100, 7, Some(20))
         }
 
         #[ink::test]
@@ -867,6 +944,21 @@ mod lockup_listings {
             assert!(matches!(
                 new_factory(FEE_RATE, MAX_LOCKUP + 1, MAX_LOCKUP),
                 Err(Error::InvalidLockupDurationLimits)
+            ));
+            assert!(matches!(
+                LockupListings::new(
+                    accounts.alice,
+                    registry_account(),
+                    accounts.charlie,
+                    FEE_RATE,
+                    fee_collector(),
+                    MIN_LISTING,
+                    MIN_PURCHASE,
+                    MIN_LOCKUP,
+                    MAX_LOCKUP,
+                    MAX_LISTING_AGE + 1,
+                ),
+                Err(Error::ListingAgeTooLong)
             ));
 
             let factory = new_factory(MAX_FEE_RATE, MIN_LOCKUP, MAX_LOCKUP).expect("valid");
@@ -900,7 +992,8 @@ mod lockup_listings {
                     amount: MIN_LISTING,
                     price_offset_bps: 100,
                     min_price: 7,
-                    lockup_duration: 20,
+                    lockup_duration: Some(20),
+                    cancel_delay: 0,
                 }
             );
             assert_eq!(&salt[..32], AsRef::<[u8]>::as_ref(&accounts.bob));
@@ -933,25 +1026,103 @@ mod lockup_listings {
             set_caller(accounts.bob);
 
             assert_eq!(
-                factory.create_listing(NETUID, accounts.eve, MIN_LISTING - 1, 0, 0, 20),
+                factory.create_listing(NETUID, accounts.eve, MIN_LISTING - 1, 0, 0, Some(20)),
                 Err(Error::AmountTooSmall)
             );
             assert_eq!(
-                factory.create_listing(NETUID, accounts.eve, MIN_LISTING, -10_000, 0, 20),
+                factory.create_listing(NETUID, accounts.eve, MIN_LISTING, -10_000, 0, Some(20)),
                 Err(Error::InvalidPriceOffset)
             );
             assert_eq!(
-                factory.create_listing(NETUID, accounts.eve, MIN_LISTING, 0, 0, MIN_LOCKUP - 1),
+                factory.create_listing(
+                    NETUID,
+                    accounts.eve,
+                    MIN_LISTING,
+                    0,
+                    0,
+                    Some(MIN_LOCKUP - 1)
+                ),
                 Err(Error::LockupDurationTooShort)
             );
             assert_eq!(
-                factory.create_listing(NETUID, accounts.eve, MIN_LISTING, 0, 0, MAX_LOCKUP + 1),
+                factory.create_listing(
+                    NETUID,
+                    accounts.eve,
+                    MIN_LISTING,
+                    0,
+                    0,
+                    Some(MAX_LOCKUP + 1)
+                ),
                 Err(Error::LockupDurationTooLong)
             );
 
             set_registry_current(LISTING_VAULT, None);
             assert_eq!(create(&mut factory), Err(Error::NoCurrentCode));
             assert!(vaults().is_empty());
+        }
+
+        #[ink::test]
+        fn spot_listings_wait_the_minimum_age_before_cancelling() {
+            let accounts = accounts();
+            let mut factory = factory();
+            set_caller(accounts.bob);
+
+            // Spot listings take no lockup, so the lockup limits don't apply.
+            let (listing_id, _) = factory
+                .create_listing(NETUID, accounts.eve, MIN_LISTING, 0, 0, None)
+                .expect("create");
+            let (_, terms, _) = vaults()[0];
+            assert_eq!(terms.lockup_duration, None);
+            assert_eq!(terms.cancel_delay, MIN_AGE);
+            assert_eq!(last_event::<ListingCreated>().lockup_duration, None);
+            assert_eq!(listing_id, 1);
+
+            set_caller(accounts.alice);
+            assert_eq!(
+                factory.set_min_listing_age(MAX_LISTING_AGE + 1),
+                Err(Error::ListingAgeTooLong)
+            );
+            assert_eq!(factory.set_min_listing_age(5), Ok(()));
+            assert_eq!(factory.get_config().min_listing_age, 5);
+            set_caller(accounts.bob);
+            factory
+                .create_listing(NETUID, accounts.eve, MIN_LISTING, 0, 0, None)
+                .expect("create");
+            assert_eq!(vaults()[1].1.cancel_delay, 5);
+        }
+
+        #[ink::test]
+        fn frozen_subnets_take_no_new_listings() {
+            let accounts = accounts();
+            let mut factory = factory();
+
+            set_caller(accounts.django);
+            assert_eq!(
+                factory.set_subnet_frozen(NETUID, true, Vec::new()),
+                Err(Error::Unauthorized)
+            );
+
+            set_caller(accounts.alice);
+            assert_eq!(
+                factory.set_subnet_frozen(NETUID, true, b"at risk".to_vec()),
+                Ok(())
+            );
+            assert!(factory.is_subnet_frozen(NETUID));
+            assert_eq!(create(&mut factory), Err(Error::SubnetFrozen));
+            set_caller(accounts.bob);
+            assert_eq!(
+                factory.create_listing(NETUID, accounts.eve, MIN_LISTING, 0, 0, None),
+                Err(Error::SubnetFrozen)
+            );
+            // Other subnets are unaffected.
+            assert!(factory
+                .create_listing(NETUID + 1, accounts.eve, MIN_LISTING, 0, 0, None)
+                .is_ok());
+
+            set_caller(accounts.alice);
+            assert_eq!(factory.set_subnet_frozen(NETUID, false, Vec::new()), Ok(()));
+            assert!(!factory.is_subnet_frozen(NETUID));
+            assert!(create(&mut factory).is_ok());
         }
 
         #[ink::test]

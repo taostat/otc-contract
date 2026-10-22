@@ -1,6 +1,6 @@
 {
   "source": {
-    "hash": "0x07202522a38cbcc5321a3bf1a627f3da41ad4f343fdd4596238e89af5a1cd20d",
+    "hash": "0x136e8361437177ae3cd31666c76797ca7e2db59ef408a6e24016fdd53d62c9a1",
     "language": "ink! 5.1.1",
     "compiler": "rustc 1.89.0",
     "build_info": {
@@ -107,10 +107,10 @@
             }
           },
           {
-            "label": "cancellable_after",
+            "label": "cancel_delay",
             "type": {
               "displayName": [
-                "BlockNumber"
+                "BlockAge"
               ],
               "type": 7
             }
@@ -1252,7 +1252,9 @@
         "args": [],
         "default": false,
         "docs": [
-          " Close the listing and return its stake to the seller. If Subtensor",
+          " Close the listing and return its stake to the seller, once the cancel",
+          " delay since activation has passed; a Pending vault can be cancelled at",
+          " any time. If Subtensor",
           " refuses the transfer, for example while the subnet is being dissolved,",
           " the listing still closes; the sweeps return whatever is left later.",
           " Never pausable, and never depends on the factory."
@@ -1803,6 +1805,15 @@
                   "ty": 7
                 }
               },
+              "name": "cancel_delay"
+            },
+            {
+              "layout": {
+                "leaf": {
+                  "key": "0x00000000",
+                  "ty": 7
+                }
+              },
               "name": "cancellable_after"
             },
             {
@@ -2018,6 +2029,11 @@
                 "name": "lockup_duration",
                 "type": 10,
                 "typeName": "<Option<BlockAge> as::ink::storage::traits::AutoStorableHint<::\nink::storage::traits::ManualKey<1958330609u32, ()>,>>::Type"
+              },
+              {
+                "name": "cancel_delay",
+                "type": 7,
+                "typeName": "<BlockAge as::ink::storage::traits::AutoStorableHint<::ink::\nstorage::traits::ManualKey<3549067766u32, ()>,>>::Type"
               },
               {
                 "name": "cancellable_after",
@@ -2751,6 +2767,11 @@
                 "name": "lockup_duration",
                 "type": 10,
                 "typeName": "Option<BlockAge>"
+              },
+              {
+                "name": "cancel_delay",
+                "type": 7,
+                "typeName": "BlockAge"
               },
               {
                 "name": "cancellable_after",

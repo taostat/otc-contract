@@ -167,7 +167,7 @@ Kinds are plain `u16` ids defined in `otc-shared` (`LISTING_VAULT = 1`, `ESCROW 
 
 **Constructor:** `new(seller, netuid, hotkey, amount, price_offset_bps, min_price, fee_rate, min_purchase, lockup_duration: Option<u32>, cancellable_after: BlockNumber, registry)`. `factory` is the caller.
 
-**Factory interface.** An ink! trait in `otc-shared`, `VaultFactory`, with `trading_paused()`, `fee_recipient()`, `validator_hotkey(netuid)` and `listing_closed(listing_id)`. Both factories implement it. The vault calls `listing_closed` best-effort and ignores failures.
+**Factory interface.** An ink! trait in `otc-shared`, `VaultFactory`, with `trading_paused()`, `fee_recipient()`, `validator_hotkey(netuid)` and `listing_closed(listing_id)`. The listing factory implements it (PR 5 made `lockup_listings` the only one). The vault calls `listing_closed` best-effort and ignores failures.
 
 **Messages**
 
@@ -241,6 +241,13 @@ All of `main`'s pooled code goes: `reserved_alpha`, and take, cancel and escrow 
 - Tests:
   - unit tests for the offer guards and the pause rules;
   - integration tests for spot vault flows, offers with the proxy added and removed in one `batch_all`, and cancel while paused.
+
+**As built**
+
+- **One listing factory.** `lockup_listings` creates spot listings too, rather than `otc` becoming a second factory with the same index, vault creation, `VaultFactory`, pruning, pause, ownership and fee settings. `create_listing` takes `lockup_duration: Option<u32>`; `None` is a spot listing. The factory also gained the subnet freeze (`set_subnet_frozen`) and `min_listing_age`, capped at `MAX_LISTING_AGE` because sellers don't choose it. A seller's 25-listing cap per subnet now counts spot and lockup listings together. `otc` v2 keeps only the pooled TAO offers.
+- The vault's `cancellable_after` constructor argument became `cancel_delay`, counted from activation. Spot listings use `min_listing_age`, lockup listings 0. A block number in the constructor would make the vault's address unpredictable, and the delay now protects buyers from the moment the listing opens.
+- `otc` v2: `create_tao_offer(netuid, offset, max_price)`, `take_tao_offer(netuid, buyer, offer_id, hotkey, max_alpha)` returning the Alpha moved, `quote_offer_fill`, `cancel_tao_offer` never paused, fees to `fee_recipient` capped at `MAX_FEE_RATE`, `pause(blocks)` with `MAX_PAUSE`, two-step ownership, and `upgrade` against the registry's `OTC` code. `MAX_FEE_RATE` and `MAX_PAUSE` moved to `otc-shared`, and `PauseState` is gone.
+- Integration tests: `otc.test.ts` (configuration, owner controls, pause, upgrade) and `offers.test.ts` (offers, the proxied fill in one batch, the price guards, pause and cancel) replace the seven pooled-era otc suites. The listing suite gains a spot take, the minimum listing age and subnet freezes.
 
 ## PR 6: Localnet tests and docs
 
