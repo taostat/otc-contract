@@ -1,5 +1,17 @@
 import { expect } from "vitest";
 import type { PolkadotSigner } from "polkadot-api/signer";
+import type { ListingVault, LockupListingsContext, TestAccount } from "./setup";
+import {
+    createHotkey,
+    elevateRegistrationLimits,
+    fundAccount,
+    registerSubnet,
+    registerValidator,
+    taoToRao,
+    waitForBlocks,
+    BITTENSOR_MIN_STAKE,
+    type Wallet,
+} from "./utils";
 
 // Proxied `transfer_stake` pre-charges its worst-case weight (a full 256-entry
 // `StakingHotkeys` walk, roughly 90e9 ref_time) before refunding, so contract calls
@@ -92,49 +104,119 @@ export function expectEvent<T extends string>(contract: any, txResult: any, even
     return event;
 }
 
+export interface LockupListingTerms {
+    hotkey: string;
+    netuid: number;
+    amount: bigint;
+    price_offset_bps: number;
+    lockup_duration: number;
+    /** TAO per Alpha scaled by 1e9; 0 for no floor */
+    min_price?: bigint;
+}
+
+/**
+ * Create a lockup listing and fund it without a proxy: one batch transfers the
+ * seller's stake to the new vault and activates it. Returns the vault and the
+ * stake it listed, which can be a rao or two below `amount`.
+ */
+export interface CreatedListing {
+    event: any;
+    listingId: bigint;
+    vaultAddress: string;
+    vault: ListingVault;
+    /** What the vault holds and lists, within the transfer tolerance of the amount */
+    listedAmount: bigint;
+}
+
 export async function createLockupListing(
-    contract: any,
-    signer: PolkadotSigner,
-    origin: string,
-    data: {
-        hotkey: string;
-        netuid: number;
-        amount: bigint;
-        price_offset_bps: number;
-        lockup_duration: number;
-    },
-) {
-    const result = await submitOk(contract.send("create_lockup_listing", withIntegrationGas({ origin, data })), signer, "create_lockup_listing");
-    const event = expectEvent(contract, result, "LockupListingCreated");
+    context: LockupListingsContext,
+    seller: TestAccount,
+    terms: LockupListingTerms,
+): Promise<CreatedListing> {
+    const factory = context.contractSdk.getContract(context.contractAddress!);
+    const created = await submitOk(factory.send("create_listing", withIntegrationGas({
+        origin: seller.address,
+        data: {
+            netuid: terms.netuid,
+            hotkey: terms.hotkey,
+            amount: terms.amount,
+            price_offset_bps: terms.price_offset_bps,
+            min_price: terms.min_price ?? 0n,
+            lockup_duration: terms.lockup_duration,
+        },
+    })), seller.signer, "create_listing");
+    const event = expectEvent(factory, created, "ListingCreated");
+    const vaultAddress = event.value.vault as string;
+    const vault = context.vaultSdk.getContract(vaultAddress);
+
+    const activated = await fundAndActivate(context, seller, vaultAddress, terms);
     return {
-        result,
         event,
         listingId: BigInt(event.value.listing_id),
-        // Transfers can round down by a few rao; the listing holds what arrived.
-        listedAmount: BigInt(event.value.amount),
+        vaultAddress,
+        vault,
+        listedAmount: BigInt(activated.value.amount),
     };
 }
 
+/** Transfer `amount` to a Pending vault and activate it, in one batch. */
+export async function fundAndActivate(
+    context: LockupListingsContext,
+    seller: TestAccount,
+    vaultAddress: string,
+    terms: { hotkey: string; netuid: number; amount: bigint },
+) {
+    const vault = context.vaultSdk.getContract(vaultAddress);
+    const result = await submitOk(await fundingBatch(context, seller, vaultAddress, terms), seller.signer, "fund and activate");
+    return expectEvent(vault, result, "Activated");
+}
+
+/** The `batch_all([transfer_stake, activate])` a seller signs to fund a vault. */
+export async function fundingBatch(
+    context: LockupListingsContext,
+    seller: TestAccount,
+    vaultAddress: string,
+    terms: { hotkey: string; netuid: number; amount: bigint },
+) {
+    const transfer = context.api.tx.SubtensorModule.transfer_stake({
+        destination_coldkey: vaultAddress,
+        hotkey: terms.hotkey,
+        origin_netuid: terms.netuid,
+        destination_netuid: terms.netuid,
+        alpha_amount: terms.amount,
+    });
+    const activate = context.vaultSdk.getContract(vaultAddress)
+        .send("activate", withIntegrationGas({ origin: seller.address, data: {} }));
+    return context.api.tx.Utility.batch_all({
+        calls: [transfer.decodedCall, await activate.decodedCall],
+    });
+}
+
+/**
+ * Take `amount` from a vault for `recipient`, paying `value`; any excess is
+ * refunded. Returns the `Taken` event and, for lockup listings, the escrow.
+ */
 export async function takeLockupListing(
-    contract: any,
-    signer: PolkadotSigner,
-    origin: string,
-    data: {
-        netuid: number;
-        seller: string;
-        listing_id: bigint;
-        amount: bigint;
-    },
+    vault: any,
+    buyer: TestAccount,
+    data: { amount: bigint; recipient: string },
     value: bigint,
 ) {
-    const result = await submitOk(contract.send("take_lockup_listing", withIntegrationGas({ origin, data, value })), signer, "take_lockup_listing");
-    const event = expectEvent(contract, result, "LockupListingTaken");
+    const result = await submitOk(vault.send("take", withIntegrationGas({ origin: buyer.address, data, value })), buyer.signer, "take");
+    const event = expectEvent(vault, result, "Taken");
     return {
         result,
         event,
-        purchaseId: BigInt(event.value.purchase_id),
-        escrowAccount: event.value.escrow_account as string,
+        escrowAccount: event.value.escrow as string | undefined,
     };
+}
+
+/** What taking `amount` from a vault costs right now */
+export async function quoteVault(vault: any, origin: string, amount: bigint) {
+    return queryOk<{ price: bigint; tao: bigint; fee: bigint; total: bigint }>(
+        await vault.query("quote", { origin, data: { amount } }),
+        "quote",
+    );
 }
 
 export async function createAlphaListing(
@@ -176,20 +258,6 @@ export async function createTaoOffer(
     };
 }
 
-// Stake transfers can round down by a rao, so a listing holds slightly less than the
-// amount requested. Full fills and price checks use what the listing recorded.
-export async function getLockupListingRemaining(
-    contract: any,
-    origin: string,
-    data: { netuid: number; seller: string; listing_id: bigint },
-): Promise<bigint> {
-    const listing = queryOk<any>(await contract.query("get_listing", { origin, data }), "get_listing");
-    if (!listing) {
-        throw new Error(`Lockup listing ${data.listing_id} not found`);
-    }
-    return BigInt(listing.remaining_amount);
-}
-
 export async function getAlphaListingAmount(
     contract: any,
     origin: string,
@@ -200,4 +268,41 @@ export async function getAlphaListingAmount(
         throw new Error(`Alpha listing ${data.listing_id} not found`);
     }
     return BigInt(listing.amount);
+}
+
+/**
+ * A fresh subnet for lockup tests: alice, the factory's default validator hotkey,
+ * is registered on it, and bob owns `sellerAlpha` on his own registered hotkey to
+ * list. Also lowers the factory's minimums to Subtensor's minimum stake.
+ */
+export async function setupLockupSubnet(
+    context: LockupListingsContext,
+    label: string,
+    sellerAlpha: bigint,
+): Promise<{ netuid: number; sellerHotkey: Wallet }> {
+    const { api, accounts } = context;
+    const factory = context.contractSdk.getContract(context.contractAddress!);
+    await submitOk(factory.send("set_min_listing_amount", {
+        origin: accounts.alice.address,
+        data: { new_amount: BITTENSOR_MIN_STAKE },
+    }), accounts.alice.signer, "set_min_listing_amount");
+    await submitOk(factory.send("set_min_purchase_amount", {
+        origin: accounts.alice.address,
+        data: { new_amount: BITTENSOR_MIN_STAKE },
+    }), accounts.alice.signer, "set_min_purchase_amount");
+
+    const subnetOwner = createHotkey(`//Alice/${label}`);
+    await fundAccount(api, subnetOwner.address, taoToRao(10), accounts.alice.signer);
+    const netuid = await registerSubnet(api, subnetOwner.address, accounts.alice.signer);
+    await elevateRegistrationLimits(api, netuid, 20, 20, accounts.alice.signer);
+    await waitForBlocks(api, 1);
+
+    await registerValidator(api, netuid, accounts.alice.address, accounts.alice.signer, taoToRao(100));
+
+    const sellerHotkey = createHotkey(`//Bob/${label}`);
+    await fundAccount(api, sellerHotkey.address, taoToRao(1), accounts.alice.signer);
+    await registerValidator(api, netuid, sellerHotkey.address, accounts.bob.signer, taoToRao(5000), sellerAlpha);
+    await waitForBlocks(api, 2);
+
+    return { netuid, sellerHotkey };
 }

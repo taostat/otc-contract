@@ -27,14 +27,9 @@ const localnetLogTailBytes = Number(process.env.OTC_TEST_LOCALNET_LOG_TAIL_BYTES
 let activeLocalnet = null;
 
 const DEFAULT_TEST_FILES = [
-  "src/lockup-listings/admin.test.ts",
-  "src/lockup-listings/cancel-listing.test.ts",
-  "src/lockup-listings/claim.test.ts",
-  "src/lockup-listings/create-listing.test.ts",
-  "src/lockup-listings/deployment.test.ts",
   "src/lockup-listings/escrow.test.ts",
-  "src/lockup-listings/pause.test.ts",
-  "src/lockup-listings/take-listing.test.ts",
+  "src/lockup-listings/factory.test.ts",
+  "src/lockup-listings/listing.test.ts",
   "src/tests/alpha-listing.test.ts",
   "src/tests/claim-dividends.test.ts",
   "src/tests/deployment.test.ts",

@@ -15,16 +15,36 @@ export type ContractSdk = ReturnType<typeof createInkSdk<TypedApi<typeof devnet>
 export type LockupListingsSdk = ReturnType<typeof createInkSdk<TypedApi<typeof devnet>, typeof contracts.lockup_listings>>;
 export type AlphaLockupSdk = ReturnType<typeof createInkSdk<TypedApi<typeof devnet>, typeof contracts.alpha_lockup>>;
 export type CodeRegistrySdk = ReturnType<typeof createInkSdk<TypedApi<typeof devnet>, typeof contracts.code_registry>>;
+export type ListingVaultSdk = ReturnType<typeof createInkSdk<TypedApi<typeof devnet>, typeof contracts.listing_vault>>;
+export type ListingVault = ReturnType<ListingVaultSdk["getContract"]>;
 
 // Code kind ids from otc-shared/src/upgrade.rs
+export const LISTING_VAULT_CODE_KIND = 1;
 export const ESCROW_CODE_KIND = 2;
+export const LOCKUP_FACTORY_CODE_KIND = 3;
+// 0.5%, as U64F64 bits
+export const FACTORY_FEE_RATE = 92233720368547758n;
 // The registry's minimum delay (MIN_DELAY) in a production build: about a day.
 export const REGISTRY_DELAY = 7_200;
 
-const RELEASE_ARTIFACTS = path.join(process.cwd(), "..", "target", "ink");
-// Built by `npm run build:contracts`: an escrow with a newer storage version,
-// so tests have real code to upgrade escrows to.
+/** Which code registry build to deploy, and its delays */
+export interface RegistryBuild {
+    artifactsDir: string;
+    upgradeDelay: number;
+    forceDelay: number;
+}
+
+export const RELEASE_ARTIFACTS = path.join(process.cwd(), "..", "target", "ink");
+// Built by `npm run build:contracts`: an escrow with a newer storage version, so
+// tests have real code to upgrade escrows to, and a code registry built with
+// `short-delays`, so tests can activate and force upgrades within a few blocks.
 export const UPGRADE_TEST_ARTIFACTS = path.join(process.cwd(), "..", "target", "upgrade-test", "ink");
+
+const RELEASE_REGISTRY: RegistryBuild = {
+    artifactsDir: RELEASE_ARTIFACTS,
+    upgradeDelay: REGISTRY_DELAY,
+    forceDelay: REGISTRY_DELAY,
+};
 
 // Contract address persistence files
 const CONTRACT_ADDRESS_FILE = path.join(process.cwd(), ".contract-address");
@@ -128,8 +148,11 @@ export interface LockupListingsContext {
         dave: TestAccount;
         eve: TestAccount;
     };
+    vaultSdk: ListingVaultSdk;
+    /** The lockup factory */
     contractAddress?: string;
     escrowCodeHash?: string;
+    vaultCodeHash: string;
     registrySdk: CodeRegistrySdk;
     registryAddress: string;
 }
@@ -167,6 +190,14 @@ export class TestSetup {
         this.api = this.client.getTypedApi(devnet);
 
         return this.api;
+    }
+
+    /**
+     * The untyped API, for runtime calls newer than the generated descriptors
+     */
+    async getUnsafeApi(): Promise<any> {
+        await this.getApi();
+        return this.client!.getUnsafeApi();
     }
 
     createTestAccounts(): TestContext['accounts'] {
@@ -345,13 +376,11 @@ export class TestSetup {
     }
 
     /**
-     * Upload alpha_lockup code and return its code hash
+     * The code hash a contract build produces, from its metadata
      */
-    async uploadAlphaLockupCode(
-        api: TypedApi<typeof devnet>,
-        accounts: TestContext['accounts']
-    ): Promise<string> {
-        return this.uploadCode(api, accounts, RELEASE_ARTIFACTS, "alpha_lockup");
+    async buildCodeHash(artifactsDir: string, name: string): Promise<string> {
+        const metadataPath = path.join(artifactsDir, name, `${name}.json`);
+        return JSON.parse(await fs.readFile(metadataPath, "utf-8")).source.hash;
     }
 
     /**
@@ -361,8 +390,9 @@ export class TestSetup {
         api: TypedApi<typeof devnet>,
         accounts: TestContext['accounts'],
         initialCodes: Array<[number, string]>,
+        build: RegistryBuild = RELEASE_REGISTRY,
     ): Promise<string> {
-        const wasmPath = path.join(RELEASE_ARTIFACTS, "code_registry", "code_registry.wasm");
+        const wasmPath = path.join(build.artifactsDir, "code_registry", "code_registry.wasm");
         const wasmBytes = Binary.fromBytes(new Uint8Array(await fs.readFile(wasmPath)));
         const deployer = createInkSdk(api, contracts.code_registry).getDeployer(wasmBytes);
 
@@ -371,8 +401,8 @@ export class TestSetup {
             data: {
                 owner: accounts.alice.address,
                 guardian: accounts.eve.address,
-                upgrade_delay: REGISTRY_DELAY,
-                force_delay: REGISTRY_DELAY,
+                upgrade_delay: build.upgradeDelay,
+                force_delay: build.forceDelay,
                 initial_codes: initialCodes.map(([kind, codeHash]) => [kind, Binary.fromHex(codeHash)]),
             } as any,
             options: { salt: randomDeploymentSalt() },
@@ -387,80 +417,62 @@ export class TestSetup {
         return dryRunResult.value.address;
     }
 
+    /**
+     * Deploy the lockup factory. Alice owns it, receives its fees and is the
+     * default validator hotkey.
+     */
     async deployLockupListingsContract(
         api: TypedApi<typeof devnet>,
         accounts: TestContext['accounts'],
-        escrowCodeHash: string,
         registryAddress: string,
     ): Promise<string> {
-        const contractPath = path.join(process.cwd(), "..", "target", "ink", "lockup_listings", "lockup_listings.wasm");
-        const wasmFile = await fs.readFile(contractPath);
-        const wasmBytes = Binary.fromBytes(new Uint8Array(wasmFile));
+        const wasmPath = path.join(RELEASE_ARTIFACTS, "lockup_listings", "lockup_listings.wasm");
+        const wasmBytes = Binary.fromBytes(new Uint8Array(await fs.readFile(wasmPath)));
+        const deployer = createInkSdk(api, contracts.lockup_listings).getDeployer(wasmBytes);
 
-        const contractSdk = createInkSdk(api, contracts.lockup_listings);
-        const deployer = contractSdk.getDeployer(wasmBytes);
-
-        // Convert hex code hash to proper format
-        const codeHashBytes = Binary.fromHex(escrowCodeHash);
-
-        const constructorArgs = {
-            owner: accounts.alice.address,
-            hotkey: accounts.alice.address, // Use alice's hotkey for testing
-            escrow_code_hash: codeHashBytes,
-            registry: registryAddress,
-            fee_rate: 92233720368547758n, // 0.5% as U64F64 bits
-            min_listing_amount: 1_000_000_000n, // 1 Alpha
-            min_purchase_amount: 100_000_000n, // 0.1 Alpha
-            min_lockup_duration: 10, // 10 blocks for testing (short lockup)
-            max_lockup_duration: 1_000_000, // ~46 days
-        };
-
-        try {
-            const dryRunResult = await deployer.dryRun("new", {
-                origin: accounts.alice.address,
-                data: constructorArgs,
-                options: { salt: randomDeploymentSalt() },
-            });
-
-            if (!dryRunResult.success) {
-                const errorType = dryRunResult.value?.value?.value?.type;
-                console.log("Dry run failed with error:", errorType);
-                console.log("Full dry run result:", JSON.stringify(dryRunResult, null, 2));
-                console.log("Dry run did not succeed", dryRunResult.value);
-                return Promise.reject(new Error(`Dry run failed: ${errorType || 'Unknown'}`));
-            }
-
-            console.log("Deploying lockup_listings contract...");
-            const fin = await this.trackTx(
-                dryRunResult.value.deploy().signSubmitAndWatch(accounts.alice.signer),
-            );
-            console.log(`Lockup listings deployed to address ${dryRunResult.value.address}`);
-            console.log(contractSdk.readDeploymentEvents(fin.events));
-
-            return dryRunResult.value.address;
-        } catch (error) {
-            console.error("Lockup listings deployment error:", error);
-            throw error;
+        const dryRunResult = await deployer.dryRun("new", {
+            origin: accounts.alice.address,
+            data: {
+                owner: accounts.alice.address,
+                registry: registryAddress,
+                default_hotkey: accounts.alice.address,
+                fee_rate: FACTORY_FEE_RATE,
+                fee_recipient: accounts.alice.address,
+                min_listing_amount: 1_000_000_000n, // 1 Alpha
+                min_purchase_amount: 100_000_000n, // 0.1 Alpha
+                min_lockup_duration: 10, // 10 blocks for testing (short lockup)
+                max_lockup_duration: 1_000_000, // ~46 days
+            },
+            options: { salt: randomDeploymentSalt() },
+        });
+        if (!dryRunResult.success) {
+            throw new Error(`Lockup factory dry run failed: ${JSON.stringify(dryRunResult.value, (_key, value) =>
+                typeof value === "bigint" ? value.toString() : value)}`);
         }
+
+        await this.trackTx(dryRunResult.value.deploy().signSubmitAndWatch(accounts.alice.signer));
+        console.log(`Lockup factory deployed to address ${dryRunResult.value.address}`);
+        return dryRunResult.value.address;
     }
 
     /**
-     * Deploy lockup_listings with a code registry. New escrows run the released
-     * escrow code; `registryEscrowCode` sets which escrow code the registry offers
-     * as current (the same code unless a test wants an upgrade available).
+     * Deploy the lockup factory with a code registry offering the released vault,
+     * escrow and factory code. `registry` picks a test registry build, such as one
+     * with short delays for upgrade tests.
      */
-    async createLockupListingsContext(options: { registryEscrowCode?: string } = {}): Promise<LockupListingsContext> {
+    async createLockupListingsContext(options: { registry?: RegistryBuild } = {}): Promise<LockupListingsContext> {
         const api = await this.getApi();
         const accounts = this.createTestAccounts();
         await this.fundTestAccounts(api, accounts);
 
-        // First upload the alpha_lockup code to get its code hash
-        const escrowCodeHash = await this.uploadAlphaLockupCode(api, accounts);
+        // Vaults and escrows are instantiated from uploaded code.
+        const escrowCodeHash = await this.uploadCode(api, accounts, RELEASE_ARTIFACTS, "alpha_lockup");
+        let vaultCodeHash = await this.uploadCode(api, accounts, RELEASE_ARTIFACTS, "listing_vault");
         const contractSdk = createInkSdk(api, contracts.lockup_listings);
         const registrySdk = createInkSdk(api, contracts.code_registry);
 
         // A custom registry gets its own deployment, outside the shared cache.
-        const useCache = options.registryEscrowCode === undefined;
+        const useCache = options.registry === undefined;
         const cachedAddress = useCache ? loadLockupListingsAddress() : null;
         let contractAddress: string;
         let registryAddress: string;
@@ -475,25 +487,38 @@ export class TestSetup {
                 throw new Error("Failed to read the cached lockup listings contract's registry");
             }
             registryAddress = registryResult.value.response;
+
+            // New vaults come from the cached registry, which may predate this build.
+            const offered = await registrySdk.getContract(registryAddress).query("current", {
+                origin: accounts.alice.address,
+                data: { kind: LISTING_VAULT_CODE_KIND },
+            });
+            const offeredHash = offered.success ? offered.value.response?.code_hash.asHex() : undefined;
+            if (offeredHash && offeredHash !== vaultCodeHash) {
+                console.warn(`Cached registry offers vault code ${offeredHash}, not this build's ${vaultCodeHash}`);
+                vaultCodeHash = offeredHash;
+            }
         } else {
             registryAddress = await this.deployCodeRegistry(api, accounts, [
-                [ESCROW_CODE_KIND, options.registryEscrowCode ?? escrowCodeHash],
-            ]);
-            contractAddress = await this.deployLockupListingsContract(api, accounts, escrowCodeHash, registryAddress);
+                [LISTING_VAULT_CODE_KIND, vaultCodeHash],
+                [ESCROW_CODE_KIND, escrowCodeHash],
+                [LOCKUP_FACTORY_CODE_KIND, await this.buildCodeHash(RELEASE_ARTIFACTS, "lockup_listings")],
+            ], options.registry);
+            contractAddress = await this.deployLockupListingsContract(api, accounts, registryAddress);
             if (useCache) {
                 saveLockupListingsAddress(contractAddress);
             }
         }
 
-        const alphaLockupSdk = createInkSdk(api, contracts.alpha_lockup);
-
         return {
             api,
             contractSdk,
-            alphaLockupSdk,
+            alphaLockupSdk: createInkSdk(api, contracts.alpha_lockup),
+            vaultSdk: createInkSdk(api, contracts.listing_vault),
             accounts,
             contractAddress,
             escrowCodeHash,
+            vaultCodeHash,
             registrySdk,
             registryAddress,
         };
@@ -562,7 +587,7 @@ export async function cleanupTestEnvironment(): Promise<void> {
 }
 
 export async function setupLockupListingsEnvironment(
-    options: { registryEscrowCode?: string } = {}
+    options: { registry?: RegistryBuild } = {}
 ): Promise<LockupListingsContext> {
     const setup = TestSetup.getInstance();
     return await setup.createLockupListingsContext(options);

@@ -1,6 +1,6 @@
 {
   "source": {
-    "hash": "0xe03caf0e485bd354dc4788a707871abece9dfc5147695da6327748f0bf6037ee",
+    "hash": "0xd518d6fae3abb52030963ec92e319a7515db0757040b875a8bc9e1239bba3dce",
     "language": "ink! 5.1.1",
     "compiler": "rustc 1.89.0",
     "build_info": {
@@ -345,167 +345,6 @@
           {
             "docs": [],
             "indexed": true,
-            "label": "beneficiary",
-            "type": {
-              "displayName": [
-                "AccountId"
-              ],
-              "type": 0
-            }
-          },
-          {
-            "docs": [],
-            "indexed": true,
-            "label": "initiated_by",
-            "type": {
-              "displayName": [
-                "AccountId"
-              ],
-              "type": 0
-            }
-          },
-          {
-            "docs": [],
-            "indexed": false,
-            "label": "amount",
-            "type": {
-              "displayName": [
-                "Balance"
-              ],
-              "type": 4
-            }
-          }
-        ],
-        "docs": [
-          "Event emitted when the escrow's TAO balance is sent to the beneficiary"
-        ],
-        "label": "TaoSwept",
-        "module_path": "alpha_lockup::alpha_lockup",
-        "signature_topic": "0xffc83658b8556616ae18d6071f1e37c10fce38e2c3cca12fb3e96d171cdedb5b"
-      },
-      {
-        "args": [
-          {
-            "docs": [],
-            "indexed": true,
-            "label": "old_hotkey",
-            "type": {
-              "displayName": [
-                "AccountId"
-              ],
-              "type": 0
-            }
-          },
-          {
-            "docs": [],
-            "indexed": true,
-            "label": "new_hotkey",
-            "type": {
-              "displayName": [
-                "AccountId"
-              ],
-              "type": 0
-            }
-          },
-          {
-            "docs": [],
-            "indexed": true,
-            "label": "initiated_by",
-            "type": {
-              "displayName": [
-                "AccountId"
-              ],
-              "type": 0
-            }
-          },
-          {
-            "docs": [],
-            "indexed": false,
-            "label": "new_hotkey_stake",
-            "type": {
-              "displayName": [
-                "AlphaAmount"
-              ],
-              "type": 4
-            }
-          }
-        ],
-        "docs": [
-          "Event emitted when the escrow follows its stake to another hotkey"
-        ],
-        "label": "HotkeyResynced",
-        "module_path": "alpha_lockup::alpha_lockup",
-        "signature_topic": "0x1f6a05115faf2230ea59c7e181eb3704d16bd8f9a3c35263c0253c25b3ecb792"
-      },
-      {
-        "args": [
-          {
-            "docs": [],
-            "indexed": true,
-            "label": "code_hash",
-            "type": {
-              "displayName": [
-                "Hash"
-              ],
-              "type": 16
-            }
-          },
-          {
-            "docs": [],
-            "indexed": true,
-            "label": "initiated_by",
-            "type": {
-              "displayName": [
-                "AccountId"
-              ],
-              "type": 0
-            }
-          }
-        ],
-        "docs": [
-          "Event emitted when the escrow installs new code"
-        ],
-        "label": "Upgraded",
-        "module_path": "alpha_lockup::alpha_lockup",
-        "signature_topic": "0xf948c495403d7387e6f1f54500e0e501588d596b53989c6fc8859c2c6f58fbf0"
-      },
-      {
-        "args": [
-          {
-            "docs": [],
-            "indexed": true,
-            "label": "beneficiary",
-            "type": {
-              "displayName": [
-                "AccountId"
-              ],
-              "type": 0
-            }
-          },
-          {
-            "docs": [],
-            "indexed": false,
-            "label": "policy",
-            "type": {
-              "displayName": [
-                "UpgradePolicy"
-              ],
-              "type": 9
-            }
-          }
-        ],
-        "docs": [
-          "Event emitted when the beneficiary changes who may upgrade the escrow"
-        ],
-        "label": "UpgradePolicyChanged",
-        "module_path": "alpha_lockup::alpha_lockup",
-        "signature_topic": "0xcdc998b3b364356a7bf35e0b542fc5c04520623c33a9e8e92c18289dde90ba93"
-      },
-      {
-        "args": [
-          {
-            "docs": [],
-            "indexed": true,
             "label": "kind",
             "type": {
               "displayName": [
@@ -787,6 +626,167 @@
         "label": "RoleChanged",
         "module_path": "code_registry::code_registry",
         "signature_topic": "0xb00d0c5d20113a679ea27014ce78036c7e92b7207ff9ecd9a3fb333254ddd143"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "owner",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "initiated_by",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "amount",
+            "type": {
+              "displayName": [
+                "Balance"
+              ],
+              "type": 4
+            }
+          }
+        ],
+        "docs": [
+          "The position's TAO balance was sent to its owner"
+        ],
+        "label": "TaoSwept",
+        "module_path": "otc_shared::events",
+        "signature_topic": "0xffc83658b8556616ae18d6071f1e37c10fce38e2c3cca12fb3e96d171cdedb5b"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "old_hotkey",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "new_hotkey",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "initiated_by",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "new_hotkey_stake",
+            "type": {
+              "displayName": [
+                "AlphaAmount"
+              ],
+              "type": 4
+            }
+          }
+        ],
+        "docs": [
+          "The position now points at the hotkey its stake moved to"
+        ],
+        "label": "HotkeyResynced",
+        "module_path": "otc_shared::events",
+        "signature_topic": "0x1f6a05115faf2230ea59c7e181eb3704d16bd8f9a3c35263c0253c25b3ecb792"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "code_hash",
+            "type": {
+              "displayName": [
+                "Hash"
+              ],
+              "type": 16
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "initiated_by",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          }
+        ],
+        "docs": [
+          "The position installed new code"
+        ],
+        "label": "Upgraded",
+        "module_path": "otc_shared::events",
+        "signature_topic": "0xf948c495403d7387e6f1f54500e0e501588d596b53989c6fc8859c2c6f58fbf0"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "owner",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "policy",
+            "type": {
+              "displayName": [
+                "UpgradePolicy"
+              ],
+              "type": 9
+            }
+          }
+        ],
+        "docs": [
+          "The owner changed who may upgrade the position"
+        ],
+        "label": "UpgradePolicyChanged",
+        "module_path": "otc_shared::events",
+        "signature_topic": "0xcdc998b3b364356a7bf35e0b542fc5c04520623c33a9e8e92c18289dde90ba93"
       }
     ],
     "lang_error": {
