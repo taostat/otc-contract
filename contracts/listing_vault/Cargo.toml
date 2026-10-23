@@ -11,7 +11,7 @@ alpha-lockup = { path = "../alpha_lockup", default-features = false, features = 
 code-registry = { path = "../code_registry", default-features = false, features = ["ink-as-dependency"] }
 
 [dev-dependencies]
-otc-shared = { path = "../../shared", features = ["testing"] }
+otc-shared = { path = "../../shared", features = ["testing", "storage-layout"] }
 fixed = { version = "=1.27.0", default-features = false }
 
 [lib]

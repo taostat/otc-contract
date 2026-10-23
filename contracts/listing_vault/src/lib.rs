@@ -1949,4 +1949,24 @@ mod listing_vault {
             assert_eq!(vault.get_version(), STORAGE_VERSION);
         }
     }
+
+    /// Upgraded code must decode the storage this code writes; see
+    /// `otc_shared::storage_layout`.
+    #[cfg(test)]
+    mod storage_layout {
+        const SNAPSHOT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/storage-layout.json");
+
+        #[cfg(not(feature = "upgrade-test"))]
+        #[test]
+        fn matches_its_snapshot() {
+            otc_shared::storage_layout::check_snapshot::<super::ListingVault>(SNAPSHOT);
+        }
+
+        /// The test-only version 2 adds a field, and still decodes the released storage.
+        #[cfg(feature = "upgrade-test")]
+        #[test]
+        fn decodes_the_released_snapshot() {
+            otc_shared::storage_layout::assert_decodes_snapshot::<super::ListingVault>(SNAPSHOT);
+        }
+    }
 }

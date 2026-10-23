@@ -1363,4 +1363,17 @@ mod lockup_listings {
             assert_eq!(factory.get_version(), STORAGE_VERSION);
         }
     }
+
+    /// Upgraded code must decode the storage this code writes; see
+    /// `otc_shared::storage_layout`.
+    #[cfg(test)]
+    mod storage_layout {
+        #[test]
+        fn matches_its_snapshot() {
+            otc_shared::storage_layout::check_snapshot::<super::LockupListings>(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/storage-layout.json"
+            ));
+        }
+    }
 }

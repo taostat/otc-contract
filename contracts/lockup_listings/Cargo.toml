@@ -10,6 +10,9 @@ otc-shared = { path = "../../shared", default-features = false }
 listing-vault = { path = "../listing_vault", default-features = false, features = ["ink-as-dependency"] }
 code-registry = { path = "../code_registry", default-features = false, features = ["ink-as-dependency"] }
 
+[dev-dependencies]
+otc-shared = { path = "../../shared", features = ["storage-layout"] }
+
 [lib]
 path = "src/lib.rs"
 

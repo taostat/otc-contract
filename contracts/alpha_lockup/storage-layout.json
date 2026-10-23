@@ -1,0 +1,387 @@
+{
+  "cells": {
+    "0x00000000": {
+      "kind": "Contract",
+      "name": "AlphaLockup",
+      "packedType": [
+        {
+          "name": "buyer",
+          "type": {
+            "def": {
+              "composite": [
+                {
+                  "name": null,
+                  "type": {
+                    "def": {
+                      "array": {
+                        "len": 32,
+                        "type": {
+                          "def": {
+                            "primitive": "u8"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            "path": "ink_primitives::types::AccountId"
+          }
+        },
+        {
+          "name": "pending_beneficiary",
+          "type": {
+            "def": {
+              "variant": [
+                {
+                  "fields": [],
+                  "index": 0,
+                  "name": "None"
+                },
+                {
+                  "fields": [
+                    {
+                      "name": null,
+                      "type": {
+                        "def": {
+                          "composite": [
+                            {
+                              "name": null,
+                              "type": {
+                                "def": {
+                                  "array": {
+                                    "len": 32,
+                                    "type": {
+                                      "def": {
+                                        "primitive": "u8"
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          ]
+                        },
+                        "path": "ink_primitives::types::AccountId"
+                      }
+                    }
+                  ],
+                  "index": 1,
+                  "name": "Some"
+                }
+              ]
+            },
+            "path": "Option"
+          }
+        },
+        {
+          "name": "netuid",
+          "type": {
+            "def": {
+              "primitive": "u16"
+            }
+          }
+        },
+        {
+          "name": "alpha_amount",
+          "type": {
+            "def": {
+              "primitive": "u64"
+            }
+          }
+        },
+        {
+          "name": "unlock_block",
+          "type": {
+            "def": {
+              "primitive": "u32"
+            }
+          }
+        },
+        {
+          "name": "hotkey",
+          "type": {
+            "def": {
+              "composite": [
+                {
+                  "name": null,
+                  "type": {
+                    "def": {
+                      "array": {
+                        "len": 32,
+                        "type": {
+                          "def": {
+                            "primitive": "u8"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            "path": "ink_primitives::types::AccountId"
+          }
+        },
+        {
+          "name": "claimed",
+          "type": {
+            "def": {
+              "primitive": "bool"
+            }
+          }
+        },
+        {
+          "name": "registry",
+          "type": {
+            "def": {
+              "composite": [
+                {
+                  "name": null,
+                  "type": {
+                    "def": {
+                      "array": {
+                        "len": 32,
+                        "type": {
+                          "def": {
+                            "primitive": "u8"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            "path": "ink_primitives::types::AccountId"
+          }
+        },
+        {
+          "name": "upgrade_policy",
+          "type": {
+            "def": {
+              "variant": [
+                {
+                  "fields": [],
+                  "index": 0,
+                  "name": "Auto"
+                },
+                {
+                  "fields": [],
+                  "index": 1,
+                  "name": "ConsentOnly"
+                }
+              ]
+            },
+            "path": "otc_shared::upgrade::UpgradePolicy"
+          }
+        },
+        {
+          "name": "version",
+          "type": {
+            "def": {
+              "primitive": "u16"
+            }
+          }
+        }
+      ],
+      "value": {
+        "fields": [
+          {
+            "layout": {
+              "leaf": {
+                "def": {
+                  "composite": [
+                    {
+                      "name": null,
+                      "type": {
+                        "def": {
+                          "array": {
+                            "len": 32,
+                            "type": {
+                              "def": {
+                                "primitive": "u8"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                },
+                "path": "ink_primitives::types::AccountId"
+              }
+            },
+            "name": "buyer"
+          },
+          {
+            "layout": {
+              "enum": "Option",
+              "variants": {
+                "0": {
+                  "fields": [],
+                  "struct": "None"
+                },
+                "1": {
+                  "fields": [
+                    {
+                      "layout": {
+                        "leaf": {
+                          "def": {
+                            "composite": [
+                              {
+                                "name": null,
+                                "type": {
+                                  "def": {
+                                    "array": {
+                                      "len": 32,
+                                      "type": {
+                                        "def": {
+                                          "primitive": "u8"
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            ]
+                          },
+                          "path": "ink_primitives::types::AccountId"
+                        }
+                      },
+                      "name": "0"
+                    }
+                  ],
+                  "struct": "Some"
+                }
+              }
+            },
+            "name": "pending_beneficiary"
+          },
+          {
+            "layout": {
+              "leaf": {
+                "def": {
+                  "primitive": "u16"
+                }
+              }
+            },
+            "name": "netuid"
+          },
+          {
+            "layout": {
+              "leaf": {
+                "def": {
+                  "primitive": "u64"
+                }
+              }
+            },
+            "name": "alpha_amount"
+          },
+          {
+            "layout": {
+              "leaf": {
+                "def": {
+                  "primitive": "u32"
+                }
+              }
+            },
+            "name": "unlock_block"
+          },
+          {
+            "layout": {
+              "leaf": {
+                "def": {
+                  "composite": [
+                    {
+                      "name": null,
+                      "type": {
+                        "def": {
+                          "array": {
+                            "len": 32,
+                            "type": {
+                              "def": {
+                                "primitive": "u8"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                },
+                "path": "ink_primitives::types::AccountId"
+              }
+            },
+            "name": "hotkey"
+          },
+          {
+            "layout": {
+              "leaf": {
+                "def": {
+                  "primitive": "bool"
+                }
+              }
+            },
+            "name": "claimed"
+          },
+          {
+            "layout": {
+              "leaf": {
+                "def": {
+                  "composite": [
+                    {
+                      "name": null,
+                      "type": {
+                        "def": {
+                          "array": {
+                            "len": 32,
+                            "type": {
+                              "def": {
+                                "primitive": "u8"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                },
+                "path": "ink_primitives::types::AccountId"
+              }
+            },
+            "name": "registry"
+          },
+          {
+            "layout": {
+              "enum": "UpgradePolicy",
+              "variants": {
+                "0": {
+                  "fields": [],
+                  "struct": "Auto"
+                },
+                "1": {
+                  "fields": [],
+                  "struct": "ConsentOnly"
+                }
+              }
+            },
+            "name": "upgrade_policy"
+          },
+          {
+            "layout": {
+              "leaf": {
+                "def": {
+                  "primitive": "u16"
+                }
+              }
+            },
+            "name": "version"
+          }
+        ],
+        "struct": "AlphaLockup"
+      }
+    }
+  }
+}

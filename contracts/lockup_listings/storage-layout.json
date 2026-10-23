@@ -1,0 +1,868 @@
+{
+  "cells": {
+    "0x00000000": {
+      "kind": "Contract",
+      "name": "LockupListings",
+      "packedType": [
+        {
+          "name": "owner",
+          "type": {
+            "def": {
+              "composite": [
+                {
+                  "name": null,
+                  "type": {
+                    "def": {
+                      "array": {
+                        "len": 32,
+                        "type": {
+                          "def": {
+                            "primitive": "u8"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            "path": "ink_primitives::types::AccountId"
+          }
+        },
+        {
+          "name": "pending_owner",
+          "type": {
+            "def": {
+              "variant": [
+                {
+                  "fields": [],
+                  "index": 0,
+                  "name": "None"
+                },
+                {
+                  "fields": [
+                    {
+                      "name": null,
+                      "type": {
+                        "def": {
+                          "composite": [
+                            {
+                              "name": null,
+                              "type": {
+                                "def": {
+                                  "array": {
+                                    "len": 32,
+                                    "type": {
+                                      "def": {
+                                        "primitive": "u8"
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          ]
+                        },
+                        "path": "ink_primitives::types::AccountId"
+                      }
+                    }
+                  ],
+                  "index": 1,
+                  "name": "Some"
+                }
+              ]
+            },
+            "path": "Option"
+          }
+        },
+        {
+          "name": "registry",
+          "type": {
+            "def": {
+              "composite": [
+                {
+                  "name": null,
+                  "type": {
+                    "def": {
+                      "array": {
+                        "len": 32,
+                        "type": {
+                          "def": {
+                            "primitive": "u8"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            "path": "ink_primitives::types::AccountId"
+          }
+        },
+        {
+          "name": "version",
+          "type": {
+            "def": {
+              "primitive": "u16"
+            }
+          }
+        },
+        {
+          "name": "next_listing_id",
+          "type": {
+            "def": {
+              "primitive": "u64"
+            }
+          }
+        },
+        {
+          "name": "default_hotkey",
+          "type": {
+            "def": {
+              "composite": [
+                {
+                  "name": null,
+                  "type": {
+                    "def": {
+                      "array": {
+                        "len": 32,
+                        "type": {
+                          "def": {
+                            "primitive": "u8"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            "path": "ink_primitives::types::AccountId"
+          }
+        },
+        {
+          "name": "fee_rate",
+          "type": {
+            "def": {
+              "composite": [
+                {
+                  "name": "value",
+                  "type": {
+                    "def": {
+                      "primitive": "u128"
+                    }
+                  }
+                }
+              ]
+            },
+            "path": "otc_shared::types::FixedDecimal"
+          }
+        },
+        {
+          "name": "fee_recipient",
+          "type": {
+            "def": {
+              "composite": [
+                {
+                  "name": null,
+                  "type": {
+                    "def": {
+                      "array": {
+                        "len": 32,
+                        "type": {
+                          "def": {
+                            "primitive": "u8"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            "path": "ink_primitives::types::AccountId"
+          }
+        },
+        {
+          "name": "min_listing_amount",
+          "type": {
+            "def": {
+              "primitive": "u64"
+            }
+          }
+        },
+        {
+          "name": "min_purchase_amount",
+          "type": {
+            "def": {
+              "primitive": "u64"
+            }
+          }
+        },
+        {
+          "name": "min_lockup_duration",
+          "type": {
+            "def": {
+              "primitive": "u32"
+            }
+          }
+        },
+        {
+          "name": "max_lockup_duration",
+          "type": {
+            "def": {
+              "primitive": "u32"
+            }
+          }
+        },
+        {
+          "name": "min_listing_age",
+          "type": {
+            "def": {
+              "primitive": "u32"
+            }
+          }
+        },
+        {
+          "name": "paused_until",
+          "type": {
+            "def": {
+              "primitive": "u32"
+            }
+          }
+        }
+      ],
+      "value": {
+        "fields": [
+          {
+            "layout": {
+              "leaf": {
+                "def": {
+                  "composite": [
+                    {
+                      "name": null,
+                      "type": {
+                        "def": {
+                          "array": {
+                            "len": 32,
+                            "type": {
+                              "def": {
+                                "primitive": "u8"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                },
+                "path": "ink_primitives::types::AccountId"
+              }
+            },
+            "name": "owner"
+          },
+          {
+            "layout": {
+              "enum": "Option",
+              "variants": {
+                "0": {
+                  "fields": [],
+                  "struct": "None"
+                },
+                "1": {
+                  "fields": [
+                    {
+                      "layout": {
+                        "leaf": {
+                          "def": {
+                            "composite": [
+                              {
+                                "name": null,
+                                "type": {
+                                  "def": {
+                                    "array": {
+                                      "len": 32,
+                                      "type": {
+                                        "def": {
+                                          "primitive": "u8"
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            ]
+                          },
+                          "path": "ink_primitives::types::AccountId"
+                        }
+                      },
+                      "name": "0"
+                    }
+                  ],
+                  "struct": "Some"
+                }
+              }
+            },
+            "name": "pending_owner"
+          },
+          {
+            "layout": {
+              "leaf": {
+                "def": {
+                  "composite": [
+                    {
+                      "name": null,
+                      "type": {
+                        "def": {
+                          "array": {
+                            "len": 32,
+                            "type": {
+                              "def": {
+                                "primitive": "u8"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                },
+                "path": "ink_primitives::types::AccountId"
+              }
+            },
+            "name": "registry"
+          },
+          {
+            "layout": {
+              "leaf": {
+                "def": {
+                  "primitive": "u16"
+                }
+              }
+            },
+            "name": "version"
+          },
+          {
+            "layout": {
+              "leaf": {
+                "def": {
+                  "primitive": "u64"
+                }
+              }
+            },
+            "name": "next_listing_id"
+          },
+          {
+            "layout": {
+              "leaf": {
+                "def": {
+                  "composite": [
+                    {
+                      "name": null,
+                      "type": {
+                        "def": {
+                          "array": {
+                            "len": 32,
+                            "type": {
+                              "def": {
+                                "primitive": "u8"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                },
+                "path": "ink_primitives::types::AccountId"
+              }
+            },
+            "name": "default_hotkey"
+          },
+          {
+            "layout": {
+              "fields": [
+                {
+                  "layout": {
+                    "leaf": {
+                      "def": {
+                        "primitive": "u128"
+                      }
+                    }
+                  },
+                  "name": "value"
+                }
+              ],
+              "struct": "FixedDecimal"
+            },
+            "name": "fee_rate"
+          },
+          {
+            "layout": {
+              "leaf": {
+                "def": {
+                  "composite": [
+                    {
+                      "name": null,
+                      "type": {
+                        "def": {
+                          "array": {
+                            "len": 32,
+                            "type": {
+                              "def": {
+                                "primitive": "u8"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                },
+                "path": "ink_primitives::types::AccountId"
+              }
+            },
+            "name": "fee_recipient"
+          },
+          {
+            "layout": {
+              "leaf": {
+                "def": {
+                  "primitive": "u64"
+                }
+              }
+            },
+            "name": "min_listing_amount"
+          },
+          {
+            "layout": {
+              "leaf": {
+                "def": {
+                  "primitive": "u64"
+                }
+              }
+            },
+            "name": "min_purchase_amount"
+          },
+          {
+            "layout": {
+              "leaf": {
+                "def": {
+                  "primitive": "u32"
+                }
+              }
+            },
+            "name": "min_lockup_duration"
+          },
+          {
+            "layout": {
+              "leaf": {
+                "def": {
+                  "primitive": "u32"
+                }
+              }
+            },
+            "name": "max_lockup_duration"
+          },
+          {
+            "layout": {
+              "leaf": {
+                "def": {
+                  "primitive": "u32"
+                }
+              }
+            },
+            "name": "min_listing_age"
+          },
+          {
+            "layout": {
+              "leaf": {
+                "def": {
+                  "primitive": "u32"
+                }
+              }
+            },
+            "name": "paused_until"
+          }
+        ],
+        "struct": "LockupListings"
+      }
+    },
+    "0x115a69c7": {
+      "keyType": {
+        "def": {
+          "composite": [
+            {
+              "name": null,
+              "type": {
+                "def": {
+                  "array": {
+                    "len": 32,
+                    "type": {
+                      "def": {
+                        "primitive": "u8"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "path": "ink_primitives::types::AccountId"
+      },
+      "kind": "Mapping",
+      "name": "LockupListings.seller_nonces",
+      "value": {
+        "leaf": {
+          "def": {
+            "primitive": "u64"
+          }
+        }
+      },
+      "valueType": {
+        "def": {
+          "primitive": "u64"
+        }
+      }
+    },
+    "0x280c643a": {
+      "keyType": {
+        "def": {
+          "tuple": [
+            {
+              "def": {
+                "composite": [
+                  {
+                    "name": null,
+                    "type": {
+                      "def": {
+                        "array": {
+                          "len": 32,
+                          "type": {
+                            "def": {
+                              "primitive": "u8"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                ]
+              },
+              "path": "ink_primitives::types::AccountId"
+            },
+            {
+              "def": {
+                "primitive": "u16"
+              }
+            }
+          ]
+        }
+      },
+      "kind": "Mapping",
+      "name": "LockupListings.user_listings",
+      "value": {
+        "leaf": {
+          "def": {
+            "sequence": {
+              "def": {
+                "primitive": "u64"
+              }
+            }
+          }
+        }
+      },
+      "valueType": {
+        "def": {
+          "sequence": {
+            "def": {
+              "primitive": "u64"
+            }
+          }
+        }
+      }
+    },
+    "0x4df25f23": {
+      "keyType": {
+        "def": {
+          "primitive": "u16"
+        }
+      },
+      "kind": "Mapping",
+      "name": "LockupListings.validator_hotkeys",
+      "value": {
+        "leaf": {
+          "def": {
+            "composite": [
+              {
+                "name": null,
+                "type": {
+                  "def": {
+                    "array": {
+                      "len": 32,
+                      "type": {
+                        "def": {
+                          "primitive": "u8"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          "path": "ink_primitives::types::AccountId"
+        }
+      },
+      "valueType": {
+        "def": {
+          "composite": [
+            {
+              "name": null,
+              "type": {
+                "def": {
+                  "array": {
+                    "len": 32,
+                    "type": {
+                      "def": {
+                        "primitive": "u8"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "path": "ink_primitives::types::AccountId"
+      }
+    },
+    "0x56b5a411": {
+      "keyType": {
+        "def": {
+          "primitive": "u16"
+        }
+      },
+      "kind": "Mapping",
+      "name": "LockupListings.frozen_subnets",
+      "value": {
+        "leaf": {
+          "def": {
+            "tuple": []
+          }
+        }
+      },
+      "valueType": {
+        "def": {
+          "tuple": []
+        }
+      }
+    },
+    "0xd5b53a05": {
+      "keyType": {
+        "def": {
+          "composite": [
+            {
+              "name": null,
+              "type": {
+                "def": {
+                  "array": {
+                    "len": 32,
+                    "type": {
+                      "def": {
+                        "primitive": "u8"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "path": "ink_primitives::types::AccountId"
+      },
+      "kind": "Mapping",
+      "name": "LockupListings.vault_listings",
+      "value": {
+        "fields": [
+          {
+            "layout": {
+              "leaf": {
+                "def": {
+                  "primitive": "u16"
+                }
+              }
+            },
+            "name": "0"
+          },
+          {
+            "layout": {
+              "leaf": {
+                "def": {
+                  "composite": [
+                    {
+                      "name": null,
+                      "type": {
+                        "def": {
+                          "array": {
+                            "len": 32,
+                            "type": {
+                              "def": {
+                                "primitive": "u8"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                },
+                "path": "ink_primitives::types::AccountId"
+              }
+            },
+            "name": "1"
+          },
+          {
+            "layout": {
+              "leaf": {
+                "def": {
+                  "primitive": "u64"
+                }
+              }
+            },
+            "name": "2"
+          }
+        ],
+        "struct": "(A, B, C)"
+      },
+      "valueType": {
+        "def": {
+          "tuple": [
+            {
+              "def": {
+                "primitive": "u16"
+              }
+            },
+            {
+              "def": {
+                "composite": [
+                  {
+                    "name": null,
+                    "type": {
+                      "def": {
+                        "array": {
+                          "len": 32,
+                          "type": {
+                            "def": {
+                              "primitive": "u8"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                ]
+              },
+              "path": "ink_primitives::types::AccountId"
+            },
+            {
+              "def": {
+                "primitive": "u64"
+              }
+            }
+          ]
+        }
+      }
+    },
+    "0xff3d71e2": {
+      "keyType": {
+        "def": {
+          "tuple": [
+            {
+              "def": {
+                "primitive": "u16"
+              }
+            },
+            {
+              "def": {
+                "composite": [
+                  {
+                    "name": null,
+                    "type": {
+                      "def": {
+                        "array": {
+                          "len": 32,
+                          "type": {
+                            "def": {
+                              "primitive": "u8"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                ]
+              },
+              "path": "ink_primitives::types::AccountId"
+            },
+            {
+              "def": {
+                "primitive": "u64"
+              }
+            }
+          ]
+        }
+      },
+      "kind": "Mapping",
+      "name": "LockupListings.listings",
+      "value": {
+        "leaf": {
+          "def": {
+            "composite": [
+              {
+                "name": null,
+                "type": {
+                  "def": {
+                    "array": {
+                      "len": 32,
+                      "type": {
+                        "def": {
+                          "primitive": "u8"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          "path": "ink_primitives::types::AccountId"
+        }
+      },
+      "valueType": {
+        "def": {
+          "composite": [
+            {
+              "name": null,
+              "type": {
+                "def": {
+                  "array": {
+                    "len": 32,
+                    "type": {
+                      "def": {
+                        "primitive": "u8"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "path": "ink_primitives::types::AccountId"
+      }
+    }
+  }
+}
