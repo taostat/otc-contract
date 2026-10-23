@@ -7,6 +7,8 @@ pub mod factory;
 pub mod pricing;
 pub mod runtime;
 pub mod stake;
+#[cfg(any(test, feature = "storage-layout"))]
+pub mod storage_layout;
 #[cfg(all(feature = "std", any(test, feature = "testing")))]
 pub mod testing;
 pub mod types;

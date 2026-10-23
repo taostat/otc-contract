@@ -9,6 +9,11 @@ ink = { version = "5.1.1", default-features = false }
 sp-io = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-stable2503-6", default-features = false, features = ["disable_panic_handler", "disable_oom", "disable_allocator"] }
 sp-runtime = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-stable2503-6", default-features = false }
 fixed = { version = "=1.27.0", default-features = false }
+serde_json = { version = "1", optional = true }
+
+[dev-dependencies]
+# The storage layout check's own tests run without the feature.
+serde_json = "1"
 
 [features]
 default = ["std"]
@@ -21,3 +26,6 @@ std = [
 # The off-chain Subtensor mock for contract unit tests; enable it from
 # dev-dependencies only.
 testing = ["std"]
+# The storage layout snapshot check for contract unit tests; enable it from
+# dev-dependencies only.
+storage-layout = ["std", "dep:serde_json"]

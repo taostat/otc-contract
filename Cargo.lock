@@ -1997,6 +1997,7 @@ version = "0.1.0"
 dependencies = [
  "fixed",
  "ink",
+ "serde_json",
  "sp-io",
  "sp-runtime",
 ]
