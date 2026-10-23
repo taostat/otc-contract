@@ -56,6 +56,8 @@ cargo contract build --release --manifest-path contracts/otc/Cargo.toml
 cargo contract build --release --manifest-path contracts/lockup_listings/Cargo.toml
 ```
 
+CI runs the first three commands on every pull request, plus `npm ci` and `npx tsc --noEmit` in `integration-tests`. The localnet suite needs a Subtensor node build, so it runs locally (see [Integration Tests](#integration-tests)).
+
 Contract artifacts are written under `target/ink/<contract_name>/`. `npm run build:contracts` in `integration-tests` builds all of them, plus the test-only builds described below.
 
 The workspace keeps `Cargo.lock` tracked on purpose. These are deployable smart contracts, so reproducible dependency resolution is more important than treating the workspace like a reusable library crate.
