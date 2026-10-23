@@ -1,0 +1,676 @@
+{
+  "cells": {
+    "0x00000000": {
+      "kind": "Contract",
+      "name": "OtcContract",
+      "packedType": [
+        {
+          "name": "owner",
+          "type": {
+            "def": {
+              "composite": [
+                {
+                  "name": null,
+                  "type": {
+                    "def": {
+                      "array": {
+                        "len": 32,
+                        "type": {
+                          "def": {
+                            "primitive": "u8"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            "path": "ink_primitives::types::AccountId"
+          }
+        },
+        {
+          "name": "pending_owner",
+          "type": {
+            "def": {
+              "variant": [
+                {
+                  "fields": [],
+                  "index": 0,
+                  "name": "None"
+                },
+                {
+                  "fields": [
+                    {
+                      "name": null,
+                      "type": {
+                        "def": {
+                          "composite": [
+                            {
+                              "name": null,
+                              "type": {
+                                "def": {
+                                  "array": {
+                                    "len": 32,
+                                    "type": {
+                                      "def": {
+                                        "primitive": "u8"
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          ]
+                        },
+                        "path": "ink_primitives::types::AccountId"
+                      }
+                    }
+                  ],
+                  "index": 1,
+                  "name": "Some"
+                }
+              ]
+            },
+            "path": "Option"
+          }
+        },
+        {
+          "name": "registry",
+          "type": {
+            "def": {
+              "composite": [
+                {
+                  "name": null,
+                  "type": {
+                    "def": {
+                      "array": {
+                        "len": 32,
+                        "type": {
+                          "def": {
+                            "primitive": "u8"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            "path": "ink_primitives::types::AccountId"
+          }
+        },
+        {
+          "name": "version",
+          "type": {
+            "def": {
+              "primitive": "u16"
+            }
+          }
+        },
+        {
+          "name": "next_tao_offer_id",
+          "type": {
+            "def": {
+              "primitive": "u64"
+            }
+          }
+        },
+        {
+          "name": "fee_rate",
+          "type": {
+            "def": {
+              "composite": [
+                {
+                  "name": "value",
+                  "type": {
+                    "def": {
+                      "primitive": "u128"
+                    }
+                  }
+                }
+              ]
+            },
+            "path": "otc_shared::types::FixedDecimal"
+          }
+        },
+        {
+          "name": "fee_recipient",
+          "type": {
+            "def": {
+              "composite": [
+                {
+                  "name": null,
+                  "type": {
+                    "def": {
+                      "array": {
+                        "len": 32,
+                        "type": {
+                          "def": {
+                            "primitive": "u8"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            "path": "ink_primitives::types::AccountId"
+          }
+        },
+        {
+          "name": "min_offer_amount",
+          "type": {
+            "def": {
+              "primitive": "u64"
+            }
+          }
+        },
+        {
+          "name": "paused_until",
+          "type": {
+            "def": {
+              "primitive": "u32"
+            }
+          }
+        }
+      ],
+      "value": {
+        "fields": [
+          {
+            "layout": {
+              "leaf": {
+                "def": {
+                  "composite": [
+                    {
+                      "name": null,
+                      "type": {
+                        "def": {
+                          "array": {
+                            "len": 32,
+                            "type": {
+                              "def": {
+                                "primitive": "u8"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                },
+                "path": "ink_primitives::types::AccountId"
+              }
+            },
+            "name": "owner"
+          },
+          {
+            "layout": {
+              "enum": "Option",
+              "variants": {
+                "0": {
+                  "fields": [],
+                  "struct": "None"
+                },
+                "1": {
+                  "fields": [
+                    {
+                      "layout": {
+                        "leaf": {
+                          "def": {
+                            "composite": [
+                              {
+                                "name": null,
+                                "type": {
+                                  "def": {
+                                    "array": {
+                                      "len": 32,
+                                      "type": {
+                                        "def": {
+                                          "primitive": "u8"
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            ]
+                          },
+                          "path": "ink_primitives::types::AccountId"
+                        }
+                      },
+                      "name": "0"
+                    }
+                  ],
+                  "struct": "Some"
+                }
+              }
+            },
+            "name": "pending_owner"
+          },
+          {
+            "layout": {
+              "leaf": {
+                "def": {
+                  "composite": [
+                    {
+                      "name": null,
+                      "type": {
+                        "def": {
+                          "array": {
+                            "len": 32,
+                            "type": {
+                              "def": {
+                                "primitive": "u8"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                },
+                "path": "ink_primitives::types::AccountId"
+              }
+            },
+            "name": "registry"
+          },
+          {
+            "layout": {
+              "leaf": {
+                "def": {
+                  "primitive": "u16"
+                }
+              }
+            },
+            "name": "version"
+          },
+          {
+            "layout": {
+              "leaf": {
+                "def": {
+                  "primitive": "u64"
+                }
+              }
+            },
+            "name": "next_tao_offer_id"
+          },
+          {
+            "layout": {
+              "fields": [
+                {
+                  "layout": {
+                    "leaf": {
+                      "def": {
+                        "primitive": "u128"
+                      }
+                    }
+                  },
+                  "name": "value"
+                }
+              ],
+              "struct": "FixedDecimal"
+            },
+            "name": "fee_rate"
+          },
+          {
+            "layout": {
+              "leaf": {
+                "def": {
+                  "composite": [
+                    {
+                      "name": null,
+                      "type": {
+                        "def": {
+                          "array": {
+                            "len": 32,
+                            "type": {
+                              "def": {
+                                "primitive": "u8"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                },
+                "path": "ink_primitives::types::AccountId"
+              }
+            },
+            "name": "fee_recipient"
+          },
+          {
+            "layout": {
+              "leaf": {
+                "def": {
+                  "primitive": "u64"
+                }
+              }
+            },
+            "name": "min_offer_amount"
+          },
+          {
+            "layout": {
+              "leaf": {
+                "def": {
+                  "primitive": "u32"
+                }
+              }
+            },
+            "name": "paused_until"
+          }
+        ],
+        "struct": "OtcContract"
+      }
+    },
+    "0x1b11f9ec": {
+      "keyType": {
+        "def": {
+          "tuple": [
+            {
+              "def": {
+                "composite": [
+                  {
+                    "name": null,
+                    "type": {
+                      "def": {
+                        "array": {
+                          "len": 32,
+                          "type": {
+                            "def": {
+                              "primitive": "u8"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                ]
+              },
+              "path": "ink_primitives::types::AccountId"
+            },
+            {
+              "def": {
+                "primitive": "u16"
+              }
+            }
+          ]
+        }
+      },
+      "kind": "Mapping",
+      "name": "OtcContract.user_offers",
+      "value": {
+        "leaf": {
+          "def": {
+            "sequence": {
+              "def": {
+                "primitive": "u64"
+              }
+            }
+          }
+        }
+      },
+      "valueType": {
+        "def": {
+          "sequence": {
+            "def": {
+              "primitive": "u64"
+            }
+          }
+        }
+      }
+    },
+    "0xb809a931": {
+      "keyType": {
+        "def": {
+          "tuple": [
+            {
+              "def": {
+                "primitive": "u16"
+              }
+            },
+            {
+              "def": {
+                "composite": [
+                  {
+                    "name": null,
+                    "type": {
+                      "def": {
+                        "array": {
+                          "len": 32,
+                          "type": {
+                            "def": {
+                              "primitive": "u8"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                ]
+              },
+              "path": "ink_primitives::types::AccountId"
+            },
+            {
+              "def": {
+                "primitive": "u64"
+              }
+            }
+          ]
+        }
+      },
+      "kind": "Mapping",
+      "name": "OtcContract.tao_offers",
+      "value": {
+        "fields": [
+          {
+            "layout": {
+              "leaf": {
+                "def": {
+                  "primitive": "u64"
+                }
+              }
+            },
+            "name": "id"
+          },
+          {
+            "layout": {
+              "leaf": {
+                "def": {
+                  "primitive": "u16"
+                }
+              }
+            },
+            "name": "netuid"
+          },
+          {
+            "layout": {
+              "leaf": {
+                "def": {
+                  "composite": [
+                    {
+                      "name": null,
+                      "type": {
+                        "def": {
+                          "array": {
+                            "len": 32,
+                            "type": {
+                              "def": {
+                                "primitive": "u8"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                },
+                "path": "ink_primitives::types::AccountId"
+              }
+            },
+            "name": "buyer"
+          },
+          {
+            "layout": {
+              "leaf": {
+                "def": {
+                  "primitive": "u64"
+                }
+              }
+            },
+            "name": "amount"
+          },
+          {
+            "layout": {
+              "leaf": {
+                "def": {
+                  "primitive": "i32"
+                }
+              }
+            },
+            "name": "price_offset_bps"
+          },
+          {
+            "layout": {
+              "leaf": {
+                "def": {
+                  "primitive": "u64"
+                }
+              }
+            },
+            "name": "max_price"
+          },
+          {
+            "layout": {
+              "fields": [
+                {
+                  "layout": {
+                    "leaf": {
+                      "def": {
+                        "primitive": "u128"
+                      }
+                    }
+                  },
+                  "name": "value"
+                }
+              ],
+              "struct": "FixedDecimal"
+            },
+            "name": "fee_rate"
+          },
+          {
+            "layout": {
+              "leaf": {
+                "def": {
+                  "primitive": "u32"
+                }
+              }
+            },
+            "name": "created_at"
+          }
+        ],
+        "struct": "TaoOffer"
+      },
+      "valueType": {
+        "def": {
+          "composite": [
+            {
+              "name": "id",
+              "type": {
+                "def": {
+                  "primitive": "u64"
+                }
+              }
+            },
+            {
+              "name": "netuid",
+              "type": {
+                "def": {
+                  "primitive": "u16"
+                }
+              }
+            },
+            {
+              "name": "buyer",
+              "type": {
+                "def": {
+                  "composite": [
+                    {
+                      "name": null,
+                      "type": {
+                        "def": {
+                          "array": {
+                            "len": 32,
+                            "type": {
+                              "def": {
+                                "primitive": "u8"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                },
+                "path": "ink_primitives::types::AccountId"
+              }
+            },
+            {
+              "name": "amount",
+              "type": {
+                "def": {
+                  "primitive": "u64"
+                }
+              }
+            },
+            {
+              "name": "price_offset_bps",
+              "type": {
+                "def": {
+                  "primitive": "i32"
+                }
+              }
+            },
+            {
+              "name": "max_price",
+              "type": {
+                "def": {
+                  "primitive": "u64"
+                }
+              }
+            },
+            {
+              "name": "fee_rate",
+              "type": {
+                "def": {
+                  "composite": [
+                    {
+                      "name": "value",
+                      "type": {
+                        "def": {
+                          "primitive": "u128"
+                        }
+                      }
+                    }
+                  ]
+                },
+                "path": "otc_shared::types::FixedDecimal"
+              }
+            },
+            {
+              "name": "created_at",
+              "type": {
+                "def": {
+                  "primitive": "u32"
+                }
+              }
+            }
+          ]
+        },
+        "path": "otc_contract::types::TaoOffer"
+      }
+    }
+  }
+}

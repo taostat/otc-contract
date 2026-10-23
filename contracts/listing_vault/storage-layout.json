@@ -1,0 +1,576 @@
+{
+  "cells": {
+    "0x00000000": {
+      "kind": "Contract",
+      "name": "ListingVault",
+      "packedType": [
+        {
+          "name": "factory",
+          "type": {
+            "def": {
+              "composite": [
+                {
+                  "name": null,
+                  "type": {
+                    "def": {
+                      "array": {
+                        "len": 32,
+                        "type": {
+                          "def": {
+                            "primitive": "u8"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            "path": "ink_primitives::types::AccountId"
+          }
+        },
+        {
+          "name": "registry",
+          "type": {
+            "def": {
+              "composite": [
+                {
+                  "name": null,
+                  "type": {
+                    "def": {
+                      "array": {
+                        "len": 32,
+                        "type": {
+                          "def": {
+                            "primitive": "u8"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            "path": "ink_primitives::types::AccountId"
+          }
+        },
+        {
+          "name": "seller",
+          "type": {
+            "def": {
+              "composite": [
+                {
+                  "name": null,
+                  "type": {
+                    "def": {
+                      "array": {
+                        "len": 32,
+                        "type": {
+                          "def": {
+                            "primitive": "u8"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            "path": "ink_primitives::types::AccountId"
+          }
+        },
+        {
+          "name": "netuid",
+          "type": {
+            "def": {
+              "primitive": "u16"
+            }
+          }
+        },
+        {
+          "name": "hotkey",
+          "type": {
+            "def": {
+              "composite": [
+                {
+                  "name": null,
+                  "type": {
+                    "def": {
+                      "array": {
+                        "len": 32,
+                        "type": {
+                          "def": {
+                            "primitive": "u8"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            "path": "ink_primitives::types::AccountId"
+          }
+        },
+        {
+          "name": "total",
+          "type": {
+            "def": {
+              "primitive": "u64"
+            }
+          }
+        },
+        {
+          "name": "remaining",
+          "type": {
+            "def": {
+              "primitive": "u64"
+            }
+          }
+        },
+        {
+          "name": "price_offset_bps",
+          "type": {
+            "def": {
+              "primitive": "i32"
+            }
+          }
+        },
+        {
+          "name": "min_price",
+          "type": {
+            "def": {
+              "primitive": "u64"
+            }
+          }
+        },
+        {
+          "name": "fee_rate",
+          "type": {
+            "def": {
+              "composite": [
+                {
+                  "name": "value",
+                  "type": {
+                    "def": {
+                      "primitive": "u128"
+                    }
+                  }
+                }
+              ]
+            },
+            "path": "otc_shared::types::FixedDecimal"
+          }
+        },
+        {
+          "name": "min_purchase",
+          "type": {
+            "def": {
+              "primitive": "u64"
+            }
+          }
+        },
+        {
+          "name": "lockup_duration",
+          "type": {
+            "def": {
+              "variant": [
+                {
+                  "fields": [],
+                  "index": 0,
+                  "name": "None"
+                },
+                {
+                  "fields": [
+                    {
+                      "name": null,
+                      "type": {
+                        "def": {
+                          "primitive": "u32"
+                        }
+                      }
+                    }
+                  ],
+                  "index": 1,
+                  "name": "Some"
+                }
+              ]
+            },
+            "path": "Option"
+          }
+        },
+        {
+          "name": "cancel_delay",
+          "type": {
+            "def": {
+              "primitive": "u32"
+            }
+          }
+        },
+        {
+          "name": "cancellable_after",
+          "type": {
+            "def": {
+              "primitive": "u32"
+            }
+          }
+        },
+        {
+          "name": "status",
+          "type": {
+            "def": {
+              "variant": [
+                {
+                  "fields": [],
+                  "index": 0,
+                  "name": "Pending"
+                },
+                {
+                  "fields": [],
+                  "index": 1,
+                  "name": "Open"
+                },
+                {
+                  "fields": [],
+                  "index": 2,
+                  "name": "Closed"
+                }
+              ]
+            },
+            "path": "listing_vault::listing_vault::Status"
+          }
+        },
+        {
+          "name": "next_purchase_id",
+          "type": {
+            "def": {
+              "primitive": "u64"
+            }
+          }
+        },
+        {
+          "name": "upgrade_policy",
+          "type": {
+            "def": {
+              "variant": [
+                {
+                  "fields": [],
+                  "index": 0,
+                  "name": "Auto"
+                },
+                {
+                  "fields": [],
+                  "index": 1,
+                  "name": "ConsentOnly"
+                }
+              ]
+            },
+            "path": "otc_shared::upgrade::UpgradePolicy"
+          }
+        },
+        {
+          "name": "version",
+          "type": {
+            "def": {
+              "primitive": "u16"
+            }
+          }
+        }
+      ],
+      "value": {
+        "fields": [
+          {
+            "layout": {
+              "leaf": {
+                "def": {
+                  "composite": [
+                    {
+                      "name": null,
+                      "type": {
+                        "def": {
+                          "array": {
+                            "len": 32,
+                            "type": {
+                              "def": {
+                                "primitive": "u8"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                },
+                "path": "ink_primitives::types::AccountId"
+              }
+            },
+            "name": "factory"
+          },
+          {
+            "layout": {
+              "leaf": {
+                "def": {
+                  "composite": [
+                    {
+                      "name": null,
+                      "type": {
+                        "def": {
+                          "array": {
+                            "len": 32,
+                            "type": {
+                              "def": {
+                                "primitive": "u8"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                },
+                "path": "ink_primitives::types::AccountId"
+              }
+            },
+            "name": "registry"
+          },
+          {
+            "layout": {
+              "leaf": {
+                "def": {
+                  "composite": [
+                    {
+                      "name": null,
+                      "type": {
+                        "def": {
+                          "array": {
+                            "len": 32,
+                            "type": {
+                              "def": {
+                                "primitive": "u8"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                },
+                "path": "ink_primitives::types::AccountId"
+              }
+            },
+            "name": "seller"
+          },
+          {
+            "layout": {
+              "leaf": {
+                "def": {
+                  "primitive": "u16"
+                }
+              }
+            },
+            "name": "netuid"
+          },
+          {
+            "layout": {
+              "leaf": {
+                "def": {
+                  "composite": [
+                    {
+                      "name": null,
+                      "type": {
+                        "def": {
+                          "array": {
+                            "len": 32,
+                            "type": {
+                              "def": {
+                                "primitive": "u8"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                },
+                "path": "ink_primitives::types::AccountId"
+              }
+            },
+            "name": "hotkey"
+          },
+          {
+            "layout": {
+              "leaf": {
+                "def": {
+                  "primitive": "u64"
+                }
+              }
+            },
+            "name": "total"
+          },
+          {
+            "layout": {
+              "leaf": {
+                "def": {
+                  "primitive": "u64"
+                }
+              }
+            },
+            "name": "remaining"
+          },
+          {
+            "layout": {
+              "leaf": {
+                "def": {
+                  "primitive": "i32"
+                }
+              }
+            },
+            "name": "price_offset_bps"
+          },
+          {
+            "layout": {
+              "leaf": {
+                "def": {
+                  "primitive": "u64"
+                }
+              }
+            },
+            "name": "min_price"
+          },
+          {
+            "layout": {
+              "fields": [
+                {
+                  "layout": {
+                    "leaf": {
+                      "def": {
+                        "primitive": "u128"
+                      }
+                    }
+                  },
+                  "name": "value"
+                }
+              ],
+              "struct": "FixedDecimal"
+            },
+            "name": "fee_rate"
+          },
+          {
+            "layout": {
+              "leaf": {
+                "def": {
+                  "primitive": "u64"
+                }
+              }
+            },
+            "name": "min_purchase"
+          },
+          {
+            "layout": {
+              "enum": "Option",
+              "variants": {
+                "0": {
+                  "fields": [],
+                  "struct": "None"
+                },
+                "1": {
+                  "fields": [
+                    {
+                      "layout": {
+                        "leaf": {
+                          "def": {
+                            "primitive": "u32"
+                          }
+                        }
+                      },
+                      "name": "0"
+                    }
+                  ],
+                  "struct": "Some"
+                }
+              }
+            },
+            "name": "lockup_duration"
+          },
+          {
+            "layout": {
+              "leaf": {
+                "def": {
+                  "primitive": "u32"
+                }
+              }
+            },
+            "name": "cancel_delay"
+          },
+          {
+            "layout": {
+              "leaf": {
+                "def": {
+                  "primitive": "u32"
+                }
+              }
+            },
+            "name": "cancellable_after"
+          },
+          {
+            "layout": {
+              "enum": "Status",
+              "variants": {
+                "0": {
+                  "fields": [],
+                  "struct": "Pending"
+                },
+                "1": {
+                  "fields": [],
+                  "struct": "Open"
+                },
+                "2": {
+                  "fields": [],
+                  "struct": "Closed"
+                }
+              }
+            },
+            "name": "status"
+          },
+          {
+            "layout": {
+              "leaf": {
+                "def": {
+                  "primitive": "u64"
+                }
+              }
+            },
+            "name": "next_purchase_id"
+          },
+          {
+            "layout": {
+              "enum": "UpgradePolicy",
+              "variants": {
+                "0": {
+                  "fields": [],
+                  "struct": "Auto"
+                },
+                "1": {
+                  "fields": [],
+                  "struct": "ConsentOnly"
+                }
+              }
+            },
+            "name": "upgrade_policy"
+          },
+          {
+            "layout": {
+              "leaf": {
+                "def": {
+                  "primitive": "u16"
+                }
+              }
+            },
+            "name": "version"
+          }
+        ],
+        "struct": "ListingVault"
+      }
+    }
+  }
+}

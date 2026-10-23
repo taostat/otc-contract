@@ -272,7 +272,7 @@ During the delay funds are illiquid but never at risk. A shorter delay means les
 
 #### Storage layout
 
-Every upgradeable contract carries a `version` field and a `migrate()` path. CI decodes storage written by the previous version with the new code. This replaces PR #6's warning against running `set_code` over the old layout.
+Every upgradeable contract carries a `version` field and a `migrate()` path. Each also commits a snapshot of its storage layout, and a unit test in CI fails unless the code can decode storage written under that snapshot (see the README's "Storage Compatibility"). This replaces PR #6's warning against running `set_code` over the old layout.
 
 ### What stays privileged
 
