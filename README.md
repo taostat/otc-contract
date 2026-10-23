@@ -33,7 +33,7 @@ Shared Bittensor environment types, runtime calls, chain extensions, and fixed-p
 
 - Rust from `rust-toolchain.toml` (`1.89`) with `rust-src`, `rustfmt`, `clippy`, and `wasm32-unknown-unknown`.
 - `cargo-contract` 5.x.
-- Node.js 22 LTS for the TypeScript integration tests.
+- Node.js 24 LTS (npm 11) for the TypeScript integration tests. npm 11 maintains `package-lock.json`; npm 10 rejects it in `npm ci`.
 - A Bittensor/Subtensor contracts development node with the expected chain extension methods.
 
 Install the Rust contract tool if needed:
@@ -55,6 +55,8 @@ cargo contract build --release --manifest-path contracts/listing_vault/Cargo.tom
 cargo contract build --release --manifest-path contracts/otc/Cargo.toml
 cargo contract build --release --manifest-path contracts/lockup_listings/Cargo.toml
 ```
+
+CI runs the first three commands on every pull request, plus `npm ci` and `npx tsc --noEmit` in `integration-tests`. The localnet suite needs a Subtensor node build, so it runs locally (see [Integration Tests](#integration-tests)).
 
 Contract artifacts are written under `target/ink/<contract_name>/`. `npm run build:contracts` in `integration-tests` builds all of them, plus the test-only builds described below.
 

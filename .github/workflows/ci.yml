@@ -1,0 +1,52 @@
+# Minimum checks on every pull request: formatting, lints and unit tests for the
+# contracts, and a type check of the integration tests. The localnet suite needs
+# a Subtensor node build, so it runs outside CI (see the README).
+name: CI
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  rust:
+    name: Rust (fmt, clippy, tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Installs the toolchain, components and targets pinned in rust-toolchain.toml.
+      - name: Install the pinned toolchain
+        run: rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - name: Check formatting
+        run: cargo fmt -- --check
+      - name: Clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+      - name: Unit tests
+        run: cargo test --workspace
+
+  integration-tests:
+    name: Integration tests (type check)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: integration-tests
+    steps:
+      - uses: actions/checkout@v4
+      # npm 11 (Node 24) maintains package-lock.json; npm 10 resolves an optional
+      # peer differently and rejects it in `npm ci`.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: integration-tests/package-lock.json
+      # postinstall generates the papi descriptors from the committed metadata.
+      - name: Install dependencies
+        run: npm ci
+      - name: Type check
+        run: npx tsc --noEmit
