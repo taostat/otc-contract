@@ -33,7 +33,7 @@ Shared Bittensor environment types, runtime calls, chain extensions, and fixed-p
 
 - Rust from `rust-toolchain.toml` (`1.89`) with `rust-src`, `rustfmt`, `clippy`, and `wasm32-unknown-unknown`.
 - `cargo-contract` 5.x.
-- Node.js 22 LTS for the TypeScript integration tests.
+- Node.js 24 LTS (npm 11) for the TypeScript integration tests. npm 11 maintains `package-lock.json`; npm 10 rejects it in `npm ci`.
 - A Bittensor/Subtensor contracts development node with the expected chain extension methods.
 
 Install the Rust contract tool if needed:

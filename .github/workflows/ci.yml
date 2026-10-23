@@ -38,9 +38,11 @@ jobs:
         working-directory: integration-tests
     steps:
       - uses: actions/checkout@v4
+      # npm 11 (Node 24) maintains package-lock.json; npm 10 resolves an optional
+      # peer differently and rejects it in `npm ci`.
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
           cache-dependency-path: integration-tests/package-lock.json
       # postinstall generates the papi descriptors from the committed metadata.
