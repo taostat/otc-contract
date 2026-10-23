@@ -82,7 +82,7 @@ The suite deploys local artifacts from:
 - `target/upgrade-test/ink/listing_vault/listing_vault.wasm`: the vault built with `--features upgrade-test`, which bumps its storage version and adds a field that its migration sets, for the vault upgrade tests. Its papi descriptor is `listing_vault_v2`.
 - `target/upgrade-test/ink/code_registry/code_registry.wasm`: the registry built with `--features short-delays`, so the upgrade tests can activate and force an upgrade within a few blocks.
 
-The suites cover deployment through the deploy script, listings and their vaults, escrows, vault and escrow upgrades through the registry, a subnet dissolution with open positions, and TAO offers.
+The suites cover deployment through the deploy script, listings and their vaults, escrows, vault and escrow upgrades through the registry, a subnet dissolution with open positions, payouts under Subtensor's recipient policies, and TAO offers.
 
 Each run deploys fresh contracts. To reuse deployments across runs, set `OTC_TEST_REUSE_DEPLOYMENTS=1`; the cached addresses are stored in these files, which Git ignores:
 
@@ -103,6 +103,7 @@ npm run test:localnet:flaky
 - `--reuse-deployments` (or `OTC_TEST_REUSE_DEPLOYMENTS=1`) keeps the deployment cache.
 - `npm run test:localnet:combined -- ...` runs all files against one node. Use it only to diagnose coupling between suites: subnets registered later on a long-lived localnet can have different economics.
 - Test runs use the node binary that is already built. Build or rebuild it with `npm run test:localnet -- --build-only`, or set `BUILD_BINARY=1` to rebuild before every restart.
+- The devnet descriptors in `.papi` come from the fork at spec 482, and some suites use calls older nodes lack, so build the node from a fork at that spec or later. After updating the fork, rebuild the node, start it, and run `npm run generate-api-types` against it to regenerate the descriptors.
 
 ## Deployment
 
@@ -347,6 +348,28 @@ When a subnet is dissolved, Subtensor sells every position on it in the blocks t
 - A new subnet can reuse the netuid, and new listings on it trade as usual. Listings the seller hasn't cancelled stay in the factory's index under that netuid and count toward their 25-listing cap there until they cancel them.
 
 The owner can `set_subnet_frozen` a subnet at risk, to stop new listings on it beforehand.
+
+### Recipient Policies And Coldkey Swaps
+
+Subtensor lets an account refuse some incoming stake. The contracts pay out with stake transfers, so these choices apply to their payouts too. None of them loses funds; a payout waits until the recipient accepts it.
+
+- **Locked Alpha.** A transfer that carries locked Alpha fails unless the recipient called `set_reject_locked_alpha(false)`. Vaults never do, so a seller can't fund a listing with locked Alpha.
+- **New staking hotkeys.** A transfer to an account that doesn't yet stake on the hotkey fails if the account called `set_reject_staking_hotkey_growth(true)`, or already stakes on 128 hotkeys. Vaults and escrows hold stake on the factory's validator hotkey, so this applies to:
+  - a spot take's recipient: the take fails and the buyer keeps their TAO;
+  - an escrow's beneficiary: `claim` fails until they accept it;
+  - a seller who cancels: the listing still closes, and the stake waits in the vault until they accept it, when anyone can `sweep_stake` it to them and they can `close` the vault;
+  - a TAO offer's buyer: fills fail.
+
+  Frontends can read the recipient's `AccountFlags` and staking hotkeys and warn before a take or fill.
+- **Coldkey-swap destinations.** `announce_coldkey_swap_v2` reserves the swap's destination until the announcement lapses, and while it's reserved, nobody else can transfer stake into it. Anyone can name any account, including a vault's predicted address, which blocks funding that vault.
+  - The listing batch reverts and leaves the seller's nonce unused, so retrying predicts the same address.
+  - Instead, the seller creates the vault in its own transaction (creation isn't blocked), then cancels and closes it. Their next listing goes to a new address.
+  - A user reserved this way can free their own account with `release_own_coldkey_swap_destination_reservation`. Contracts can't.
+- **Swapping your own coldkey.** While an account has a swap announced, Subtensor only lets it make swap calls. A disputed swap blocks every call, and a key that root reset but kept locked can still only make swap calls. So the account can't cancel a listing or an offer until the swap completes.
+  - Vaults and TAO offers stay bound to the old coldkey, and so do their payouts.
+  - Escrows can follow the user to the new coldkey through the beneficiary handoff, which the old key proposes. That's easiest before announcing the swap: once the swap executes, the old key holds no TAO, so it can't pay fees until someone sends it some.
+
+  So cancel listings and offers, and hand over escrows, before swapping.
 
 ## Alpha Lockup Interface
 

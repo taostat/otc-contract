@@ -282,6 +282,38 @@ All of `main`'s pooled code goes: `reserved_alpha`, and take, cancel and escrow 
 - `registerSubnet` in the tests reads the netuid from `NetworkAdded`, since Subtensor reuses the lowest free netuid.
 - `docs/backend-subnet-risk-runbook.md` doesn't exist on the integration branch, so nothing is deleted. The README's subnet dissolution section replaces it.
 
+## Follow-up: Subtensor upstream to spec 482
+
+The fork moved from `c004cebf3` (spec 471) to `25b3866e1` (spec 482): 194 commits. Reviewed for anything the contracts depend on. The full localnet suite passes on a node built from it: 38 tests across 8 files, with the devnet descriptors still generated from spec 471.
+
+**Unchanged for the contracts**
+
+- Chain-extension functions 0, 5, 6 and 15 keep their ids and encodings. Stake exits now charge the `StakingHotkeys` walk for the caller's own list rather than the 256-entry worst case, so contract calls that move stake cost less gas.
+- The proxied fill's runtime call still encodes correctly: `SubtensorModule` (7), `Proxy` (16), `transfer_stake` (86), and `ProxyType::Transfer` (10). The new proxy types `Validate` and `Weights` are appended at 19 and 20, and `Transfer` still allows `transfer_stake`. The dispatch-side walk bound is unchanged, so the fill's gas note stands.
+- No change to staking rate limits, transfer minimums or the dissolution settlement.
+- The new `StakeMoveCooldownUntil` only gates the next owner-driven hotkey swap; delegator withdrawals ignore it.
+- New pallet errors reach the contracts as the chain extension's generic `RuntimeError`, which they already treat as a refused transfer.
+
+**Changes that reach the contracts**
+
+1. **Recipient opt-out, `set_reject_staking_hotkey_growth`.** A third-party `transfer_stake` now fails when the recipient doesn't already stake on the hotkey and has either set this flag or holds 128 hotkeys (the cap is not new). Contracts receive stake only into fresh coldkeys, at funding and escrow creation, so their own receipts are unaffected. Payouts to users are affected: a spot take's recipient, an escrow claim's beneficiary, a cancel or sweep to the seller, and an offer fill's buyer. None of this loses funds. A take or fill reverts, a cancel still closes the listing and leaves the stake to sweep, and a claim waits. The user clears it by unsetting the flag.
+2. **Coldkey-swap destination reservations.** Anyone can announce a V2 swap naming any account as its destination, paying the announcement fee. Until the announcement expires, every cross-coldkey stake transfer into that account fails with `ColdkeySwapDestinationReserved`. The reserved account can release the reservation itself, but contracts can't.
+   - A known or predicted vault address can be reserved to block its funding. The seller relists under a new nonce, and the Pending vault can be cancelled and closed. Each announcer can hold one reservation, so this costs one fee per blocked listing.
+   - Escrow addresses depend on the take's block, so reserving one ahead of time is impractical.
+   - Users who are reserved as payout recipients release the reservation themselves.
+3. **Swaps executed into a contract.** No delegation authority moves: proxy grants stay with the old coldkey. Locks move only to a destination that accepts locked Alpha, and a vault or escrow holding stake keeps its default refusal. Everything else is a donation: stake on the contract's own position can be swept to its owner, and positions elsewhere are stranded at the sender's cost. One edge case: a drained, unclosed vault or escrow whose staking list has been cleared counts as unused. It then gets the temporary accept-locked-Alpha override and could receive locked Alpha. Sweeps and `close` to an owner who refuses locked Alpha would then fail until the owner accepts it. The owner's own funds are never at risk.
+4. **Users who swap coldkeys.** While a swap is announced, the account can only make swap calls, and nothing at all if the swap is disputed. A root reset can now keep it locked that way. So a seller can't cancel and a buyer can't cancel an offer until the swap completes. Escrows follow the user through the two-step beneficiary handoff. Vaults and TAO offers stay bound to the old key, so sellers and buyers should cancel before swapping.
+5. **Hotkey swaps.** A third-party stake now follows the new hotkey only if its coldkey could accept a new hotkey, and otherwise stays on the old one. Contracts always can, so `resync_hotkey` works as before.
+
+**As built (PR 7)**
+
+- The devnet descriptors are regenerated from the spec 482 node. With them, the full localnet suite passes on that node: 40 tests across 9 files.
+- `recipient-policies.test.ts` covers both behaviours on spec 482:
+  - a buyer, beneficiary and seller with the growth opt-out: a spot take and a claim fail, a cancel closes the listing with the stake held back, and everything pays out once they clear the flag;
+  - a vault address reserved as a coldkey-swap destination: the listing batch reverts with `ColdkeySwapDestinationReserved`. The seller uses up the nonce by creating, cancelling and closing that vault, and lists at the next address.
+- The README's "Recipient policies and coldkey swaps" section covers the opt-outs, reserved destinations, and cancelling before a coldkey swap.
+- Open question: whether vaults and TAO offers should gain a seller or buyer handoff like the escrow's beneficiary change. Until then, sellers and buyers cancel before a coldkey swap.
+
 ## Risks
 
 | Risk | Mitigation |
