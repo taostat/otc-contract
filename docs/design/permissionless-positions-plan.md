@@ -319,12 +319,32 @@ The fork moved from `c004cebf3` (spec 471) to `25b3866e1` (spec 482): 194 commit
 - **It wouldn't protect a compromised key.** Whoever holds the old key can call a handoff as easily as the owner.
 - **It isn't cheap.** The factory indexes listings by seller and caps them per seller, so changing a vault's seller means re-keying that index through a new `VaultFactory` call, plus a vault upgrade that migrates storage. `otc` keys offers by buyer the same way.
 
+## PR 8: Costs and storage compatibility
+
+Two items the risks table and the design promised, which the earlier PRs left out.
+
+**As built**
+
+- **Costs.** `costs.test.ts` measures each step of a listing's life on localnet (spec 482): weight, fee and storage deposits. The README's "Costs" section has the table.
+  - Opening a listing costs about 11.5e9 `ref_time` and a 0.003 TAO fee, and holds a 0.00026 TAO deposit for the vault.
+  - A lockup take adds a 0.00016 TAO escrow deposit.
+  - Every other step is cheaper.
+
+  The suite fails if a vault's or escrow's deposit isn't fully refunded on close, or if any step needs more than 25e9 `ref_time`, about twice the heaviest step measured. Per-listing contracts cost little: the deposits are refunded, and the gas is a fraction of a block.
+- **Storage compatibility.** `otc-shared`'s `storage_layout` module canonicalises a contract's storage layout from the same ink! metadata the build writes: every cell by key, its packed fields in order, and their types expanded. It then checks that new code can decode storage written under a committed snapshot.
+  - Cells may be added, but not moved or removed. A `Mapping` with an automatic key moves if its field is renamed.
+  - Packed fields keep their number, order and encoding, and can't swap places.
+  - Enums may only gain variants.
+  - Mapping key types can't change.
+
+  Each upgradeable contract (`listing_vault`, `alpha_lockup`, `lockup_listings`, `otc`) commits `storage-layout.json` and checks it in `cargo test`, so CI runs it on every PR. A compatible change fails until the snapshot is updated (`UPDATE_STORAGE_LAYOUT=1`), and the update refuses incompatible changes. The test-only v2 builds of the vault and the escrow check that they decode the released snapshots.
+
 ## Risks
 
 | Risk | Mitigation |
 |---|---|
 | Cross-contract logic has no off-chain test coverage | Seams for unit tests; every real cross-contract path has a localnet test |
-| Cost of a vault per listing | Measure the storage deposit and weights in PR 4 and report them in the PR |
+| Cost of a vault per listing | Measured in PR 8: about 0.003 TAO in fees to open a listing, and a 0.00026 TAO deposit that closing the vault refunds; the README has the full table |
 | Frontend single-batch funding depends on predicting the vault address | Two-transaction flow first; address prediction added in PR 6, and every listing test now opens its listing in one batch |
 | Subtensor changes during implementation | Every chain call stays in `otc-shared`; the localnet suite runs against the fork's `main` |
 | A proxied `transfer_stake` pre-charges a full 256-entry `StakingHotkeys` walk (about 90e9 ref_time) before refunding, so contract calls that make it need a large gas limit | Vault funding is proxy-free. `take_tao_offer` keeps the proxy, and a dry run made before the proxy exists can't measure it, so frontends set a limit that covers the pre-charge (the tests use 250e9 ref_time); unused gas is refunded |

@@ -58,6 +58,23 @@ cargo contract build --release --manifest-path contracts/lockup_listings/Cargo.t
 
 Contract artifacts are written under `target/ink/<contract_name>/`. `npm run build:contracts` in `integration-tests` builds all of them, plus the test-only builds described below.
 
+### Storage Compatibility
+
+An upgrade swaps a position's code but keeps its storage, so new code must decode everything older code wrote. Each upgradeable contract (`listing_vault`, `alpha_lockup`, `lockup_listings` and `otc`) commits a snapshot of its storage layout as `storage-layout.json`, and a unit test in `cargo test` compares the code's layout with it. The test refuses any change that old storage wouldn't decode under:
+
+- a storage cell that moved or disappeared, including a `Mapping` or `Lazy` field with an automatic key that was renamed;
+- a packed field that was added, removed or retyped, or that swapped places with another;
+- an enum variant that was removed, retyped or moved (new variants are fine);
+- a changed mapping key type.
+
+A compatible change, such as a new `Lazy` field under its own key, still fails until the snapshot is updated, so every layout change shows up in review:
+
+```bash
+UPDATE_STORAGE_LAYOUT=1 cargo test -p listing-vault
+```
+
+The update refuses incompatible changes. Only a contract with no deployed instances can start over, by deleting its snapshot. `otc-shared`'s `storage_layout` module documents the rules.
+
 The workspace keeps `Cargo.lock` tracked on purpose. These are deployable smart contracts, so reproducible dependency resolution is more important than treating the workspace like a reusable library crate.
 
 ## Integration Tests
@@ -216,6 +233,30 @@ Execution price is calculated at execution time:
 ```text
 executed_price = market_price * (10000 + price_offset_bps) / 10000
 ```
+
+## Costs
+
+What each step of a listing's life costs, measured on localnet against Subtensor spec 482 at its minimum fee multiplier. Mainnet weights and storage deposits follow the same runtime rules; fees there also depend on the network's fee multiplier.
+
+| Step | Signer | ref_time | proof_size | Fee (TAO) | Deposit held (TAO) | Deposit released (TAO) |
+|---|---|---:|---:|---:|---:|---:|
+| Open a lockup listing (create, fund, activate) | seller | 11,510,819,955 | 351,023 | 0.00288 | 0.000264 | – |
+| Take from a lockup listing (creates an escrow) | buyer | 6,926,473,184 | 222,446 | 0.00173 | 0.000159 | – |
+| Take the rest (creates an escrow, closes the listing) | buyer | 9,194,456,560 | 340,846 | 0.00230 | 0.000159 | 0.000003 |
+| Close the vault | seller | 4,415,865,343 | 62,609 | 0.00110 | – | 0.000261 |
+| Claim an escrow | anyone | 4,421,527,671 | 63,016 | 0.00111 | – | – |
+| Close an escrow | beneficiary | 1,497,348,169 | 40,637 | 0.00037 | – | 0.000159 |
+| Open a spot listing (create, fund, activate) | seller | 11,859,012,874 | 351,031 | 0.00296 | 0.000264 | – |
+| Take from a spot listing | buyer | 5,555,423,122 | 152,351 | 0.00139 | – | – |
+| Cancel a listing | seller | 6,238,672,310 | 181,784 | 0.00156 | – | 0.000003 |
+| Close the vault after a cancel | seller | 1,559,425,631 | 51,807 | 0.00039 | – | 0.000261 |
+
+- The seller pays the vault's storage deposit when opening a listing, and gets it back when closing the vault.
+- A lockup take's buyer pays the escrow's deposit, which goes to the beneficiary when they close the escrow.
+- The small deposits released on the final take and on a cancel are the factory's index entry.
+- Every step uses less than a twentieth of the 250e9 `ref_time` the tests allow a call. The proxied TAO-offer fill is the exception: it needs that limit up front (see [TAO Offers Interface](#tao-offers-interface)).
+
+`npm run test:localnet -- src/lockup-listings/costs.test.ts` prints this table again. It fails if a vault's or escrow's deposit isn't fully refunded, or if a step needs more than 25e9 `ref_time`, about twice the heaviest step above.
 
 ## TAO Offers Interface
 
