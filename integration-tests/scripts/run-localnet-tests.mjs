@@ -30,6 +30,7 @@ const DEFAULT_TEST_FILES = [
   "src/lockup-listings/escrow.test.ts",
   "src/lockup-listings/factory.test.ts",
   "src/lockup-listings/listing.test.ts",
+  "src/lockup-listings/vault-upgrade.test.ts",
   "src/tests/deploy.test.ts",
   "src/tests/offers.test.ts",
   "src/tests/otc.test.ts",
