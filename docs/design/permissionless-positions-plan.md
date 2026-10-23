@@ -312,7 +312,12 @@ The fork moved from `c004cebf3` (spec 471) to `25b3866e1` (spec 482): 194 commit
   - a buyer, beneficiary and seller with the growth opt-out: a spot take and a claim fail, a cancel closes the listing with the stake held back, and everything pays out once they clear the flag;
   - a vault address reserved as a coldkey-swap destination: the listing batch reverts with `ColdkeySwapDestinationReserved`. The seller uses up the nonce by creating, cancelling and closing that vault, and lists at the next address.
 - The README's "Recipient policies and coldkey swaps" section covers the opt-outs, reserved destinations, and cancelling before a coldkey swap.
-- Open question: whether vaults and TAO offers should gain a seller or buyer handoff like the escrow's beneficiary change. Until then, sellers and buyers cancel before a coldkey swap.
+
+**Decision: no seller or buyer handoff for vaults and TAO offers.** Escrows keep their beneficiary handoff; vaults and offers stay bound to the account that opened them.
+
+- **Nothing gets stuck without it.** A lockup listing or an offer can be cancelled at any time, and a spot listing once it has been open for `min_listing_age`, which is capped at about a week. A user who swaps coldkeys cancels first, or cancels afterwards from the old key once it has TAO for fees, and opens the position again from the new key. Escrows are different: their Alpha stays locked for the whole lockup, which can be months, so they need the handoff.
+- **It wouldn't protect a compromised key.** Whoever holds the old key can call a handoff as easily as the owner.
+- **It isn't cheap.** The factory indexes listings by seller and caps them per seller, so changing a vault's seller means re-keying that index through a new `VaultFactory` call, plus a vault upgrade that migrates storage. `otc` keys offers by buyer the same way.
 
 ## Risks
 
