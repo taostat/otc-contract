@@ -26,3 +26,7 @@ std = [
     "code-registry/std",
 ]
 ink-as-dependency = []
+# Test builds only: a second vault code with a newer storage version and an
+# added storage field, so integration tests can upgrade vaults across a layout
+# change.
+upgrade-test = []

@@ -13,7 +13,7 @@
         "test:watch": "vitest watch",
         "build:contracts": "bash scripts/build-contracts.sh",
         "generate-api-types": "papi add devnet -w ws://localhost:9944",
-        "generate-contract-types": "papi ink add ../target/ink/otc_contract/otc_contract.contract --key otc_contract && papi ink add ../target/ink/alpha_lockup/alpha_lockup.contract --key alpha_lockup && papi ink add ../target/ink/listing_vault/listing_vault.contract --key listing_vault && papi ink add ../target/ink/lockup_listings/lockup_listings.contract --key lockup_listings && papi ink add ../target/ink/code_registry/code_registry.contract --key code_registry",
+        "generate-contract-types": "papi ink add ../target/ink/otc_contract/otc_contract.contract --key otc_contract && papi ink add ../target/ink/alpha_lockup/alpha_lockup.contract --key alpha_lockup && papi ink add ../target/ink/listing_vault/listing_vault.contract --key listing_vault && papi ink add ../target/ink/lockup_listings/lockup_listings.contract --key lockup_listings && papi ink add ../target/ink/code_registry/code_registry.contract --key code_registry && papi ink add ../target/upgrade-test/ink/listing_vault/listing_vault.contract --key listing_vault_v2",
         "postinstall": "papi && patch-package"
     },
     "dependencies": {
