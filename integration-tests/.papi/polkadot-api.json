@@ -14,6 +14,7 @@
     "alpha_lockup": ".papi/contracts/alpha_lockup.json",
     "lockup_listings": ".papi/contracts/lockup_listings.json",
     "code_registry": ".papi/contracts/code_registry.json",
-    "listing_vault": ".papi/contracts/listing_vault.json"
+    "listing_vault": ".papi/contracts/listing_vault.json",
+    "listing_vault_v2": ".papi/contracts/listing_vault_v2.json"
   }
 }

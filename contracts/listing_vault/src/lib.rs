@@ -26,7 +26,15 @@ mod listing_vault {
     };
 
     /// Storage layout version this code expects; see `ensure_migrated`.
+    #[cfg(not(feature = "upgrade-test"))]
     pub const STORAGE_VERSION: u16 = 1;
+    #[cfg(feature = "upgrade-test")]
+    pub const STORAGE_VERSION: u16 = 2;
+
+    /// Storage key of the field the test-only version 2 adds. Defined in every
+    /// build, because ink!'s storage macro names field types without their `cfg`.
+    #[allow(dead_code)]
+    type MigratedAtKey = ink::storage::traits::ManualKey<0x7631_6d32>;
 
     /// Gas a best-effort factory notification may use, in both dimensions, so a
     /// broken or hostile factory cannot make a cancel or the final take run out of
@@ -257,6 +265,10 @@ mod listing_vault {
         upgrade_policy: UpgradePolicy,
         /// Storage layout version, see `STORAGE_VERSION`
         version: u16,
+        /// Test-only state version 2 adds, in its own storage cell as the layout
+        /// rule requires: the block at which the vault migrated to version 2
+        #[cfg(feature = "upgrade-test")]
+        migrated_at: ink::storage::Lazy<BlockNumber, MigratedAtKey>,
     }
 
     impl ListingVault {
@@ -300,6 +312,8 @@ mod listing_vault {
                 next_purchase_id: 1,
                 upgrade_policy: UpgradePolicy::default(),
                 version: STORAGE_VERSION,
+                #[cfg(feature = "upgrade-test")]
+                migrated_at: Default::default(),
             }
         }
 
@@ -789,6 +803,13 @@ mod listing_vault {
             self.version
         }
 
+        /// Test-only: the block at which the vault migrated to version 2
+        #[cfg(feature = "upgrade-test")]
+        #[ink(message)]
+        pub fn get_migrated_at(&self) -> Option<BlockNumber> {
+            self.migrated_at.get()
+        }
+
         fn own_stake(&self, hotkey: AccountId) -> Result<AlphaAmount, Error> {
             stake_of(hotkey, self.env().account_id(), self.netuid)
                 .map_err(|_| Error::StakeQueryFailed)
@@ -861,6 +882,8 @@ mod listing_vault {
         fn ensure_migrated(&mut self) {
             if self.version < STORAGE_VERSION {
                 // Versions newer than 1 initialise their added storage here.
+                #[cfg(feature = "upgrade-test")]
+                self.migrated_at.set(&self.env().block_number());
                 self.version = STORAGE_VERSION;
             }
         }

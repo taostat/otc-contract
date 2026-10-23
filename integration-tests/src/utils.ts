@@ -163,11 +163,15 @@ export async function registerSubnet(
     const tx = api.tx.SubtensorModule.register_network({
         hotkey: hotkey
     });
-    await tx.signAndSubmit(signer);
+    const result = await tx.signAndSubmit(signer);
 
-    // Get the new total networks to determine the netuid
-    const afterNetworks = await api.query.SubtensorModule.TotalNetworks.getValue() || 0;
-    const netuid = afterNetworks - 1; // Latest network has netuid = total - 1
+    // Subtensor reuses the lowest free netuid, so read it from the event.
+    const added = result.events.find((event) =>
+        event.type === "SubtensorModule" && event.value.type === "NetworkAdded");
+    if (!result.ok || !added) {
+        throw new Error(`register_network failed: ${JSON.stringify(result.dispatchError)}`);
+    }
+    const netuid = (added.value.value as [number, number])[0];
 
     console.log(`Registered subnet with netuid: ${netuid}`);
 

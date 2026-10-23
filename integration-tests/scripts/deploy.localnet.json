@@ -1,0 +1,17 @@
+{
+    "artifactsDir": "target/ink",
+    "registryArtifactsDir": "target/upgrade-test/ink",
+    "owner": "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+    "guardian": "5HGjWAeFDfFCWPsjFQdVV2Msvz2XtMktvgocEZcCj68kUMaw",
+    "upgradeDelay": 10,
+    "forceDelay": 20,
+    "feeRate": "92233720368547758",
+    "feeRecipient": "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+    "defaultHotkey": "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+    "minListingAmount": "1000000000",
+    "minPurchaseAmount": "100000000",
+    "minLockupDuration": 10,
+    "maxLockupDuration": 1000000,
+    "minListingAge": 30,
+    "minOfferAmount": "1000000000"
+}

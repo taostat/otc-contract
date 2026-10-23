@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Approved, in progress |
+| Status | Approved; all six PRs built |
 | Date | 2026-09-28 |
 | Design | [permissionless-positions.md](permissionless-positions.md) |
 | Integration branch | `feat/permissionless-positions` (from `main`) |
@@ -261,12 +261,33 @@ All of `main`'s pooled code goes: `reserved_alpha`, and take, cancel and escrow 
 - A README rewrite covering the frontend batching for vault funding and TAO-offer fills.
 - Delete `docs/backend-subnet-risk-runbook.md`.
 
+**As built**
+
+- **Deregistration** (`deregistration.test.ts`):
+  - setup: an open lockup listing with a purchase in an expired escrow, plus an open spot listing;
+  - Sudo's `root_dissolve_network` stops takes at once;
+  - once Subtensor's cleanup has left the queue, `sweep_tao` pays each vault's liquidation TAO to the seller and the escrow's to its beneficiary;
+  - `claim` fails with `NoAlphaToClaim`, the beneficiary closes the escrow, and the seller cancels and closes both vaults, which leaves the index empty;
+  - a new subnet then reuses the netuid, and a listing on it trades as usual.
+- **Dust during cleanup.** On localnet, a small subnet's cleanup finishes within a block or two of the dissolution, so the suite can't land a transfer mid-cleanup. A first attempt swept the liquidation together with the dust. What keeps late TAO safe is that sweeps never terminate a contract and only the owner can close one. The listing suite already covers a sweep that leaves the vault open.
+- **Upgrade drill** (`vault-upgrade.test.ts`):
+  - the guardian vetoes a vault code proposal, and the owner later proposes the same code again;
+  - new listings get the new code at their predicted address;
+  - the seller upgrades at once, and storage migrates on the next state change, a take;
+  - a third party forces the upgrade after `force_delay`, and `ConsentOnly` refuses that while the seller can still upgrade.
+
+  The test-only vault v2 (`--features upgrade-test`) adds a `Lazy` field under a fixed key, which its migration sets, and a getter for it. The field's key type is declared in every build, because ink!'s storage macro names field types without their `cfg`. The release metadata is unchanged.
+- **Deployment script.** `integration-tests/src/deploy.ts` has `deployAll` and `verifyDeployment`, and `scripts/deploy.ts` is its CLI: a JSON config, the deployer secret in `DEPLOYER_SURI`, and the deployment printed as JSON. Every constructor is dry-run before anything is uploaded, so a rejected config changes nothing on chain. Verification checks the registry's codes, and that both contracts answer to it and run its code. The test setup deploys through the same code. `deploy.test.ts` runs the CLI against localnet with `scripts/deploy.localnet.json`, and checks that a rejected config leaves the chain untouched.
+- **Address prediction.** `integration-tests/src/vault-address.ts` predicts the factory's next vault for a seller. The test helpers open every listing with one `batch_all([create_listing, transfer_stake, activate])`, and a test shows that a stale prediction reverts the whole batch.
+- `registerSubnet` in the tests reads the netuid from `NetworkAdded`, since Subtensor reuses the lowest free netuid.
+- `docs/backend-subnet-risk-runbook.md` doesn't exist on the integration branch, so nothing is deleted. The README's subnet dissolution section replaces it.
+
 ## Risks
 
 | Risk | Mitigation |
 |---|---|
 | Cross-contract logic has no off-chain test coverage | Seams for unit tests; every real cross-contract path has a localnet test |
 | Cost of a vault per listing | Measure the storage deposit and weights in PR 4 and report them in the PR |
-| Frontend single-batch funding depends on predicting the vault address | Two-transaction flow first; address prediction added and tested in PR 6 |
+| Frontend single-batch funding depends on predicting the vault address | Two-transaction flow first; address prediction added in PR 6, and every listing test now opens its listing in one batch |
 | Subtensor changes during implementation | Every chain call stays in `otc-shared`; the localnet suite runs against the fork's `main` |
-| A proxied `transfer_stake` pre-charges a full 256-entry `StakingHotkeys` walk (about 90e9 ref_time) before refunding, so contract calls that make it need a large gas limit | Vault funding is proxy-free. `take_tao_offer` keeps the proxy, so frontends must use the dry-run gas estimate rather than a fixed limit |
+| A proxied `transfer_stake` pre-charges a full 256-entry `StakingHotkeys` walk (about 90e9 ref_time) before refunding, so contract calls that make it need a large gas limit | Vault funding is proxy-free. `take_tao_offer` keeps the proxy, and a dry run made before the proxy exists can't measure it, so frontends set a limit that covers the pre-charge (the tests use 250e9 ref_time); unused gas is refunded |

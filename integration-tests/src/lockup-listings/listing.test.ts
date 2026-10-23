@@ -26,6 +26,7 @@ import {
     expectContractError,
     expectEvent,
     fundingBatch,
+    listingBatch,
     queryOk,
     quoteVault,
     setupLockupSubnet,
@@ -125,7 +126,17 @@ describe("Lockup listings v2 - vaults", () => {
         }), FACTORY_LISTING_STILL_OPEN, "prune an open listing");
     }, 300000);
 
-    it("reverts the whole funding batch when activation fails", async () => {
+    it("funds a vault in a second transaction, and reverts batches that would misfund one", async () => {
+        // A batch for bob's next spot listing goes stale once another listing
+        // takes his nonce: the vault would land elsewhere, so activating the
+        // predicted address fails and undoes the stake transfer.
+        const stale = await listingBatch(context, bob, {
+            hotkey: sellerHotkey.address,
+            netuid,
+            amount: LISTING_AMOUNT,
+            price_offset_bps: MARKET_PRICE,
+        });
+
         const created = await submitOk(factory.send("create_listing", withIntegrationGas({
             origin: bob.address,
             data: {
@@ -140,9 +151,25 @@ describe("Lockup listings v2 - vaults", () => {
         const vaultAddress = expectEvent(factory, created, "ListingCreated").value.vault as string;
         const vault = context.vaultSdk.getContract(vaultAddress);
         const bobStakeBefore = await stakeOn(sellerHotkey.address, bob.address);
+        const nonce = queryOk<bigint>(await factory.query("get_seller_nonce", {
+            origin: bob.address,
+            data: { seller: bob.address },
+        }), "get_seller_nonce");
+
+        const staleResult = await submitReverted(stale.batch, bob.signer, "stale listing batch");
+        expect(staleResult.dispatchError).toMatchObject({
+            type: "Module",
+            value: { type: "Contracts", value: { type: "ContractNotFound" } },
+        });
+        expect(await stakeOn(sellerHotkey.address, bob.address)).toBeGreaterThanOrEqual(bobStakeBefore);
+        expect(await TestSetup.getInstance().contractExistsOnChain(context.api, stale.vaultAddress)).toBe(false);
+        expect(queryOk<bigint>(await factory.query("get_seller_nonce", {
+            origin: bob.address,
+            data: { seller: bob.address },
+        }), "get_seller_nonce")).toBe(nonce);
 
         // Funding half the listed amount fails activation, which undoes the transfer.
-        await submitReverted(await fundingBatch(context, bob, vaultAddress, {
+        await submitReverted(fundingBatch(context, vaultAddress, {
             hotkey: sellerHotkey.address,
             netuid,
             amount: LISTING_AMOUNT / 2n,
@@ -151,11 +178,22 @@ describe("Lockup listings v2 - vaults", () => {
         expect(await stakeOn(sellerHotkey.address, bob.address)).toBeGreaterThanOrEqual(bobStakeBefore);
         expect((await vaultInfo(vault)).status.type).toBe("Pending");
 
-        // The seller cancels the unfunded vault and closes it.
+        // Funding the whole amount opens it, as a frontend's second transaction would.
+        const funded = await submitOk(fundingBatch(context, vaultAddress, {
+            hotkey: sellerHotkey.address,
+            netuid,
+            amount: LISTING_AMOUNT,
+        }), bob.signer, "funding batch");
+        const listed = BigInt(expectEvent(vault, funded, "Activated").value.amount);
+        expect(LISTING_AMOUNT - listed).toBeLessThanOrEqual(TRANSFER_TOLERANCE);
+        expect((await vaultInfo(vault)).status.type).toBe("Open");
+
+        // The seller cancels, getting the stake back, and closes the vault.
         const cancelled = await submitOk(vault.send("cancel", withIntegrationGas({
             origin: bob.address,
             data: {},
         })), bob.signer, "cancel");
+        expect(BigInt(expectEvent(vault, cancelled, "Cancelled").value.returned)).toBeGreaterThanOrEqual(listed);
         expectEvent(factory, cancelled, "ListingClosed");
         await submitOk(vault.send("close", withIntegrationGas({ origin: bob.address, data: {} })), bob.signer, "close");
         expect(await TestSetup.getInstance().contractExistsOnChain(context.api, vaultAddress)).toBe(false);
@@ -442,7 +480,7 @@ describe("Lockup listings v2 - vaults", () => {
         })), eve.signer, "create_listing");
         const vaultAddress = expectEvent(factory, created, "ListingCreated").value.vault as string;
 
-        const result = await submitReverted(await fundingBatch(context, eve, vaultAddress, {
+        const result = await submitReverted(fundingBatch(context, vaultAddress, {
             hotkey: sellerHotkey.address,
             netuid,
             amount: eveStake,

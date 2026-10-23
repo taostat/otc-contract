@@ -12,6 +12,7 @@ import {
     BITTENSOR_MIN_STAKE,
     type Wallet,
 } from "./utils";
+import { activateCall, predictVaultAddress, type ListingTerms } from "./vault-address";
 
 // Proxied `transfer_stake` pre-charges its worst-case weight (a full 256-entry
 // `StakingHotkeys` walk, roughly 90e9 ref_time) before refunding, so contract calls
@@ -104,22 +105,6 @@ export function expectEvent<T extends string>(contract: any, txResult: any, even
     return event;
 }
 
-export interface LockupListingTerms {
-    hotkey: string;
-    netuid: number;
-    amount: bigint;
-    price_offset_bps: number;
-    /** Leave out for a spot listing */
-    lockup_duration?: number;
-    /** TAO per Alpha scaled by 1e9; 0 for no floor */
-    min_price?: bigint;
-}
-
-/**
- * Create a lockup listing and fund it without a proxy: one batch transfers the
- * seller's stake to the new vault and activates it. Returns the vault and the
- * stake it listed, which can be a rao or two below `amount`.
- */
 export interface CreatedListing {
     event: any;
     listingId: bigint;
@@ -129,28 +114,25 @@ export interface CreatedListing {
     listedAmount: bigint;
 }
 
+/**
+ * Open a listing in one transaction and without a proxy, as a frontend would:
+ * the seller's batch creates the vault, transfers their stake to its predicted
+ * address and activates it. Returns the vault and the stake it listed, which
+ * can be a rao or two below `amount`.
+ */
 export async function createLockupListing(
     context: LockupListingsContext,
     seller: TestAccount,
-    terms: LockupListingTerms,
+    terms: ListingTerms,
 ): Promise<CreatedListing> {
     const factory = context.contractSdk.getContract(context.contractAddress!);
-    const created = await submitOk(factory.send("create_listing", withIntegrationGas({
-        origin: seller.address,
-        data: {
-            netuid: terms.netuid,
-            hotkey: terms.hotkey,
-            amount: terms.amount,
-            price_offset_bps: terms.price_offset_bps,
-            min_price: terms.min_price ?? 0n,
-            lockup_duration: terms.lockup_duration,
-        },
-    })), seller.signer, "create_listing");
-    const event = expectEvent(factory, created, "ListingCreated");
-    const vaultAddress = event.value.vault as string;
-    const vault = context.vaultSdk.getContract(vaultAddress);
+    const { vaultAddress, batch } = await listingBatch(context, seller, terms);
+    const result = await submitOk(batch, seller.signer, "create and fund listing");
+    const event = expectEvent(factory, result, "ListingCreated");
+    expect(event.value.vault).toBe(vaultAddress);
 
-    const activated = await fundAndActivate(context, seller, vaultAddress, terms);
+    const vault = context.vaultSdk.getContract(vaultAddress);
+    const activated = expectEvent(vault, result, "Activated");
     return {
         event,
         listingId: BigInt(event.value.listing_id),
@@ -160,22 +142,40 @@ export async function createLockupListing(
     };
 }
 
-/** Transfer `amount` to a Pending vault and activate it, in one batch. */
-export async function fundAndActivate(
+/**
+ * The `batch_all([create_listing, transfer_stake, activate])` that opens a
+ * listing, funding the vault at the address the factory will give it.
+ */
+export async function listingBatch(context: LockupListingsContext, seller: TestAccount, terms: ListingTerms) {
+    const vaultAddress = await predictVaultAddress(context.api, context.contractAddress!, seller.address, terms);
+    const create = context.contractSdk.getContract(context.contractAddress!).send("create_listing", withIntegrationGas({
+        origin: seller.address,
+        data: {
+            netuid: terms.netuid,
+            hotkey: terms.hotkey,
+            amount: terms.amount,
+            price_offset_bps: terms.price_offset_bps,
+            min_price: terms.min_price ?? 0n,
+            lockup_duration: terms.lockup_duration,
+        },
+    }));
+    const batch = context.api.tx.Utility.batch_all({
+        calls: [await create.decodedCall, ...fundingCalls(context, vaultAddress, terms)],
+    });
+    return { vaultAddress, batch };
+}
+
+/** The `batch_all([transfer_stake, activate])` a seller signs to fund a Pending vault. */
+export function fundingBatch(
     context: LockupListingsContext,
-    seller: TestAccount,
     vaultAddress: string,
     terms: { hotkey: string; netuid: number; amount: bigint },
 ) {
-    const vault = context.vaultSdk.getContract(vaultAddress);
-    const result = await submitOk(await fundingBatch(context, seller, vaultAddress, terms), seller.signer, "fund and activate");
-    return expectEvent(vault, result, "Activated");
+    return context.api.tx.Utility.batch_all({ calls: fundingCalls(context, vaultAddress, terms) });
 }
 
-/** The `batch_all([transfer_stake, activate])` a seller signs to fund a vault. */
-export async function fundingBatch(
+function fundingCalls(
     context: LockupListingsContext,
-    seller: TestAccount,
     vaultAddress: string,
     terms: { hotkey: string; netuid: number; amount: bigint },
 ) {
@@ -186,11 +186,7 @@ export async function fundingBatch(
         destination_netuid: terms.netuid,
         alpha_amount: terms.amount,
     });
-    const activate = context.vaultSdk.getContract(vaultAddress)
-        .send("activate", withIntegrationGas({ origin: seller.address, data: {} }));
-    return context.api.tx.Utility.batch_all({
-        calls: [transfer.decodedCall, await activate.decodedCall],
-    });
+    return [transfer.decodedCall, activateCall(context.api, vaultAddress, withIntegrationGas({})).decodedCall];
 }
 
 /**

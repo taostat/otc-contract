@@ -1,15 +1,21 @@
-import { createClient, type PolkadotClient as Client, type TypedApi, Binary, TxEvent, TxFinalized } from "polkadot-api";
+import { createClient, type PolkadotClient as Client, type TypedApi } from "polkadot-api";
 import { getWsProvider } from "polkadot-api/ws-provider/web";
 import { createInkSdk } from "@polkadot-api/sdk-ink";
 import { devnet, contracts, MultiAddress } from "@polkadot-api/descriptors";
-import { sr25519CreateDerive } from "@polkadot-labs/hdkd";
-import { DEV_PHRASE, entropyToMiniSecret, mnemonicToEntropy, ss58Address } from "@polkadot-labs/hdkd-helpers";
-import { getPolkadotSigner, type PolkadotSigner } from "polkadot-api/signer";
-import { randomBytes } from "crypto";
-import * as fs from "fs/promises";
+import type { PolkadotSigner } from "polkadot-api/signer";
 import * as fsSync from "fs";
 import * as path from "path";
-import { Observable } from "rxjs";
+import { CODE_KINDS } from "./code-kinds";
+import {
+    buildCodeHash,
+    codeExistsOnChain,
+    contractCodeHash,
+    deployAll,
+    deployerFromSuri,
+    uploadCode,
+    type DeployConfig,
+    type Deployment,
+} from "./deploy";
 
 export type ContractSdk = ReturnType<typeof createInkSdk<TypedApi<typeof devnet>, typeof contracts.otc_contract>>;
 export type LockupListingsSdk = ReturnType<typeof createInkSdk<TypedApi<typeof devnet>, typeof contracts.lockup_listings>>;
@@ -18,11 +24,10 @@ export type CodeRegistrySdk = ReturnType<typeof createInkSdk<TypedApi<typeof dev
 export type ListingVaultSdk = ReturnType<typeof createInkSdk<TypedApi<typeof devnet>, typeof contracts.listing_vault>>;
 export type ListingVault = ReturnType<ListingVaultSdk["getContract"]>;
 
-// Code kind ids from otc-shared/src/upgrade.rs
-export const LISTING_VAULT_CODE_KIND = 1;
-export const ESCROW_CODE_KIND = 2;
-export const LOCKUP_FACTORY_CODE_KIND = 3;
-export const OTC_CODE_KIND = 4;
+export const LISTING_VAULT_CODE_KIND = CODE_KINDS.listingVault;
+export const ESCROW_CODE_KIND = CODE_KINDS.escrow;
+export const LOCKUP_FACTORY_CODE_KIND = CODE_KINDS.lockupFactory;
+export const OTC_CODE_KIND = CODE_KINDS.otc;
 // How long spot listings must stay open before the seller can cancel, in blocks:
 // long enough to check a cancel is refused right after funding.
 export const SPOT_LISTING_AGE = 30;
@@ -39,16 +44,11 @@ export interface RegistryBuild {
 }
 
 export const RELEASE_ARTIFACTS = path.join(process.cwd(), "..", "target", "ink");
-// Built by `npm run build:contracts`: an escrow with a newer storage version, so
-// tests have real code to upgrade escrows to, and a code registry built with
-// `short-delays`, so tests can activate and force upgrades within a few blocks.
+// Built by `npm run build:contracts`: an escrow and a vault with a newer storage
+// version, so tests have real code to upgrade positions to, and a code registry
+// built with `short-delays`, so tests can activate and force upgrades within a
+// few blocks.
 export const UPGRADE_TEST_ARTIFACTS = path.join(process.cwd(), "..", "target", "upgrade-test", "ink");
-
-const RELEASE_REGISTRY: RegistryBuild = {
-    artifactsDir: RELEASE_ARTIFACTS,
-    upgradeDelay: REGISTRY_DELAY,
-    forceDelay: REGISTRY_DELAY,
-};
 
 // Contract address persistence files
 const CONTRACT_ADDRESS_FILE = path.join(process.cwd(), ".contract-address");
@@ -59,72 +59,18 @@ const REUSE_DEPLOYMENT_CACHE = process.env.OTC_TEST_REUSE_DEPLOYMENTS === "1";
 // starts well funded rather than failing on balance when prices move.
 const TEST_ACCOUNT_TOP_UP = 1_000_000_000_000_000n; // 1,000,000 TAO
 
-// A random salt lets the same code and constructor arguments deploy again on one chain.
-function randomDeploymentSalt(): any {
-    return Binary.fromBytes(randomBytes(32)) as any;
-}
-
-// Load contract address from file if it exists
-function loadContractAddress(): string | null {
-    if (!REUSE_DEPLOYMENT_CACHE) {
+function loadCachedAddress(file: string): string | null {
+    if (!REUSE_DEPLOYMENT_CACHE || !fsSync.existsSync(file)) {
         return null;
     }
-
-    try {
-        if (fsSync.existsSync(CONTRACT_ADDRESS_FILE)) {
-            const address = fsSync.readFileSync(CONTRACT_ADDRESS_FILE, 'utf-8').trim();
-            console.log(`Loaded contract address from file: ${address}`);
-            return address;
-        }
-    } catch (error) {
-        console.error("Failed to load contract address:", error);
-    }
-    return null;
+    const address = fsSync.readFileSync(file, "utf-8").trim();
+    console.log(`Loaded cached address ${address} from ${path.basename(file)}`);
+    return address;
 }
 
-// Save contract address to file
-function saveContractAddress(address: string): void {
-    if (!REUSE_DEPLOYMENT_CACHE) {
-        return;
-    }
-
-    try {
-        fsSync.writeFileSync(CONTRACT_ADDRESS_FILE, address, 'utf-8');
-        console.log(`Saved contract address to file: ${address}`);
-    } catch (error) {
-        console.error("Failed to save contract address:", error);
-    }
-}
-
-// Load lockup listings address from file
-function loadLockupListingsAddress(): string | null {
-    if (!REUSE_DEPLOYMENT_CACHE) {
-        return null;
-    }
-
-    try {
-        if (fsSync.existsSync(LOCKUP_LISTINGS_ADDRESS_FILE)) {
-            const address = fsSync.readFileSync(LOCKUP_LISTINGS_ADDRESS_FILE, 'utf-8').trim();
-            console.log(`Loaded lockup listings address from file: ${address}`);
-            return address;
-        }
-    } catch (error) {
-        console.error("Failed to load lockup listings address:", error);
-    }
-    return null;
-}
-
-// Save lockup listings address to file
-function saveLockupListingsAddress(address: string): void {
-    if (!REUSE_DEPLOYMENT_CACHE) {
-        return;
-    }
-
-    try {
-        fsSync.writeFileSync(LOCKUP_LISTINGS_ADDRESS_FILE, address, 'utf-8');
-        console.log(`Saved lockup listings address to file: ${address}`);
-    } catch (error) {
-        console.error("Failed to save lockup listings address:", error);
+function saveCachedAddress(file: string, address: string): void {
+    if (REUSE_DEPLOYMENT_CACHE) {
+        fsSync.writeFileSync(file, address, "utf-8");
     }
 }
 
@@ -154,7 +100,7 @@ export interface LockupListingsContext {
         eve: TestAccount;
     };
     vaultSdk: ListingVaultSdk;
-    /** The lockup factory */
+    /** The listing factory */
     contractAddress?: string;
     escrowCodeHash?: string;
     vaultCodeHash: string;
@@ -223,118 +169,15 @@ export class TestSetup {
     }
 
     private createAccount(derivePath: string): TestAccount {
-        const entropy = mnemonicToEntropy(DEV_PHRASE);
-        const miniSecret = entropyToMiniSecret(entropy);
-        const derive = sr25519CreateDerive(miniSecret);
-        const keypair = derive(derivePath);
-
-        const signer = getPolkadotSigner(
-            keypair.publicKey,
-            "Sr25519",
-            keypair.sign
-        );
-
-        const address = ss58Address(keypair.publicKey, 42);
-
-        return {
-            address,
-            signer,
-            derivePath
-        };
+        return { ...deployerFromSuri(derivePath), derivePath };
     }
 
-    /**
-     * Deploy the OTC contract
-     */
-    /**
-     * Deploy otc with a code registry offering its code. Alice owns it and
-     * receives its fees.
-     */
-    async deployContract(
-        api: TypedApi<typeof devnet>,
-        accounts: TestContext['accounts'],
-    ): Promise<{ contractAddress: string; registryAddress: string }> {
-        const contractSdk = createInkSdk(api, contracts.otc_contract);
-        const cachedAddress = loadContractAddress();
-        if (cachedAddress && await this.contractExistsOnChain(api, cachedAddress)) {
-            console.log(`Using existing contract at ${cachedAddress}`);
-            const registry = await contractSdk.getContract(cachedAddress).query("get_registry", {
-                origin: accounts.alice.address,
-                data: {},
-            });
-            if (!registry.success) {
-                throw new Error("Failed to read the cached otc contract's registry");
-            }
-            return { contractAddress: cachedAddress, registryAddress: registry.value.response };
-        }
-
-        const registryAddress = await this.deployCodeRegistry(api, accounts, [
-            [OTC_CODE_KIND, await this.buildCodeHash(RELEASE_ARTIFACTS, "otc_contract")],
-        ]);
-        const wasmPath = path.join(RELEASE_ARTIFACTS, "otc_contract", "otc_contract.wasm");
-        const wasmBytes = Binary.fromBytes(new Uint8Array(await fs.readFile(wasmPath)));
-        const dryRunResult = await contractSdk.getDeployer(wasmBytes).dryRun("new", {
-            origin: accounts.alice.address,
-            data: {
-                owner: accounts.alice.address,
-                registry: registryAddress,
-                fee_rate: FACTORY_FEE_RATE,
-                fee_recipient: accounts.alice.address,
-                min_offer_amount: 1_000_000_000n, // 1 TAO
-            },
-            options: { salt: randomDeploymentSalt() },
-        });
-        if (!dryRunResult.success) {
-            throw new Error(`otc dry run failed: ${JSON.stringify(dryRunResult.value, (_key, value) =>
-                typeof value === "bigint" ? value.toString() : value)}`);
-        }
-
-        await this.trackTx(dryRunResult.value.deploy().signSubmitAndWatch(accounts.alice.signer));
-        console.log(`otc deployed to address ${dryRunResult.value.address}`);
-        saveContractAddress(dryRunResult.value.address);
-        return { contractAddress: dryRunResult.value.address, registryAddress };
+    async contractExistsOnChain(api: TypedApi<typeof devnet>, address: string): Promise<boolean> {
+        return (await contractCodeHash(api, address)) !== undefined;
     }
 
-    async trackTx(obs: Observable<TxEvent>): Promise<TxFinalized> {
-        return new Promise<TxFinalized>((resolve, reject) =>
-            obs.subscribe({
-                next: (evt) => {
-                    console.log(evt.type)
-                    if (evt.type === "finalized") {
-                        resolve(evt)
-                    }
-                },
-                error: (err) => reject(err),
-            }),
-        )
-    }
-
-    /**
-     * Check if contract code exists on-chain
-     */
-    async contractExistsOnChain(
-        api: TypedApi<typeof devnet>,
-        address: string
-    ): Promise<boolean> {
-        try {
-            const contractInfo = await api.query.Contracts.ContractInfoOf.getValue(address);
-            return contractInfo !== undefined;
-        } catch {
-            return false;
-        }
-    }
-
-    async codeExistsOnChain(
-        api: TypedApi<typeof devnet>,
-        codeHash: string
-    ): Promise<boolean> {
-        try {
-            const codeHashBinary = Binary.fromHex(codeHash);
-            const codeInfo = await api.query.Contracts.CodeInfoOf.getValue(codeHashBinary);
-            return codeInfo !== undefined;
-        } catch {
-            return false;
-        }
+    async codeExistsOnChain(api: TypedApi<typeof devnet>, codeHash: string): Promise<boolean> {
+        return codeExistsOnChain(api, codeHash);
     }
 
     /**
@@ -347,165 +190,96 @@ export class TestSetup {
         artifactsDir: string,
         name: string,
     ): Promise<string> {
-        const wasmPath = path.join(artifactsDir, name, `${name}.wasm`);
-        const metadataPath = path.join(artifactsDir, name, `${name}.json`);
-        const metadata = JSON.parse(await fs.readFile(metadataPath, "utf-8"));
-        const codeHash: string = metadata.source.hash;
-
-        if (await this.codeExistsOnChain(api, codeHash)) {
-            console.log(`${name} code already on chain: ${codeHash}`);
-            return codeHash;
-        }
-
-        console.log(`Uploading ${name} code from ${wasmPath}...`);
-        const wasmBytes = Binary.fromBytes(new Uint8Array(await fs.readFile(wasmPath)));
-        await this.trackTx(
-            api.tx.Contracts.upload_code({
-                code: wasmBytes,
-                storage_deposit_limit: undefined,
-                determinism: { type: "Enforced", value: undefined },
-            }).signSubmitAndWatch(accounts.alice.signer)
-        );
-
-        if (!(await this.codeExistsOnChain(api, codeHash))) {
-            throw new Error(`Uploaded ${name} code but ${codeHash} is not on chain`);
-        }
-        return codeHash;
+        return uploadCode(api, accounts.alice, artifactsDir, name);
     }
 
     /**
      * The code hash a contract build produces, from its metadata
      */
     async buildCodeHash(artifactsDir: string, name: string): Promise<string> {
-        const metadataPath = path.join(artifactsDir, name, `${name}.json`);
-        return JSON.parse(await fs.readFile(metadataPath, "utf-8")).source.hash;
+        return buildCodeHash(artifactsDir, name);
     }
 
     /**
-     * Deploy a code registry. Alice is the owner and Eve the guardian.
+     * Deploy everything the way `scripts/deploy.ts` does, with test settings:
+     * Alice owns the contracts, receives the fees and is the default validator
+     * hotkey; Eve is the registry's guardian. `registry` picks a test registry
+     * build, such as one with short delays for upgrade tests.
      */
-    async deployCodeRegistry(
+    async deploy(
         api: TypedApi<typeof devnet>,
         accounts: TestContext['accounts'],
-        initialCodes: Array<[number, string]>,
-        build: RegistryBuild = RELEASE_REGISTRY,
-    ): Promise<string> {
-        const wasmPath = path.join(build.artifactsDir, "code_registry", "code_registry.wasm");
-        const wasmBytes = Binary.fromBytes(new Uint8Array(await fs.readFile(wasmPath)));
-        const deployer = createInkSdk(api, contracts.code_registry).getDeployer(wasmBytes);
-
-        const dryRunResult = await deployer.dryRun("new", {
-            origin: accounts.alice.address,
-            data: {
-                owner: accounts.alice.address,
-                guardian: accounts.eve.address,
-                upgrade_delay: build.upgradeDelay,
-                force_delay: build.forceDelay,
-                initial_codes: initialCodes.map(([kind, codeHash]) => [kind, Binary.fromHex(codeHash)]),
-            } as any,
-            options: { salt: randomDeploymentSalt() },
-        });
-        if (!dryRunResult.success) {
-            throw new Error(`Code registry dry run failed: ${JSON.stringify(dryRunResult.value, (_key, value) =>
-                typeof value === "bigint" ? value.toString() : value)}`);
-        }
-
-        await this.trackTx(dryRunResult.value.deploy().signSubmitAndWatch(accounts.alice.signer));
-        console.log(`Code registry deployed to address ${dryRunResult.value.address}`);
-        return dryRunResult.value.address;
+        registry?: RegistryBuild,
+    ): Promise<Deployment> {
+        const config: DeployConfig = {
+            artifactsDir: RELEASE_ARTIFACTS,
+            registryArtifactsDir: registry?.artifactsDir,
+            owner: accounts.alice.address,
+            guardian: accounts.eve.address,
+            upgradeDelay: registry?.upgradeDelay ?? REGISTRY_DELAY,
+            forceDelay: registry?.forceDelay ?? REGISTRY_DELAY,
+            feeRate: FACTORY_FEE_RATE,
+            feeRecipient: accounts.alice.address,
+            defaultHotkey: accounts.alice.address,
+            minListingAmount: 1_000_000_000n, // 1 Alpha
+            minPurchaseAmount: 100_000_000n, // 0.1 Alpha
+            minLockupDuration: 10, // 10 blocks for testing (short lockup)
+            maxLockupDuration: 1_000_000, // ~46 days
+            minListingAge: SPOT_LISTING_AGE,
+            minOfferAmount: 1_000_000_000n, // 1 TAO
+        };
+        const deployment = await deployAll(api, accounts.alice, config);
+        console.log(`Deployed: ${JSON.stringify(deployment)}`);
+        return deployment;
     }
 
     /**
-     * Deploy the lockup factory. Alice owns it, receives its fees and is the
-     * default validator hotkey.
-     */
-    async deployLockupListingsContract(
-        api: TypedApi<typeof devnet>,
-        accounts: TestContext['accounts'],
-        registryAddress: string,
-    ): Promise<string> {
-        const wasmPath = path.join(RELEASE_ARTIFACTS, "lockup_listings", "lockup_listings.wasm");
-        const wasmBytes = Binary.fromBytes(new Uint8Array(await fs.readFile(wasmPath)));
-        const deployer = createInkSdk(api, contracts.lockup_listings).getDeployer(wasmBytes);
-
-        const dryRunResult = await deployer.dryRun("new", {
-            origin: accounts.alice.address,
-            data: {
-                owner: accounts.alice.address,
-                registry: registryAddress,
-                default_hotkey: accounts.alice.address,
-                fee_rate: FACTORY_FEE_RATE,
-                fee_recipient: accounts.alice.address,
-                min_listing_amount: 1_000_000_000n, // 1 Alpha
-                min_purchase_amount: 100_000_000n, // 0.1 Alpha
-                min_lockup_duration: 10, // 10 blocks for testing (short lockup)
-                max_lockup_duration: 1_000_000, // ~46 days
-                min_listing_age: SPOT_LISTING_AGE,
-            },
-            options: { salt: randomDeploymentSalt() },
-        });
-        if (!dryRunResult.success) {
-            throw new Error(`Lockup factory dry run failed: ${JSON.stringify(dryRunResult.value, (_key, value) =>
-                typeof value === "bigint" ? value.toString() : value)}`);
-        }
-
-        await this.trackTx(dryRunResult.value.deploy().signSubmitAndWatch(accounts.alice.signer));
-        console.log(`Lockup factory deployed to address ${dryRunResult.value.address}`);
-        return dryRunResult.value.address;
-    }
-
-    /**
-     * Deploy the lockup factory with a code registry offering the released vault,
-     * escrow and factory code. `registry` picks a test registry build, such as one
-     * with short delays for upgrade tests.
+     * The listing factory, with its code registry. `registry` picks a test
+     * registry build, such as one with short delays for upgrade tests; it always
+     * gets a fresh deployment, outside the shared cache.
      */
     async createLockupListingsContext(options: { registry?: RegistryBuild } = {}): Promise<LockupListingsContext> {
         const api = await this.getApi();
         const accounts = this.createTestAccounts();
         await this.fundTestAccounts(api, accounts);
-
-        // Vaults and escrows are instantiated from uploaded code.
-        const escrowCodeHash = await this.uploadCode(api, accounts, RELEASE_ARTIFACTS, "alpha_lockup");
-        let vaultCodeHash = await this.uploadCode(api, accounts, RELEASE_ARTIFACTS, "listing_vault");
         const contractSdk = createInkSdk(api, contracts.lockup_listings);
         const registrySdk = createInkSdk(api, contracts.code_registry);
 
-        // A custom registry gets its own deployment, outside the shared cache.
         const useCache = options.registry === undefined;
-        const cachedAddress = useCache ? loadLockupListingsAddress() : null;
+        const cachedAddress = useCache ? loadCachedAddress(LOCKUP_LISTINGS_ADDRESS_FILE) : null;
         let contractAddress: string;
         let registryAddress: string;
+        let escrowCodeHash: string;
+        let vaultCodeHash: string;
         if (cachedAddress && await this.contractExistsOnChain(api, cachedAddress)) {
-            console.log(`Using existing lockup listings contract at ${cachedAddress}`);
             contractAddress = cachedAddress;
-            const registryResult = await contractSdk.getContract(contractAddress).query("get_registry", {
+            const registry = await contractSdk.getContract(contractAddress).query("get_registry", {
                 origin: accounts.alice.address,
                 data: {},
             });
-            if (!registryResult.success) {
-                throw new Error("Failed to read the cached lockup listings contract's registry");
+            if (!registry.success) {
+                throw new Error("Failed to read the cached listing factory's registry");
             }
-            registryAddress = registryResult.value.response;
-
-            // New vaults come from the cached registry, which may predate this build.
-            const offered = await registrySdk.getContract(registryAddress).query("current", {
-                origin: accounts.alice.address,
-                data: { kind: LISTING_VAULT_CODE_KIND },
-            });
-            const offeredHash = offered.success ? offered.value.response?.code_hash.asHex() : undefined;
-            if (offeredHash && offeredHash !== vaultCodeHash) {
-                console.warn(`Cached registry offers vault code ${offeredHash}, not this build's ${vaultCodeHash}`);
-                vaultCodeHash = offeredHash;
-            }
+            registryAddress = registry.value.response;
+            // New vaults and escrows come from the cached registry, which may
+            // predate this build, so report the code it actually offers.
+            const offered = async (kind: number) => {
+                const current = await registrySdk.getContract(registryAddress).query("current", {
+                    origin: accounts.alice.address,
+                    data: { kind },
+                });
+                return current.success ? current.value.response?.code_hash.asHex() : undefined;
+            };
+            vaultCodeHash = (await offered(LISTING_VAULT_CODE_KIND))!;
+            escrowCodeHash = (await offered(ESCROW_CODE_KIND))!;
         } else {
-            registryAddress = await this.deployCodeRegistry(api, accounts, [
-                [LISTING_VAULT_CODE_KIND, vaultCodeHash],
-                [ESCROW_CODE_KIND, escrowCodeHash],
-                [LOCKUP_FACTORY_CODE_KIND, await this.buildCodeHash(RELEASE_ARTIFACTS, "lockup_listings")],
-            ], options.registry);
-            contractAddress = await this.deployLockupListingsContract(api, accounts, registryAddress);
+            const deployment = await this.deploy(api, accounts, options.registry);
+            contractAddress = deployment.lockupListings;
+            registryAddress = deployment.registry;
+            escrowCodeHash = deployment.codeHashes.escrow;
+            vaultCodeHash = deployment.codeHashes.listingVault;
             if (useCache) {
-                saveLockupListingsAddress(contractAddress);
+                saveCachedAddress(LOCKUP_LISTINGS_ADDRESS_FILE, contractAddress);
             }
         }
 
@@ -531,23 +305,28 @@ export class TestSetup {
         }
     }
 
+    /** otc, with its code registry */
     async createTestContext(): Promise<TestContext> {
         const api = await this.getApi();
         const accounts = this.createTestAccounts();
         await this.fundTestAccounts(api, accounts);
         const contractSdk = createInkSdk(api, contracts.otc_contract);
 
-        const context: TestContext = {
-            api,
-            contractSdk,
-            accounts,
-        };
+        const cachedAddress = loadCachedAddress(CONTRACT_ADDRESS_FILE);
+        if (cachedAddress && await this.contractExistsOnChain(api, cachedAddress)) {
+            const registry = await contractSdk.getContract(cachedAddress).query("get_registry", {
+                origin: accounts.alice.address,
+                data: {},
+            });
+            if (!registry.success) {
+                throw new Error("Failed to read the cached otc contract's registry");
+            }
+            return { api, contractSdk, accounts, contractAddress: cachedAddress, registryAddress: registry.value.response };
+        }
 
-        const { contractAddress, registryAddress } = await this.deployContract(api, accounts);
-        context.contractAddress = contractAddress;
-        context.registryAddress = registryAddress;
-
-        return context;
+        const deployment = await this.deploy(api, accounts);
+        saveCachedAddress(CONTRACT_ADDRESS_FILE, deployment.otc);
+        return { api, contractSdk, accounts, contractAddress: deployment.otc, registryAddress: deployment.registry };
     }
 
     private async fundTestAccounts(
@@ -568,12 +347,6 @@ export class TestSetup {
             throw new Error("Failed to top up test accounts");
         }
     }
-}
-
-export function bigintReplacer(_key: any, value: any) {
-    console.log(JSON.stringify(value, (_, value) =>
-        typeof value === 'bigint' ? value.toString() : value
-        , 2));
 }
 
 export async function setupTestEnvironment(): Promise<TestContext> {
