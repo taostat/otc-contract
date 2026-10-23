@@ -79,7 +79,10 @@ The suite deploys local artifacts from:
 - `target/ink/lockup_listings/lockup_listings.wasm`
 - `target/ink/otc_contract/otc_contract.wasm`
 - `target/upgrade-test/ink/alpha_lockup/alpha_lockup.wasm`: the escrow built with `--features upgrade-test`, which only bumps its storage version, for the escrow tests to upgrade to.
-- `target/upgrade-test/ink/code_registry/code_registry.wasm`: the registry built with `--features short-delays`, so the escrow tests can activate and force an upgrade within a few blocks.
+- `target/upgrade-test/ink/listing_vault/listing_vault.wasm`: the vault built with `--features upgrade-test`, which bumps its storage version and adds a field that its migration sets, for the vault upgrade tests. Its papi descriptor is `listing_vault_v2`.
+- `target/upgrade-test/ink/code_registry/code_registry.wasm`: the registry built with `--features short-delays`, so the upgrade tests can activate and force an upgrade within a few blocks.
+
+The suites cover deployment through the deploy script, listings and their vaults, escrows, vault and escrow upgrades through the registry, a subnet dissolution with open positions, and TAO offers.
 
 Each run deploys fresh contracts. To reuse deployments across runs, set `OTC_TEST_REUSE_DEPLOYMENTS=1`; the cached addresses are stored in these files, which Git ignores:
 
@@ -91,7 +94,7 @@ Each run deploys fresh contracts. To reuse deployments across runs, set `OTC_TES
 `integration-tests` ships a runner that manages the localnet for you:
 
 ```bash
-npm run test:localnet -- src/lockup-listings/claim.test.ts
+npm run test:localnet -- src/lockup-listings/listing.test.ts
 npm run test:localnet:flaky
 ```
 
@@ -101,11 +104,29 @@ npm run test:localnet:flaky
 - `npm run test:localnet:combined -- ...` runs all files against one node. Use it only to diagnose coupling between suites: subnets registered later on a long-lived localnet can have different economics.
 - Test runs use the node binary that is already built. Build or rebuild it with `npm run test:localnet -- --build-only`, or set `BUILD_BINARY=1` to rebuild before every restart.
 
-## Deployment Order
+## Deployment
 
-1. Build all contracts, and upload the `alpha_lockup` and `listing_vault` code; keep their code hashes.
+The deploy script runs the whole deployment in order and checks the result:
+
+```bash
+cd integration-tests
+npm run build:contracts
+DEPLOYER_SURI='<mnemonic>//<derivation path>' RPC_URL=wss://<node> npm run deploy -- <config.json> --out deployment.json
+```
+
+- `DEPLOYER_SURI` is the deployer's secret URI: a mnemonic, optionally followed by derivation paths and a `///password`. It is read from the environment so the secret never sits in a file. A bare path such as `//Alice` uses the development phrase, for localnet only.
+- `RPC_URL` defaults to `ws://127.0.0.1:9944`.
+- The config is a JSON `DeployConfig` (see `integration-tests/src/deploy.ts`). Amounts must be strings, since JSON numbers lose precision, and artifact paths are relative to the repository root. [`scripts/deploy.localnet.json`](integration-tests/scripts/deploy.localnet.json) is an example; it uses the `short-delays` registry, which is for localnet only.
+- The script prints the deployment as JSON, with every address and code hash, and `--out` also writes it to a file.
+
+The script does what a manual deployment would:
+
+1. Upload the `alpha_lockup` and `listing_vault` code, unless it is already on chain.
 2. Instantiate `code_registry` with the initial codes: `listing_vault` (kind `1`), `alpha_lockup` (kind `2`), and the code hashes of `lockup_listings` (kind `3`) and `otc_contract` (kind `4`).
 3. Instantiate `lockup_listings` and `otc_contract` with the registry address.
+4. Check that the registry offers each kind's code, and that both contracts answer to the registry and run the code it offers for them.
+
+Every constructor is dry-run with the config before anything is uploaded, so a config the contracts reject changes nothing on chain. A later failure, such as running out of funds, leaves the earlier steps in place; a rerun reuses code already uploaded and deploys new contracts. The integration tests deploy through the same code.
 
 Listings need no proxy. Filling a TAO offer moves the seller's stake through a proxy, which frontends add and remove in the seller's own batch (see below).
 
@@ -220,27 +241,44 @@ utility.batch_all([
 ])
 ```
 
+If any call fails, the batch reverts and the proxy is never left behind. A frontend sets `max_alpha` from `quote_offer_fill` plus the slippage the seller accepts. The fill's gas limit must cover the proxied transfer, which pre-charges a worst-case weight (about 90e9 `ref_time`) before refunding it. A dry run made before the proxy exists fails, so it can't measure this. The integration tests use 250e9 `ref_time` and 3,000,000 `proof_size`, and unused gas is refunded.
+
 ## Listings Interface
 
 Each listing, spot or lockup, is its own `listing_vault`, holding the seller's Alpha on the vault's own coldkey. The `lockup_listings` factory creates vaults and keeps the index; it never holds Alpha.
 
 ### Selling
 
-1. The seller calls `create_listing(netuid, hotkey, amount, price_offset_bps, min_price, lockup_duration)` on the factory. It creates a Pending vault and returns the listing id and the vault's address; the seller pays the vault's storage deposit. With a `lockup_duration`, buyers receive the Alpha in an escrow that locks it for that long, within the factory's limits. With `None` it is a spot listing: buyers receive the Alpha directly, and the seller can cancel only once the listing has been open for `min_listing_age`.
-2. The seller funds and opens the vault in one batch, with no proxy:
+A seller opens a listing with one transaction and no proxy. The batch creates the vault, moves the seller's stake to it, and activates it:
 
-   ```text
-   utility.batch_all([
-     subtensorModule.transfer_stake(vault, hotkey, netuid, netuid, amount),
-     contracts.call(vault.activate()),
-   ])
-   ```
+```text
+utility.batch_all([
+  contracts.call(factory.create_listing(netuid, hotkey, amount, price_offset_bps, min_price, lockup_duration)),
+  subtensorModule.transfer_stake(vault, hotkey, netuid, netuid, amount),
+  contracts.call(vault.activate()),
+])
+```
 
-   `activate` requires the vault to hold `amount` within the transfer tolerance and lists what it actually holds. It then moves the stake to the factory's validator hotkey for the subnet, when Subtensor allows. If activation fails, the batch reverts the transfer too.
+- `create_listing` creates a Pending vault and returns the listing id and the vault's address; the seller pays the vault's storage deposit. With a `lockup_duration`, buyers receive the Alpha in an escrow that locks it for that long, within the factory's limits. With `None` it is a spot listing: buyers receive the Alpha directly, and the seller can cancel only once the listing has been open for `min_listing_age`.
+- `activate` requires the vault to hold `amount` within the transfer tolerance and lists what it actually holds. It then moves the stake to the factory's validator hotkey for the subnet, when Subtensor allows. If activation fails, the batch reverts the transfer too.
+- `min_price` is the seller's floor, in TAO per Alpha scaled by 1e9 (0 for none). Takes below it fail, so a buyer can't push the spot price down earlier in the same batch and buy cheap.
 
-`min_price` is the seller's floor, in TAO per Alpha scaled by 1e9 (0 for none). Takes below it fail, so a buyer can't push the spot price down earlier in the same batch and buy cheap.
+The batch needs the vault's address before the vault exists, and it is predictable. pallet-contracts derives a contract's address as
 
-Vault addresses are predictable. pallet-contracts derives an address from the deployer (the factory), the code hash, the constructor arguments and the salt. The factory salts each vault with the seller and `get_seller_nonce(seller)`, and the constructor arguments hold only the seller's terms and the factory's current fee rate, minimum purchase and registry, so a frontend can create and fund a listing in one batch. If the factory's settings or the registry's vault code change in between, the batch reverts as a whole.
+```text
+blake2_256(SCALE(b"contract_addr_v1", deployer, code_hash, input_data, salt))
+```
+
+where `b"contract_addr_v1"` is 16 raw bytes, and `input_data` (the constructor's selector and arguments) and `salt` carry length prefixes. For a vault:
+
+- the deployer is the factory;
+- the code hash is the registry's `current(1)`;
+- the input is `listing_vault::new` with the seller's terms and the factory's `get_config()` fee rate, minimum purchase and registry, with `cancel_delay` set to `min_listing_age` for a spot listing and 0 for a lockup listing;
+- the salt is the seller's account followed by `get_seller_nonce(seller)` as a little-endian `u64`.
+
+[`integration-tests/src/vault-address.ts`](integration-tests/src/vault-address.ts) implements this (`predictVaultAddress`), and the listing tests open every listing this way. If anything changes between the prediction and the batch, such as the factory's settings, the registry's vault code or the seller's nonce, the vault lands at another address. Activating the predicted address then fails, and the whole batch reverts.
+
+A frontend can also fund in two transactions: `create_listing` first, then a `batch_all` of the transfer and `activate` against the address it returned. Until it is funded, a Pending vault can be cancelled and closed at any time.
 
 ### Vault
 
@@ -296,7 +334,19 @@ VaultFactory::validator_hotkey(netuid) -> AccountId
 VaultFactory::listing_closed()
 ```
 
-The index holds open listings; a vault removes its listing when it fills or is cancelled. A seller can have 25 open listings per subnet, spot and lockup together. That report is best effort, so if it ever fails, anyone can `prune_listing` once the vault is closed or gone. Users are limited to 25 open listings per subnet. Vaults copy the fee rate and minimum purchase when they are created, and read the fee recipient, validator hotkey and pause from the factory.
+The index holds open listings; a vault removes its listing when it fills or is cancelled. That report is best effort, so if it ever fails, anyone can `prune_listing` once the vault is closed or gone. A seller can have 25 open listings per subnet, spot and lockup together. Vaults copy the fee rate and minimum purchase when they are created, and read the fee recipient, validator hotkey and pause from the factory.
+
+### Subnet Dissolution
+
+When a subnet is dissolved, Subtensor sells every position on it in the blocks that follow, crediting each coldkey's share of the subnet's TAO to its free balance. A vault or escrow is a coldkey of its own, so the TAO arrives in the contract, and nothing needs a backend:
+
+- Takes fail once the subnet is dissolved.
+- Anyone can `sweep_tao` a vault to its seller and an escrow to its beneficiary. Sweeping never terminates a contract, so TAO that arrives later can be swept too.
+- An escrow has no Alpha left to claim (`claim` fails with `NoAlphaToClaim`). Its beneficiary can `close` it once its stake is gone, even before `unlock_block`.
+- The seller cancels each listing (a spot listing once its minimum age has passed), which returns nothing and drops it from the index. Then they close the vault.
+- A new subnet can reuse the netuid, and new listings on it trade as usual. Listings the seller hasn't cancelled stay in the factory's index under that netuid and count toward their 25-listing cap there until they cancel them.
+
+The owner can `set_subnet_frozen` a subnet at risk, to stop new listings on it beforehand.
 
 ## Alpha Lockup Interface
 
